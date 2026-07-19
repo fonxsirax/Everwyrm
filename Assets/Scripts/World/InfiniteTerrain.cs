@@ -99,6 +99,18 @@ public class InfiniteTerrain : MonoBehaviour
     [Tooltip("Multiplicador geral de densidade do deserto (1 = calibrado pela Demo Scene do pacote).")]
     [SerializeField, Range(0.1f, 2f)] float desertDensity = 1f;
 
+    [Header("Tundra/Montanha (Winter Environment — preenchido pelo WinterSetup)")]
+    [Tooltip("Abetos nevados (firs) — a mata da Tundra e a treeline da Montanha.")]
+    public GameObject[] winterFirPrefabs;
+    [Tooltip("Bétulas nevadas (birch) — esparsas, quebram a monotonia dos abetos.")]
+    public GameObject[] winterBirchPrefabs;
+    [Tooltip("Arbustos nevados — preenchimento baixo da Tundra.")]
+    public GameObject[] winterBushPrefabs;
+    [Tooltip("Pedras/rochas nevadas — detalhe da Tundra e das encostas da Montanha.")]
+    public GameObject[] winterRockPrefabs;
+    [Tooltip("Multiplicador geral de densidade da Tundra/Montanha (recalibrar pela Demo do pack).")]
+    [SerializeField, Range(0.1f, 2f)] float winterDensity = 1f;
+
     [Header("Camadas de espalhamento (vazio = padrão gerado dos arrays acima)")]
     [Tooltip("Controle fino da distribuição. Deixe vazio para usar o conjunto padrão " +
              "(floresta + campos + deserto). Cada camada = um 'tipo' de objeto com suas regras.")]
@@ -112,6 +124,15 @@ public class InfiniteTerrain : MonoBehaviour
     public TerrainLayer sandLayer;        // Deserto: areia (RockyDesert/Terrain_Sand)
     public TerrainLayer desertRockLayer;  // Deserto: rocha de encosta (RockyDesert/Terrain_Rock)
     [SerializeField] float groundTextureTile = 12f;
+
+    [Header("MicroSplat (gerar via Tools > Everwyrm > MicroSplat — Converter Terreno)")]
+    [Tooltip("Material template do MicroSplat: cada tile ganha um MicroSplatTerrain sincronizado " +
+             "com ele no spawn. Vazio = HDRP/TerrainLit padrão (sem anti-tiling/height blend).")]
+    public Material microSplatMaterial;
+    public JBooth.MicroSplat.MicroSplatPropData microSplatPropData;
+    public JBooth.MicroSplat.MicroSplatKeywords microSplatKeywords;
+    [Tooltip("Shader *_Base do MicroSplat — o Sync só o resolve sozinho no editor; em build precisa da referência.")]
+    public Shader microSplatBaseShader;
 
     public static InfiniteTerrain Instance { get; private set; }
 
@@ -197,18 +218,20 @@ public class InfiniteTerrain : MonoBehaviour
 
         [Tooltip("Escala do meandro (m) — maior = curvas mais largas e riachos mais afastados")]
         public float courseSize = 430f;
-        [Tooltip("Meia-largura do canal em unidades de noise (~0.022 ≈ canal de 8–18 m)")]
-        [Range(0.008f, 0.06f)] public float channelWidth = 0.022f;
+        [Tooltip("Meia-largura do canal em unidades de noise (~0.026 ≈ canal de 10–20 m)")]
+        [Range(0.008f, 0.06f)] public float channelWidth = 0.026f;
         [Tooltip("Profundidade do leito abaixo do waterLevel (m)")]
-        public float depth = 1.6f;
-        [Tooltip("Altura do fundo do vale acima do waterLevel (m)")]
-        public float bankHeight = 1.2f;
+        public float depth = 1.8f;
+        [Tooltip("Altura do fundo do vale acima do waterLevel (m) — margem seca estreita")]
+        public float bankHeight = 0.6f;
         [Tooltip("Largura do vale relativa ao canal (encostas suaves até o leito)")]
-        public float valleyWidthMul = 3.2f;
-        [Tooltip("Fração aproximada do bioma com riachos (1 = bioma inteiro)")]
-        [Range(0f, 1f)] public float density = 0.6f;
-        [Tooltip("Tamanho das regiões com/sem riachos (m)")]
-        public float regionSize = 1400f;
+        public float valleyWidthMul = 2.6f;
+        [Tooltip("Fração aproximada do bioma com riachos (1 = bioma inteiro). " +
+                 "Baixo = achar um riacho é raro/especial.")]
+        [Range(0f, 1f)] public float density = 0.25f;
+        [Tooltip("Tamanho das regiões com/sem riachos (m) — grande = longos trechos " +
+                 "secos entre 'bacias hidrográficas'")]
+        public float regionSize = 2600f;
         [Tooltip("Peso do bioma a partir do qual o riacho aparece em força total")]
         [Range(0f, 1f)] public float fadeStart = 0.55f;
         [Tooltip("Peso do bioma abaixo do qual não existe riacho nenhum")]
@@ -405,6 +428,7 @@ public class InfiniteTerrain : MonoBehaviour
     List<ScatterLayer> DefaultLayers()
     {
         float d = desertDensity;
+        float w = winterDensity;
         int treeAttempts = Mathf.RoundToInt(forestVegetationPerTile * (1f - bushShare));
         int bushAttempts = forestVegetationPerTile - treeAttempts;
 
@@ -511,6 +535,64 @@ public class InfiniteTerrain : MonoBehaviour
                 scaleRange = new Vector2(1.2f, 2f), maxSlope = 0.35f,
                 minSpacing = 60f, avoidBlockers = 3f, landmark = true   // marcos raros (8/km² na demo)
             },
+
+            // ---------------- TUNDRA (Winter Environment) ----------------
+            // Taiga aberta: bosques de abetos em manchas, bétulas raras entre eles,
+            // arbustos e pedras preenchendo as clareiras. Arrays vazios até o
+            // WinterSetup rodar (BuildScatterSetup descarta camadas vazias).
+            // Densidades = chute inicial — recalibrar pela Demo do pack (como no deserto).
+            new()
+            {
+                name = "Tundra — abetos", biome = Biome.Tundra, prefabs = winterFirPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(180 * w), minBiomeWeight = 0.4f, density = 0.9f,
+                scaleRange = new Vector2(0.9f, 1.5f), aspectJitter = 0.1f, maxSlope = 0.5f,
+                clusterStrength = 0.45f, clusterSize = 110f, clusterGroup = 1,  // bosques
+                minSpacing = 4f, landmark = true
+            },
+            new()
+            {
+                name = "Tundra — bétulas", biome = Biome.Tundra, prefabs = winterBirchPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(25 * w), minBiomeWeight = 0.45f, density = 0.7f,
+                scaleRange = new Vector2(0.9f, 1.3f), maxSlope = 0.5f,
+                clusterStrength = 0.3f, clusterSize = 110f, clusterGroup = 1,   // na borda dos bosques
+                minSpacing = 10f
+            },
+            new()
+            {
+                name = "Tundra — arbustos", biome = Biome.Tundra, prefabs = winterBushPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(120 * w), minBiomeWeight = 0.4f, density = 0.8f,
+                scaleRange = new Vector2(0.8f, 1.3f), maxSlope = 0.55f
+            },
+            new()
+            {
+                name = "Tundra — pedras", biome = Biome.Tundra, prefabs = winterRockPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(90 * w), minBiomeWeight = 0.35f, density = 0.7f,
+                scaleRange = new Vector2(0.5f, 1.6f), aspectJitter = 0.2f, maxSlope = 0.7f,
+                clusterStrength = 0.3f, clusterSize = 90f
+            },
+
+            // ---------------- MONTANHA (treeline + pedras nevadas) ----------------
+            // Abetos só nas encostas BAIXAS (heightRange limita a treeline ~60 m;
+            // hMount vai a ~130 m) — acima disso, só rocha nua e pedras com neve
+            // perto dos picos (a neve do terreno pinta a partir de h01 > 0.75).
+            new()
+            {
+                name = "Montanha — treeline (abetos)", biome = Biome.Montanha,
+                prefabs = winterFirPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(70 * w), minBiomeWeight = 0.45f, density = 0.7f,
+                scaleRange = new Vector2(0.8f, 1.3f), aspectJitter = 0.1f,
+                maxSlope = 0.55f, heightRange = new Vector2(-1000f, 60f),
+                clusterStrength = 0.4f, clusterSize = 120f,
+                minSpacing = 6f, landmark = true
+            },
+            new()
+            {
+                name = "Montanha — pedras nevadas", biome = Biome.Montanha,
+                prefabs = winterRockPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(60 * w), minBiomeWeight = 0.4f, density = 0.7f,
+                scaleRange = new Vector2(0.7f, 1.8f), aspectJitter = 0.25f,
+                maxSlope = 0.8f, heightRange = new Vector2(40f, 1000f)
+            },
         };
     }
 
@@ -596,6 +678,21 @@ public class InfiniteTerrain : MonoBehaviour
         terrain.heightmapPixelError = 8f;
         terrain.treeBillboardDistance = 180f;
         terrain.treeDistance = 700f;
+
+        if (microSplatMaterial != null)
+        {
+            // tiles nascem em runtime, então a conversão de editor não os alcança:
+            // cada um recebe o componente apontando pro template compartilhado.
+            // O Sync instancia o material e liga os alphamaps como control textures
+            // (depois do drawInstanced acima — ele decide o per-pixel normal).
+            var mst = go.AddComponent<JBooth.MicroSplat.MicroSplatTerrain>();
+            mst.terrain = terrain;
+            mst.templateMaterial = microSplatMaterial;
+            mst.propData = microSplatPropData;
+            mst.keywordSO = microSplatKeywords;
+            mst.baseMapShader = microSplatBaseShader;
+            mst.Sync();
+        }
 
         tiles[coord] = terrain;
     }
@@ -847,8 +944,13 @@ public class InfiniteTerrain : MonoBehaviour
                                      wz / (s.courseSize * 0.31f) + s.offWidth.y);
         float halfW = s.channelWidth * Mathf.Lerp(0.55f, 1.45f, wn) * Mathf.Lerp(0.3f, 1f, fade);
 
-        valley = (1f - Mathf.SmoothStep(0.25f, 1f, d / (halfW * s.valleyWidthMul))) * fade;
-        return d < halfW ? (1f - Mathf.SmoothStep(0.3f, 1f, d / halfW)) * fade : 0f;
+        // (Mathf.SmoothStep é interpolador (from,to,t) — o limiar estilo shader
+        //  é sempre SmoothStep(0,1, InverseLerp(a,b,x)), como no resto do arquivo.)
+        valley = (1f - Mathf.SmoothStep(0f, 1f,
+            Mathf.InverseLerp(0.25f, 1f, d / (halfW * s.valleyWidthMul)))) * fade;
+        return d < halfW
+            ? (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.3f, 1f, d / halfW))) * fade
+            : 0f;
     }
 
     /// <summary>Força [0..1] do canal de riacho num ponto do mundo (0 = fora).</summary>
@@ -1011,9 +1113,17 @@ public class InfiniteTerrain : MonoBehaviour
                 if (bw < s.fadeEnd) continue;               // early-out: fora do bioma
                 float channel = StreamMasks(wx, wz, bw, s, out float valley);
                 if (valley <= 0f) continue;
-                h = Mathf.Min(h, Mathf.Lerp(h, waterLevel + s.bankHeight, valley));
-                if (channel > 0f)
-                    h = Mathf.Min(h, Mathf.Lerp(h, waterLevel - s.depth, channel));
+
+                // Leito ABSOLUTO: no miolo do canal o alvo é exatamente
+                // waterLevel−depth (patamar plano, água garantida), subindo até o
+                // fundo do vale nas beiradas. O vale adota o alvo por inteiro já a
+                // meia encosta (blend satura) — um Lerp parcial a partir do terreno
+                // alto da floresta deixava o canal acima da lâmina = riacho seco.
+                float bedT = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, 0.75f, channel));
+                float target = Mathf.Lerp(waterLevel + s.bankHeight,
+                                          waterLevel - s.depth, bedT);
+                float blend = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, 0.55f, valley));
+                h = Mathf.Min(h, Mathf.Lerp(h, target, blend));
             }
         return h;
     }
@@ -1209,11 +1319,30 @@ public class InfiniteTerrain : MonoBehaviour
                 "Assets/RockyDesert/Terrain/Terrain_Rock.terrainlayer");
             dirty = true;
         }
+        // ---- MicroSplat: reencontra os assets da conversão (Tools > Everwyrm > MicroSplat)
+        if (microSplatMaterial == null &&
+            UnityEditor.AssetDatabase.IsValidFolder("Assets/Everwyrm/MicroSplat"))
+        {
+            microSplatMaterial = MS<Material>("t:Material");
+            if (microSplatMaterial != null)
+            {
+                microSplatPropData = MS<JBooth.MicroSplat.MicroSplatPropData>("t:MicroSplatPropData");
+                microSplatKeywords = MS<JBooth.MicroSplat.MicroSplatKeywords>("t:MicroSplatKeywords");
+                microSplatBaseShader = MS<Shader>("t:Shader _Base");
+                dirty = true;
+            }
+        }
         if (dirty) UnityEditor.EditorUtility.SetDirty(this);
 
         static Texture2D T(string p) => UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(p);
         static GameObject P(string p) => UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(p);
         static bool Empty(GameObject[] a) => a == null || a.Length == 0 || a[0] == null;
+        static U MS<U>(string filter) where U : UnityEngine.Object
+        {
+            var g = UnityEditor.AssetDatabase.FindAssets(filter, new[] { "Assets/Everwyrm/MicroSplat" });
+            return g.Length > 0 ? UnityEditor.AssetDatabase.LoadAssetAtPath<U>(
+                UnityEditor.AssetDatabase.GUIDToAssetPath(g[0])) : null;
+        }
     }
 #endif
 }

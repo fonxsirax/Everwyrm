@@ -34,6 +34,10 @@ static class EverwyrmAutoSetup
             AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Everwyrm/Desert/SM_RockSide_A1.prefab") == null)
             DesertSetup.Convert();
 
+        // 2b) Winter Environment (Tundra/Montanha) convertido?
+        if (WinterSetup.IsInstalled && !WinterSetup.IsConverted)
+            WinterSetup.Convert();
+
         // 3) Animator do dragão em dia?
         var controller = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>(ControllerPath);
         bool outdated = controller == null;

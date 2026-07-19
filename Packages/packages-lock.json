@@ -1,5 +1,99 @@
 {
   "dependencies": {
+    "com.jbooth.microsplat.alpha-hole": {
+      "version": "file:com.jbooth.microsplat.alpha-hole",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.jbooth.microsplat.core": "3.9.0"
+      }
+    },
+    "com.jbooth.microsplat.anti-tile": {
+      "version": "file:com.jbooth.microsplat.anti-tile",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.jbooth.microsplat.core": "3.9.0"
+      }
+    },
+    "com.jbooth.microsplat.core": {
+      "version": "file:com.jbooth.microsplat.core",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
+    "com.jbooth.microsplat.global-texture": {
+      "version": "file:com.jbooth.microsplat.global-texture",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.jbooth.microsplat.core": "3.9.0"
+      }
+    },
+    "com.jbooth.microsplat.hdrp6": {
+      "version": "file:com.jbooth.microsplat.hdrp6",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.jbooth.microsplat.core": "3.9.0"
+      }
+    },
+    "com.jbooth.microsplat.snow": {
+      "version": "file:com.jbooth.microsplat.snow",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.jbooth.microsplat.core": "3.9.0"
+      }
+    },
+    "com.jbooth.microsplat.streams": {
+      "version": "file:com.jbooth.microsplat.streams",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.jbooth.microsplat.core": "3.9.0"
+      }
+    },
+    "com.jbooth.microsplat.terrain-blending": {
+      "version": "file:com.jbooth.microsplat.terrain-blending",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.jbooth.microsplat.core": "3.9.0"
+      }
+    },
+    "com.jbooth.microsplat.tessellation": {
+      "version": "file:com.jbooth.microsplat.tessellation",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.jbooth.microsplat.core": "3.9.0"
+      }
+    },
+    "com.jbooth.microsplat.texture-clusters": {
+      "version": "file:com.jbooth.microsplat.texture-clusters",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.jbooth.microsplat.core": "3.9.0"
+      }
+    },
+    "com.jbooth.microsplat.triplanar": {
+      "version": "file:com.jbooth.microsplat.triplanar",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.jbooth.microsplat.core": "3.9.0"
+      }
+    },
+    "com.jbooth.microsplat.wind": {
+      "version": "file:com.jbooth.microsplat.wind",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.jbooth.microsplat.core": "3.9.0"
+      }
+    },
     "com.unity.burst": {
       "version": "1.8.25",
       "depth": 2,
