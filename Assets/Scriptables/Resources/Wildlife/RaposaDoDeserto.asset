@@ -1,0 +1,252 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e3c19f96ab8fb4439f6c22b28a18950, type: 3}
+  m_Name: RaposaDoDeserto
+  m_EditorClassIdentifier: 
+  speciesName: Raposa
+  description: "Quase sempre sozinha, faminta e ainda mais curiosa. Ronda os o\xE1sis
+    ca\xE7ando lebres na tocaia."
+  social: 3
+  groupSize: {x: 1, y: 2}
+  soloChance: 0.75
+  memberSpacing: 3.5
+  catchUpDistance: 10
+  roles:
+  - name: Adulta
+    kind: 1
+    prefabs:
+    - {fileID: 8634157177298246577, guid: 18c70a56bdd22fb43873f052d990a5ec, type: 3}
+    - {fileID: 345845814997456358, guid: 7b4c425fbd0dbe64db995a08a6619a1d, type: 3}
+    - {fileID: 1876147209714953625, guid: b8d842e9e7cd2794c9bdf76fcb3e2123, type: 3}
+    controller: {fileID: 9100000, guid: 36654d2ebe9ad1a4a9abcce17beb4e75, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_6
+      - Idle_7
+      extras:
+      - Scratching
+      - Defecate
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: Digging_start
+        loops:
+        - Digging_loop
+        end: Digging_end
+      digWalk: 
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop_1
+        - Lie_loop_2
+        end: Lie_end
+      lieBelly:
+        start: Lie_belly_start
+        loops:
+        - Lie_belly_loop_1
+        - Lie_belly_loop_2
+        end: Lie_belly_end
+      sit:
+        start: Sitting_start
+        loops:
+        - Sitting_loop_1
+        - Sitting_loop_2
+        end: Sitting_end
+      sleep:
+        start: Lie_Sleep_start
+        loops:
+        - Lie_Sleep_loop
+        end: Lie_Sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: 
+        loops: []
+        end: 
+      stalkIdle:
+        start: Crouch_Idle_start
+        loops:
+        - Crouch_Idle_loop_1
+        - Crouch_Idle_loop_2
+        end: Crouch_Idle_end
+      stalkWalk: Crouch_F_IP
+      howl: 
+      eatCarcass: Eat_tear
+      jumpPlace: Jump_Place_IP
+      attacks:
+      - Attack_Bite
+      - Attack_Down
+      - Attack_F
+      - Attack_J
+      - Attack_L
+      - Attack_R
+      chargeAttack: 
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_B
+      - Hit_F
+      - Hit_M
+      runFast: RunFast_F_IP
+    count: {x: 1, y: 2}
+    chance: 1
+    scaleRange: {x: 0.94, y: 1.06}
+    speedMul: 1
+  - name: Filhote
+    kind: 2
+    prefabs:
+    - {fileID: 5103233840352622379, guid: 59bed47ee5b4fc94596169fb75734640, type: 3}
+    - {fileID: 5715482017011617045, guid: d288e9597186faf4c9e901c74daa8828, type: 3}
+    - {fileID: 7625610926411515930, guid: aaea7a032dc38794e90f99a644d585b4, type: 3}
+    controller: {fileID: 9100000, guid: 153d8ad294005e64488f76d363524e80, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_6
+      - Idle_7
+      extras:
+      - Scratching
+      - Defecate
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: Digging_start
+        loops:
+        - Digging_loop
+        end: Digging_end
+      digWalk: 
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop_1
+        - Lie_loop_2
+        end: Lie_end
+      lieBelly:
+        start: Lie_belly_start
+        loops:
+        - Lie_belly_loop_1
+        - Lie_belly_loop_2
+        end: Lie_belly_end
+      sit:
+        start: Sitting_start
+        loops:
+        - Sitting_loop_1
+        - Sitting_loop_2
+        end: Sitting_end
+      sleep:
+        start: Lie_Sleep_start
+        loops:
+        - Lie_Sleep_loop
+        end: Lie_Sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: 
+        loops: []
+        end: 
+      stalkIdle:
+        start: Crouch_Idle_start
+        loops:
+        - Crouch_Idle_loop_1
+        - Crouch_Idle_loop_2
+        end: Crouch_Idle_end
+      stalkWalk: Crouch_F_IP
+      howl: 
+      eatCarcass: Eat_tear
+      jumpPlace: Jump_Place_IP
+      attacks:
+      - Attack_Bite
+      - Attack_Down
+      - Attack_F
+      - Attack_J
+      - Attack_L
+      - Attack_R
+      chargeAttack: 
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_B
+      - Hit_F
+      - Hit_M
+      runFast: RunFast_F_IP
+    count: {x: 0, y: 2}
+    chance: 0.3
+    scaleRange: {x: 0.85, y: 1}
+    speedMul: 0.9
+  biomes:
+  - biome: 4
+    minWeight: 0.3
+    affinity: 1
+  spawnWeight: 5
+  maxActiveGroups: 2
+  activity: 15
+  walkSpeed: 1
+  trotSpeed: 3.2
+  runSpeed: 8.2
+  turnSpeed: 300
+  bravery: 0.4
+  aggression: 0.1
+  curiosity: 0.95
+  alertness: 0.8
+  grazing: 0.2
+  restfulness: 0.45
+  waterAffinity: 0.55
+  unpredictability: 0.15
+  playfulness: 0.9
+  sightRange: 70
+  fleeDistance: 24
+  attackRange: 0
+  meleeRange: 1.6
+  attackDamage: 4
+  ignoreBelowGrowth: 0
+  panicAboveGrowth: 0.6
+  territorial: 0
+  territoryRadius: 90
+  migrationChancePerMinute: 0.08
+  migrationDistance: {x: 220, y: 480}
+  health: 26
+  nutrition: 20
+  predator: 1
+  preySpecies:
+  - Lebre
+  huntChancePerMinute: 0.35

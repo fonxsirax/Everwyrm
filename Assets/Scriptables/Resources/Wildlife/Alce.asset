@@ -1,0 +1,153 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e3c19f96ab8fb4439f6c22b28a18950, type: 3}
+  m_Name: Alce
+  m_EditorClassIdentifier: 
+  speciesName: Alce
+  description: "Grande, lento e imponente. Ignora drag\xF5es pequenos, adora a beira
+    dos lagos (bebe muito) e se torna perigos\xEDssimo quando provocado."
+  social: 0
+  groupSize: {x: 1, y: 1}
+  soloChance: 0
+  memberSpacing: 4
+  catchUpDistance: 10
+  roles:
+  - name: Macho
+    kind: 0
+    prefabs:
+    - {fileID: 5995559903164006588, guid: 9f0f450140dd7f94aa27bd86ea63d219, type: 3}
+    - {fileID: 1469489219058403692, guid: 726685f50f6544540bb195ac8e1b72d5, type: 3}
+    - {fileID: 6774714817724399820, guid: f7c3077c0ef46f34eaf805663530befb, type: 3}
+    - {fileID: 1091041163912379897, guid: 82b9000af916aca4a82372507879d4f4, type: 3}
+    controller: {fileID: 9100000, guid: ddb315a9deadce541ba88be4af4da2b2, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_5
+      - Idle_6
+      extras: []
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop
+        - EatDig_loop
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: 
+        loops: []
+        end: 
+      digWalk: 
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop1
+        - Lie_loop2
+        end: Lie_end
+      lieBelly:
+        start: 
+        loops: []
+        end: 
+      sit:
+        start: 
+        loops: []
+        end: 
+      sleep:
+        start: Lie_sleep_start
+        loops:
+        - Lie_sleep_loop
+        end: Lie_sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: 
+        loops: []
+        end: 
+      stalkIdle:
+        start: 
+        loops: []
+        end: 
+      stalkWalk: 
+      howl: 
+      eatCarcass: 
+      jumpPlace: Jump_Place_IP
+      attacks:
+      - Attack_B
+      - Attack_F
+      - Attack_L
+      - Attack_R
+      - Attack_Up
+      chargeAttack: Attack_Run_IP
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_Back
+      - Hit_Front
+      - Hit_Middle
+      runFast: 
+    count: {x: 1, y: 1}
+    chance: 1
+    scaleRange: {x: 1, y: 1.1}
+    speedMul: 1
+  biomes:
+  - biome: 3
+    minWeight: 0.25
+    affinity: 1
+  - biome: 1
+    minWeight: 0.28
+    affinity: 0.55
+  - biome: 2
+    minWeight: 0.3
+    affinity: 0.3
+  spawnWeight: 2.6
+  maxActiveGroups: 2
+  activity: 15
+  walkSpeed: 1.5
+  trotSpeed: 3.6
+  runSpeed: 7.8
+  turnSpeed: 170
+  bravery: 0.95
+  aggression: 0.55
+  curiosity: 0.15
+  alertness: 0.35
+  grazing: 0.7
+  restfulness: 0.4
+  waterAffinity: 0.85
+  unpredictability: 0
+  playfulness: 0.5
+  sightRange: 55
+  fleeDistance: 18
+  attackRange: 15
+  meleeRange: 3.4
+  attackDamage: 30
+  ignoreBelowGrowth: 0.45
+  panicAboveGrowth: 0.9
+  territorial: 0
+  territoryRadius: 90
+  migrationChancePerMinute: 0.03
+  migrationDistance: {x: 250, y: 500}
+  health: 220
+  nutrition: 110
+  predator: 0
+  preySpecies: []
+  huntChancePerMinute: 0.1

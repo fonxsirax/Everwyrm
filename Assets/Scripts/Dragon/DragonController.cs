@@ -372,6 +372,7 @@ public class DragonController : MonoBehaviour
             anim.SetTrigger(P_Attack);
             meleeCombo = (meleeCombo + 1) % 4;
             Lock(1.0f);
+            StrikeWildlife(2.2f, 3.0f, 16f);
         }
         else if (Input.GetKeyDown(KeyCode.Q) && Spend(attackCost * CostMul))
         {
@@ -379,6 +380,7 @@ public class DragonController : MonoBehaviour
             tailLeft = !tailLeft;
             anim.SetTrigger(P_Attack);
             Lock(1.2f);
+            StrikeWildlife(0f, 4.0f, 12f);      // cauda varre ao redor
         }
         else if (Input.GetKeyDown(KeyCode.E) && Spend(attackCost * CostMul))
         {
@@ -386,6 +388,7 @@ public class DragonController : MonoBehaviour
             wingLeft = !wingLeft;
             anim.SetTrigger(P_Attack);
             Lock(1.1f);
+            StrikeWildlife(1.2f, 3.5f, 10f);
         }
         else if (Input.GetKeyDown(KeyCode.F) && Spend(fireCost * CostMul))
         {
@@ -593,6 +596,14 @@ public class DragonController : MonoBehaviour
 
     bool Spend(float amount) => vitals == null || vitals.TrySpend(amount);
     void Lock(float seconds) => actionLockUntil = Time.time + seconds;
+
+    /// <summary>Golpe corpo a corpo atinge a fauna viva (caça de verdade — GDD).
+    /// Presas abatidas viram carcaças que se comem com G, como sempre.</summary>
+    void StrikeWildlife(float forwardOffset, float radius, float damage)
+    {
+        Vector3 p = transform.position + transform.forward * (forwardOffset * S);
+        AnimalAgent.DamageNearest(p, radius * S, damage * S, transform);
+    }
 
     // -------------------------------------------------------- VISUAL / ANIM
     void ApplyRotation(float dt, float h)

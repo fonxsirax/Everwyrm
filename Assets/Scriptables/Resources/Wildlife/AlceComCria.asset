@@ -1,0 +1,238 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e3c19f96ab8fb4439f6c22b28a18950, type: 3}
+  m_Name: AlceComCria
+  m_EditorClassIdentifier: 
+  speciesName: Alce
+  description: "F\xEAmea com o filhote \u2014 rara. A m\xE3e \xE9 ainda mais agressiva
+    que o macho quando algo se aproxima da cria."
+  social: 3
+  groupSize: {x: 2, y: 2}
+  soloChance: 0
+  memberSpacing: 3.5
+  catchUpDistance: 10
+  roles:
+  - name: "F\xEAmea"
+    kind: 1
+    prefabs:
+    - {fileID: 4526012501318171781, guid: eddbcfe3d9c9f794b86d24ff31a6f290, type: 3}
+    - {fileID: 5684503408793453441, guid: 16479a0d65fe6684f9403fc17992a886, type: 3}
+    - {fileID: 4778853432168319448, guid: 68b7d574422d04041a3b7e0e70be30a7, type: 3}
+    - {fileID: 8195227934825881606, guid: 129e94010fcb94b45b5005d744709376, type: 3}
+    controller: {fileID: 9100000, guid: aa036e3fdb31ced4c8578a511fd9c81d, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_5
+      - Idle_6
+      extras: []
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop
+        - EatDig_loop
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: 
+        loops: []
+        end: 
+      digWalk: 
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop1
+        - Lie_loop2
+        end: Lie_end
+      lieBelly:
+        start: 
+        loops: []
+        end: 
+      sit:
+        start: 
+        loops: []
+        end: 
+      sleep:
+        start: Lie_sleep_start
+        loops:
+        - Lie_sleep_loop
+        end: Lie_sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: 
+        loops: []
+        end: 
+      stalkIdle:
+        start: 
+        loops: []
+        end: 
+      stalkWalk: 
+      howl: 
+      eatCarcass: 
+      jumpPlace: Jump_Place_IP
+      attacks:
+      - Attack_B
+      - Attack_F
+      - Attack_L
+      - Attack_R
+      - Attack_Up
+      chargeAttack: Attack_Run_IP
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_Back
+      - Hit_Front
+      - Hit_Middle
+      runFast: 
+    count: {x: 1, y: 1}
+    chance: 1
+    scaleRange: {x: 0.94, y: 1.06}
+    speedMul: 1
+  - name: Cria
+    kind: 2
+    prefabs:
+    - {fileID: 8454316005655874917, guid: 80978f6dd01cb9a48aa6e96584688db4, type: 3}
+    - {fileID: 5081432464806620956, guid: b15447c2388e07a4e856771faef00e66, type: 3}
+    - {fileID: 2317823966124119766, guid: d83f1062c06d0c147b64852bcf2b519c, type: 3}
+    - {fileID: 474447414190745193, guid: be06d1b858fe3154ea8cae91a56b2201, type: 3}
+    controller: {fileID: 9100000, guid: 4a229f3ca453fd047bcfa325241cc7e7, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_5
+      - Idle_6
+      extras: []
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop
+        - EatDig_loop
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: 
+        loops: []
+        end: 
+      digWalk: 
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop1
+        - Lie_loop2
+        end: Lie_end
+      lieBelly:
+        start: 
+        loops: []
+        end: 
+      sit:
+        start: 
+        loops: []
+        end: 
+      sleep:
+        start: Lie_sleep_start
+        loops:
+        - Lie_sleep_loop
+        end: Lie_sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: 
+        loops: []
+        end: 
+      stalkIdle:
+        start: 
+        loops: []
+        end: 
+      stalkWalk: 
+      howl: 
+      eatCarcass: 
+      jumpPlace: Jump_Place_IP
+      attacks:
+      - Attack_B
+      - Attack_F
+      - Attack_L
+      - Attack_R
+      - Attack_Up
+      chargeAttack: Attack_Run_IP
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_Back
+      - Hit_Front
+      - Hit_Middle
+      runFast: 
+    count: {x: 1, y: 1}
+    chance: 1
+    scaleRange: {x: 0.9, y: 1}
+    speedMul: 0.9
+  biomes:
+  - biome: 3
+    minWeight: 0.25
+    affinity: 1
+  - biome: 1
+    minWeight: 0.3
+    affinity: 0.5
+  spawnWeight: 1.2
+  maxActiveGroups: 1
+  activity: 15
+  walkSpeed: 1.5
+  trotSpeed: 3.6
+  runSpeed: 7.8
+  turnSpeed: 175
+  bravery: 0.8
+  aggression: 0.75
+  curiosity: 0.1
+  alertness: 0.6
+  grazing: 0.7
+  restfulness: 0.35
+  waterAffinity: 0.8
+  unpredictability: 0
+  playfulness: 0.75
+  sightRange: 55
+  fleeDistance: 22
+  attackRange: 16
+  meleeRange: 3.2
+  attackDamage: 26
+  ignoreBelowGrowth: 0.3
+  panicAboveGrowth: 0.85
+  territorial: 0
+  territoryRadius: 90
+  migrationChancePerMinute: 0.03
+  migrationDistance: {x: 250, y: 550}
+  health: 190
+  nutrition: 95
+  predator: 0
+  preySpecies: []
+  huntChancePerMinute: 0.1

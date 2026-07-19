@@ -1,0 +1,157 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e3c19f96ab8fb4439f6c22b28a18950, type: 3}
+  m_Name: Urso
+  m_EditorClassIdentifier: 
+  speciesName: Urso
+  description: Predador territorial raro. Vaga sozinho, investiga barulhos, levanta
+    em duas patas para intimidar e decide se ignora ou ataca.
+  social: 0
+  groupSize: {x: 1, y: 1}
+  soloChance: 0
+  memberSpacing: 4
+  catchUpDistance: 10
+  roles:
+  - name: Macho
+    kind: 0
+    prefabs:
+    - {fileID: 998607632821897618, guid: 8ca967a8e0c2fc94a9cca81ef860cb04, type: 3}
+    - {fileID: 6255908700991819577, guid: fff07148027b2cf44b839e07b7d80522, type: 3}
+    - {fileID: 4765125371087128253, guid: 3ce19edba8c586e4193593d60f2359de, type: 3}
+    controller: {fileID: 9100000, guid: 9063dc3525fc1e64e8915394159ccbd2, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_5
+      - Idle_6
+      extras: []
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop
+        - EatDig_loop
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: 
+        loops: []
+        end: 
+      digWalk: 
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop_1
+        - Lie_loop_2
+        end: Lie_end
+      lieBelly:
+        start: 
+        loops: []
+        end: 
+      sit:
+        start: Sit_start
+        loops:
+        - Sit_loop_1
+        - Sit_loop_2
+        - Sit_loop_3
+        end: Sit_end
+      sleep:
+        start: Lie_sleep_start
+        loops:
+        - Lie_sleep_loop
+        end: Lie_sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: Stand_start
+        loops:
+        - Stand_loop_1
+        - Stand_loop_2
+        end: Stand_end
+      stalkIdle:
+        start: 
+        loops: []
+        end: 
+      stalkWalk: 
+      howl: 
+      eatCarcass: 
+      jumpPlace: Jump_place_IP
+      attacks:
+      - Attack_Bite
+      - Attack_F
+      - Attack_L
+      - Attack_R
+      chargeAttack: 
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_B
+      - Hit_F
+      - Hit_M
+      runFast: 
+    count: {x: 1, y: 1}
+    chance: 1
+    scaleRange: {x: 1, y: 1.1}
+    speedMul: 1
+  biomes:
+  - biome: 1
+    minWeight: 0.3
+    affinity: 1
+  - biome: 2
+    minWeight: 0.3
+    affinity: 0.6
+  - biome: 3
+    minWeight: 0.3
+    affinity: 0.35
+  spawnWeight: 1.8
+  maxActiveGroups: 2
+  activity: 15
+  walkSpeed: 1.25
+  trotSpeed: 3.4
+  runSpeed: 8.4
+  turnSpeed: 200
+  bravery: 0.95
+  aggression: 0.6
+  curiosity: 0.75
+  alertness: 0.5
+  grazing: 0.6
+  restfulness: 0.5
+  waterAffinity: 0.6
+  unpredictability: 0
+  playfulness: 0.5
+  sightRange: 70
+  fleeDistance: 15
+  attackRange: 18
+  meleeRange: 3
+  attackDamage: 34
+  ignoreBelowGrowth: 0.3
+  panicAboveGrowth: 0.95
+  territorial: 1
+  territoryRadius: 140
+  migrationChancePerMinute: 0
+  migrationDistance: {x: 250, y: 550}
+  health: 240
+  nutrition: 105
+  predator: 1
+  preySpecies:
+  - Lebre
+  huntChancePerMinute: 0.06

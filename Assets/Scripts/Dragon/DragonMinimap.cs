@@ -20,16 +20,19 @@ public class DragonMinimap : MonoBehaviour
 
     // Ícones vêm do asset Assets/Scriptables/Resources/MinimapIcons.asset
     // (MinimapIconSet) — configure sprites/cores/tamanhos lá, sem tocar na cena.
-    Sprite dragonSprite, foodSprite;
+    Sprite dragonSprite, foodSprite, animalSprite;
     Color dragonColor = Color.white;
     Color foodColor = new(1f, 0.7f, 0.25f);
-    float dragonSize = 24f, foodSize = 14f;
+    Color animalColor = new(0.55f, 0.85f, 1f, 0.9f);
+    Color predatorColor = new(1f, 0.4f, 0.35f, 0.95f);
+    float dragonSize = 24f, foodSize = 14f, animalSize = 8f;
 
     Transform dragon;
     DragonAttributes attrs;
-    RectTransform center, foodLayer, arrow;
+    RectTransform center, foodLayer, animalLayer, arrow;
     readonly List<Image> foodMarkers = new();
-    Sprite generatedArrow, generatedX;
+    readonly List<Image> animalMarkers = new();
+    Sprite generatedArrow, generatedX, generatedDot;
     float nextUpdate;
 
     public void Bind(DragonController d, DragonAttributes a)
@@ -42,10 +45,14 @@ public class DragonMinimap : MonoBehaviour
         {
             dragonSprite = icons.dragonSprite;
             foodSprite = icons.foodSprite;
+            animalSprite = icons.animalSprite;
             dragonColor = icons.dragonColor;
             foodColor = icons.foodColor;
+            animalColor = icons.animalColor;
+            predatorColor = icons.predatorColor;
             dragonSize = icons.dragonSize;
             foodSize = icons.foodSize;
+            animalSize = icons.animalSize;
         }
         Build();
     }
@@ -77,6 +84,22 @@ public class DragonMinimap : MonoBehaviour
         }
         for (int i = used; i < foodMarkers.Count; i++)
             foodMarkers[i].gameObject.SetActive(false);
+
+        // fauna viva dentro do faro — presas azuladas, predadores avermelhados
+        int usedAnimals = 0;
+        foreach (var a in AnimalAgent.All)
+        {
+            if (a == null || a.IsDead) continue;
+            float dx = a.transform.position.x - origin.x;
+            float dz = a.transform.position.z - origin.z;
+            if (dx * dx + dz * dz > range * range) continue;
+
+            var m = GetAnimalMarker(usedAnimals++);
+            m.color = a.Def != null && a.Def.predator ? predatorColor : animalColor;
+            m.rectTransform.anchoredPosition = new Vector2(dx, dz) / range * uiRadius;
+        }
+        for (int i = usedAnimals; i < animalMarkers.Count; i++)
+            animalMarkers[i].gameObject.SetActive(false);
     }
 
     // --------------------------------------------------------------- BUILD
@@ -101,7 +124,8 @@ public class DragonMinimap : MonoBehaviour
         center.anchorMin = center.anchorMax = new Vector2(0.5f, 0.5f);
         center.sizeDelta = Vector2.zero;
 
-        // camadas em ordem: comida embaixo, seta SEMPRE por cima
+        // camadas em ordem: fauna embaixo, comida no meio, seta SEMPRE por cima
+        animalLayer = MakeLayerRect("Animals");
         foodLayer = MakeLayerRect("Foods");
 
         var arrowImg = new GameObject("Dragon", typeof(Image)).GetComponent<Image>();
@@ -140,6 +164,22 @@ public class DragonMinimap : MonoBehaviour
         return m;
     }
 
+    Image GetAnimalMarker(int index)
+    {
+        while (animalMarkers.Count <= index)
+        {
+            var img = new GameObject("Animal", typeof(Image)).GetComponent<Image>();
+            img.transform.SetParent(animalLayer, false);
+            img.sprite = animalSprite != null ? animalSprite : (generatedDot ??= DotSprite());
+            img.raycastTarget = false;
+            img.rectTransform.sizeDelta = new Vector2(animalSize, animalSize);
+            animalMarkers.Add(img);
+        }
+        var m = animalMarkers[index];
+        m.gameObject.SetActive(true);
+        return m;
+    }
+
     // ------------------------------------------------- SPRITES PROCEDURAIS
     static Sprite CircleSprite()
     {
@@ -170,6 +210,18 @@ public class DragonMinimap : MonoBehaviour
                 if (Mathf.Abs(x - s / 2f) <= half)
                     tex.SetPixel(x, y, red);
         }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f));
+    }
+
+    static Sprite DotSprite()
+    {
+        const int s = 16; float r = s * 0.5f - 1f;
+        var tex = NewTex(s);
+        for (int y = 0; y < s; y++)
+            for (int x = 0; x < s; x++)
+                if (Vector2.Distance(new Vector2(x, y), new Vector2(s / 2f, s / 2f)) < r)
+                    tex.SetPixel(x, y, Color.white);
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f));
     }

@@ -44,5 +44,19 @@ static class EverwyrmAutoSetup
                 if (p.name == AnimatorMarker) { outdated = false; break; }
         }
         if (outdated) DragonSetup.RegenerateAnimatorAndPrefab();
+
+        // 4) Fauna configurada? (controllers + espécies do Forest Animals 2.0)
+        if (AssetDatabase.IsValidFolder("Assets/Red_Deer/Wild_Animals"))
+        {
+            if (AssetDatabase.LoadAssetAtPath<AnimalDefinition>(WildlifeSetup.MarkerAsset) == null)
+                WildlifeSetup.SetupAll(quiet: false);
+            else
+            {
+                // materiais do pacote ainda em Built-in (magenta)? converte.
+                var probe = AssetDatabase.LoadAssetAtPath<Material>(WildlifeSetup.ProbeMaterial);
+                if (probe != null && probe.shader != null && !probe.shader.name.StartsWith("HDRP/"))
+                    WildlifeSetup.ConvertMaterials();
+            }
+        }
     }
 }

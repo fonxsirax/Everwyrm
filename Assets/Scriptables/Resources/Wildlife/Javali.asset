@@ -1,0 +1,319 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e3c19f96ab8fb4439f6c22b28a18950, type: 3}
+  m_Name: Javali
+  m_EditorClassIdentifier: 
+  speciesName: Javali
+  description: "Pequenos grupos fu\xE7ando o ch\xE3o (Dig_walk). Imprevis\xEDvel:
+    ora foge, ora parte para cima \u2014 nunca d\xE1 para ter certeza."
+  social: 3
+  groupSize: {x: 2, y: 6}
+  soloChance: 0.3
+  memberSpacing: 3.5
+  catchUpDistance: 10
+  roles:
+  - name: Macho
+    kind: 0
+    prefabs:
+    - {fileID: 3079695440661327860, guid: 72d5c7eefc5b24642969e19cd0f758a6, type: 3}
+    - {fileID: 550375672422619498, guid: 5fd4e36bc775b48408f6ad47c53de86d, type: 3}
+    - {fileID: 5542278096399875581, guid: b66f27e3b3414e3458a7ee9726312b8e, type: 3}
+    controller: {fileID: 9100000, guid: e9eead421009c0c4fa474bd6c31d8bd0, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_5
+      - Idle_6
+      extras: []
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop_1
+        - Eat_loop_2
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: 
+        loops: []
+        end: 
+      digWalk: Dig_walk_IP
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop_1
+        - Lie_loop_2
+        end: Lie_end
+      lieBelly:
+        start: 
+        loops: []
+        end: 
+      sit:
+        start: 
+        loops: []
+        end: 
+      sleep:
+        start: Lie_sleep_start
+        loops:
+        - Lie_sleep_loop
+        end: Lie_sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: 
+        loops: []
+        end: 
+      stalkIdle:
+        start: 
+        loops: []
+        end: 
+      stalkWalk: 
+      howl: 
+      eatCarcass: 
+      jumpPlace: Jump_place_IP
+      attacks:
+      - Attack_F
+      - Attack_L
+      - Attack_R
+      - Attack_Up
+      chargeAttack: Attack_Run_IP
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_B
+      - Hit_F
+      - Hit_M
+      runFast: 
+    count: {x: 1, y: 1}
+    chance: 0.8
+    scaleRange: {x: 1, y: 1.08}
+    speedMul: 1
+  - name: "F\xEAmea"
+    kind: 1
+    prefabs:
+    - {fileID: 3441131714533742938, guid: 05c61c21692b8554e8cc14e32371e020, type: 3}
+    - {fileID: 8953030405639012412, guid: a35b4994020e40b48ab1ff3e712f1bb2, type: 3}
+    - {fileID: 3045018643715619511, guid: 1da61a503aa53a4458c53e78f2b1ab64, type: 3}
+    controller: {fileID: 9100000, guid: b5b16dd2e0faa554d82657f87c1d1d42, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_5
+      - Idle_6
+      extras: []
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop_1
+        - Eat_loop_2
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: 
+        loops: []
+        end: 
+      digWalk: Dig_walk_IP
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop_1
+        - Lie_loop_2
+        end: Lie_end
+      lieBelly:
+        start: 
+        loops: []
+        end: 
+      sit:
+        start: 
+        loops: []
+        end: 
+      sleep:
+        start: Lie_sleep_start
+        loops:
+        - Lie_sleep_loop
+        end: Lie_sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: 
+        loops: []
+        end: 
+      stalkIdle:
+        start: 
+        loops: []
+        end: 
+      stalkWalk: 
+      howl: 
+      eatCarcass: 
+      jumpPlace: Jump_place_IP
+      attacks:
+      - Attack_F
+      - Attack_L
+      - Attack_R
+      - Attack_Up
+      chargeAttack: Attack_Run_IP
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_B
+      - Hit_F
+      - Hit_M
+      runFast: 
+    count: {x: 1, y: 3}
+    chance: 1
+    scaleRange: {x: 0.94, y: 1.06}
+    speedMul: 1
+  - name: Filhote
+    kind: 2
+    prefabs:
+    - {fileID: 5515534292888582148, guid: e4016633166b4b24288e592af4a5413f, type: 3}
+    - {fileID: 1419819575635623383, guid: 0e31332b34ca93648bef2fd4e4312970, type: 3}
+    controller: {fileID: 9100000, guid: 34e6edb2a333c9245a4a5d04356639c5, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_5
+      - Idle_6
+      extras: []
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop_1
+        - Eat_loop_2
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: 
+        loops: []
+        end: 
+      digWalk: Dig_walk_IP
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop_1
+        - Lie_loop_2
+        end: Lie_end
+      lieBelly:
+        start: 
+        loops: []
+        end: 
+      sit:
+        start: 
+        loops: []
+        end: 
+      sleep:
+        start: Lie_sleep_start
+        loops:
+        - Lie_sleep_loop
+        end: Lie_sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: 
+        loops: []
+        end: 
+      stalkIdle:
+        start: 
+        loops: []
+        end: 
+      stalkWalk: 
+      howl: 
+      eatCarcass: 
+      jumpPlace: Jump_place_IP
+      attacks:
+      - Attack_F
+      - Attack_L
+      - Attack_R
+      - Attack_Up
+      chargeAttack: Attack_Run_IP
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_B
+      - Hit_F
+      - Hit_M
+      runFast: 
+    count: {x: 0, y: 4}
+    chance: 0.7
+    scaleRange: {x: 0.85, y: 1}
+    speedMul: 0.9
+  biomes:
+  - biome: 1
+    minWeight: 0.25
+    affinity: 1
+  - biome: 0
+    minWeight: 0.25
+    affinity: 0.6
+  spawnWeight: 6.5
+  maxActiveGroups: 3
+  activity: 15
+  walkSpeed: 1.1
+  trotSpeed: 3.3
+  runSpeed: 8
+  turnSpeed: 260
+  bravery: 0.5
+  aggression: 0.45
+  curiosity: 0.3
+  alertness: 0.6
+  grazing: 0.8
+  restfulness: 0.35
+  waterAffinity: 0.3
+  unpredictability: 0.85
+  playfulness: 0.7
+  sightRange: 55
+  fleeDistance: 28
+  attackRange: 11
+  meleeRange: 2.2
+  attackDamage: 16
+  ignoreBelowGrowth: 0.1
+  panicAboveGrowth: 0.7
+  territorial: 0
+  territoryRadius: 90
+  migrationChancePerMinute: 0.06
+  migrationDistance: {x: 200, y: 450}
+  health: 80
+  nutrition: 55
+  predator: 0
+  preySpecies: []
+  huntChancePerMinute: 0.1

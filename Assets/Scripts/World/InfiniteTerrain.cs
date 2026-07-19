@@ -65,6 +65,18 @@ public class InfiniteTerrain : MonoBehaviour
     Vector2 startLakeCenter;
     bool startLakeSet;
 
+    [Header("Riachos (canal escavado + mesma lâmina d'água dos lagos)")]
+    [Tooltip("Riachos serpenteando por bioma (padrão: só Floresta Antiga). O leito é escavado " +
+             "abaixo do waterLevel, então a MESMA WaterSurface dos lagos preenche a água.")]
+    public bool enableStreams = true;
+    [Tooltip("Config por bioma. Vazio = padrão (só Floresta Antiga). Para expandir a outros " +
+             "biomas no futuro, basta adicionar entradas aqui.")]
+    [SerializeField] List<StreamSettings> streamSettings = new();
+    [Tooltip("Ripples com direção fixa na água — sensação de correnteza nos riachos " +
+             "(deriva sutil também nos lagos).")]
+    [SerializeField] bool streamFlowRipples = true;
+    [SerializeField] float streamRippleSpeed = 3.5f;
+
     [Header("Vegetação da Floresta/Campos (ALP)")]
     public GameObject[] treePrefabs;            // Floresta Antiga (+ raras nos Campos)
     public GameObject[] bushPrefabs;            // arbustos: floresta densa + campos esparsos
@@ -170,6 +182,41 @@ public class InfiniteTerrain : MonoBehaviour
         [NonSerialized] public int protoCount;
     }
 
+    /// <summary>
+    /// Regras de riacho de UM bioma. O traçado é a curva de nível 0.5 de um Perlin
+    /// em coordenadas de mundo (linhas sinuosas, contínuas, sem costura entre tiles),
+    /// com largura modulada por um 2º noise e presença regional por um 3º.
+    /// Tudo multiplicado pelo peso do bioma: na borda o riacho afina, seca e some.
+    /// </summary>
+    [Serializable]
+    public class StreamSettings
+    {
+        public string name = "Riachos da Floresta";
+        public Biome biome = Biome.Floresta;
+        public bool enabled = true;
+
+        [Tooltip("Escala do meandro (m) — maior = curvas mais largas e riachos mais afastados")]
+        public float courseSize = 430f;
+        [Tooltip("Meia-largura do canal em unidades de noise (~0.022 ≈ canal de 8–18 m)")]
+        [Range(0.008f, 0.06f)] public float channelWidth = 0.022f;
+        [Tooltip("Profundidade do leito abaixo do waterLevel (m)")]
+        public float depth = 1.6f;
+        [Tooltip("Altura do fundo do vale acima do waterLevel (m)")]
+        public float bankHeight = 1.2f;
+        [Tooltip("Largura do vale relativa ao canal (encostas suaves até o leito)")]
+        public float valleyWidthMul = 3.2f;
+        [Tooltip("Fração aproximada do bioma com riachos (1 = bioma inteiro)")]
+        [Range(0f, 1f)] public float density = 0.6f;
+        [Tooltip("Tamanho das regiões com/sem riachos (m)")]
+        public float regionSize = 1400f;
+        [Tooltip("Peso do bioma a partir do qual o riacho aparece em força total")]
+        [Range(0f, 1f)] public float fadeStart = 0.55f;
+        [Tooltip("Peso do bioma abaixo do qual não existe riacho nenhum")]
+        [Range(0f, 1f)] public float fadeEnd = 0.25f;
+
+        [NonSerialized] public Vector2 offCourse, offWidth, offRegion; // da seed (BuildStreamSetup)
+    }
+
     readonly Dictionary<Vector2Int, Terrain> tiles = new();
     readonly Dictionary<Vector2Int, List<Vector2>> tileTrees = new(); // XZ das árvores (minimapa)
     readonly Queue<Vector2Int> buildQueue = new();
@@ -179,6 +226,7 @@ public class InfiniteTerrain : MonoBehaviour
     Material terrainMat;
     TreePrototype[] prototypes;                 // união dos prefabs de todas as camadas
     List<ScatterLayer> activeLayers;            // scatterLayers ou o padrão
+    List<StreamSettings> activeStreams;         // streamSettings habilitados ou o padrão
     readonly Dictionary<int, Vector2> clusterOffsets = new();
     float oxT, ozT, oxM, ozM, oxH, ozH, oxD, ozD; // offsets de noise (seed)
 
@@ -209,6 +257,7 @@ public class InfiniteTerrain : MonoBehaviour
         };
 
         BuildScatterSetup();
+        BuildStreamSetup();
     }
 
     void Start()
@@ -318,6 +367,34 @@ public class InfiniteTerrain : MonoBehaviour
             }
         }
     }
+
+    /// <summary>
+    /// Resolve as configs de riacho ativas e sorteia offsets de noise próprios por
+    /// entrada (System.Random independente — não consome o rng dos offsets do
+    /// terreno, então ligar/desligar riachos NÃO muda o resto do mundo).
+    /// </summary>
+    void BuildStreamSetup()
+    {
+        activeStreams = new List<StreamSettings>();
+        if (!enableStreams) return;
+
+        var list = streamSettings != null && streamSettings.Count > 0
+            ? streamSettings : DefaultStreams();
+        for (int i = 0; i < list.Count; i++)
+        {
+            var s = list[i];
+            if (s == null || !s.enabled) continue;
+            var r = new System.Random(seed * 131 + i * 613 + 7);
+            float Off() => (float)(r.NextDouble() * 8000.0 - 4000.0);
+            s.offCourse = new Vector2(Off(), Off());
+            s.offWidth = new Vector2(Off(), Off());
+            s.offRegion = new Vector2(Off(), Off());
+            activeStreams.Add(s);
+        }
+    }
+
+    /// <summary>Padrão de riachos: decisão de design — SÓ na Floresta Antiga.</summary>
+    static List<StreamSettings> DefaultStreams() => new() { new StreamSettings() };
 
     /// <summary>
     /// Conjunto padrão de camadas — Floresta/Campos como sempre foram, e o Deserto
@@ -481,7 +558,11 @@ public class InfiniteTerrain : MonoBehaviour
                 float dRock = desert * Mathf.Clamp01(slope * 2.6f - 0.3f); // penhascos de arenito
                 float sand = Mathf.Max(0f, desert - dRock);
 
-                float g = plains, f = forest, r = rock, s = snow;
+                // riachos: leito pinta rocha molhada, margens do vale pintam terra
+                float sBed = 0f, sBank = 0f;
+                StreamPaintMasks(wx, wz, plains, forest, mount, cold, desert, ref sBed, ref sBank);
+
+                float g = plains, f = forest + sBank * 1.6f, r = rock + sBed * 1.4f, s = snow;
                 float sum = g + f + r + s + sand + dRock + 0.0001f;
                 alphas[z, x, 0] = g / sum;
                 alphas[z, x, 1] = f / sum;
@@ -530,7 +611,7 @@ public class InfiniteTerrain : MonoBehaviour
     /// </summary>
     void EnsureWaterSurface()
     {
-        if (!enableLakes || lakeSurface != null) return;
+        if ((!enableLakes && !StreamsActive) || lakeSurface != null) return;
 
         var go = new GameObject("Lake Water (HDRP)");
         go.transform.SetParent(transform, false);
@@ -550,6 +631,17 @@ public class InfiniteTerrain : MonoBehaviour
         volume.size = new Vector3(1f, 12f, 1f);   // x/z cobrem o quad via escala
         lakeSurface.underWater = true;
         lakeSurface.volumeBounds = volume;
+
+        // correnteza visual dos riachos: ripples com direção própria em vez de
+        // herdada (deriva sutil também nos lagos — aceitável). Upgrade futuro:
+        // ripplesCurrentMap regional apontando ao longo de cada curso.
+        if (streamFlowRipples && StreamsActive)
+        {
+            lakeSurface.ripplesMotionMode =
+                UnityEngine.Rendering.HighDefinition.WaterPropertyOverrideMode.Custom;
+            lakeSurface.ripplesOrientationValue = 25f;
+            lakeSurface.ripplesWindSpeed = streamRippleSpeed;
+        }
     }
 
     void UpdateWaterFollow()
@@ -588,7 +680,8 @@ public class InfiniteTerrain : MonoBehaviour
                 float wx = ox + nx * tileSize, wz = oz + nz * tileSize;
 
                 // 1) peso do bioma — densidade cai suavemente rumo à borda
-                float w = BiomeWeightOf(layer.biome, wx, wz);
+                BiomeWeights(wx, wz, out float bPl, out float bFo, out float bMo, out float bCo, out float bDe);
+                float w = PickWeight(layer.biome, bPl, bFo, bMo, bCo, bDe);
                 if (w < layer.minBiomeWeight) continue;
                 float p = layer.density *
                           Mathf.Sqrt(Mathf.InverseLerp(layer.minBiomeWeight, 1f, w));
@@ -603,12 +696,17 @@ public class InfiniteTerrain : MonoBehaviour
                 }
                 if (roll > p) continue;
 
+                // 2.5) riachos: nada dentro do canal nem nas margens do vale
+                //      (barato — vem antes de SlopeAt, que custa 3x HeightAt)
+                if (StreamExcluded(wx, wz, bPl, bFo, bMo, bCo, bDe)) continue;
+
                 // 3) relevo
                 float slope = SlopeAt(wx, wz);
                 if (slope < layer.minSlope || slope > layer.maxSlope) continue;
                 float h = HeightAt(wx, wz);
                 if (h < layer.heightRange.x || h > layer.heightRange.y) continue;
-                if (enableLakes && h < waterLevel + 0.35f) continue;   // nada dentro/na beira d'água
+                if ((enableLakes || StreamsActive) && h < waterLevel + 0.35f)
+                    continue;   // nada dentro/na beira d'água
 
                 // 4) distância de outros objetos
                 var pos2 = new Vector2(wx, wz);
@@ -695,7 +793,11 @@ public class InfiniteTerrain : MonoBehaviour
     public float BiomeWeightOf(Biome biome, float wx, float wz)
     {
         BiomeWeights(wx, wz, out float plains, out float forest, out float mount, out float cold, out float desert);
-        return biome switch
+        return PickWeight(biome, plains, forest, mount, cold, desert);
+    }
+
+    static float PickWeight(Biome biome, float plains, float forest, float mount, float cold, float desert)
+        => biome switch
         {
             Biome.Campos => plains,
             Biome.Floresta => forest,
@@ -703,6 +805,103 @@ public class InfiniteTerrain : MonoBehaviour
             Biome.Tundra => cold,
             _ => desert,
         };
+
+    // ------------------------------------------------------------- RIACHOS
+    bool StreamsActive => enableStreams && activeStreams != null && activeStreams.Count > 0;
+
+    /// <summary>Mundo tem riachos? (fauna/gameplay consultam.)</summary>
+    public bool HasStreams => StreamsActive;
+
+    /// <summary>
+    /// Máscaras de UM riacho num ponto: retorna o canal [0..1] (0 = fora) e o vale
+    /// (mais largo, encostas incluídas) em out. Função pura de (worldXZ, seed).
+    /// Custo: 1–3 Perlin, com early-out fora do bioma e longe da curva de nível.
+    /// </summary>
+    float StreamMasks(float wx, float wz, float biomeW, StreamSettings s, out float valley)
+    {
+        valley = 0f;
+
+        // fade pelo peso do bioma: força total dentro, nada fora (requisito de design)
+        float fade = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(s.fadeEnd, s.fadeStart, biomeW));
+        if (fade <= 0.002f) return 0f;
+
+        // curva de nível 0.5 do noise de curso = linha sinuosa contínua no mundo
+        float n = Mathf.PerlinNoise(wx / s.courseSize + s.offCourse.x,
+                                    wz / s.courseSize + s.offCourse.y);
+        float d = Mathf.Abs(n - 0.5f);
+        if (d >= s.channelWidth * 1.45f * s.valleyWidthMul) return 0f;   // longe do curso
+
+        // regiões com/sem riachos (density) — manchas grandes, transição suave
+        if (s.density < 0.999f)
+        {
+            float t = Mathf.Lerp(0.72f, 0.15f, s.density);
+            float rg = Mathf.PerlinNoise(wx / s.regionSize + s.offRegion.x,
+                                         wz / s.regionSize + s.offRegion.y);
+            fade *= Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(t, t + 0.12f, rg));
+            if (fade <= 0.002f) return 0f;
+        }
+
+        // largura respira ao longo do curso e AFINA junto com o fade do bioma —
+        // na borda da floresta o riacho estreita antes de secar (nunca corte seco)
+        float wn = Mathf.PerlinNoise(wx / (s.courseSize * 0.31f) + s.offWidth.x,
+                                     wz / (s.courseSize * 0.31f) + s.offWidth.y);
+        float halfW = s.channelWidth * Mathf.Lerp(0.55f, 1.45f, wn) * Mathf.Lerp(0.3f, 1f, fade);
+
+        valley = (1f - Mathf.SmoothStep(0.25f, 1f, d / (halfW * s.valleyWidthMul))) * fade;
+        return d < halfW ? (1f - Mathf.SmoothStep(0.3f, 1f, d / halfW)) * fade : 0f;
+    }
+
+    /// <summary>Força [0..1] do canal de riacho num ponto do mundo (0 = fora).</summary>
+    public float StreamStrength(float wx, float wz)
+    {
+        if (!StreamsActive) return 0f;
+        BiomeWeights(wx, wz, out float pl, out float fo, out float mo, out float co, out float de);
+        float best = 0f;
+        for (int i = 0; i < activeStreams.Count; i++)
+        {
+            var s = activeStreams[i];
+            float bw = PickWeight(s.biome, pl, fo, mo, co, de);
+            if (bw < s.fadeEnd) continue;
+            float c = StreamMasks(wx, wz, bw, s, out _);
+            if (c > best) best = c;
+        }
+        return best;
+    }
+
+    /// <summary>Há água de riacho neste ponto? (Fauna usa como fonte de água.)</summary>
+    public bool IsStream(Vector3 worldPos) =>
+        StreamStrength(worldPos.x, worldPos.z) > 0.45f &&
+        HeightAt(worldPos.x, worldPos.z) < waterLevel;
+
+    /// <summary>Ponto cai no canal ou nas margens do vale? (Exclusão do scatter.)</summary>
+    bool StreamExcluded(float wx, float wz, float pl, float fo, float mo, float co, float de)
+    {
+        if (!StreamsActive) return false;
+        for (int i = 0; i < activeStreams.Count; i++)
+        {
+            var s = activeStreams[i];
+            float bw = PickWeight(s.biome, pl, fo, mo, co, de);
+            if (bw < s.fadeEnd) continue;
+            StreamMasks(wx, wz, bw, s, out float valley);
+            if (valley > 0.35f) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Leito/margens para o splatmap (máximo entre todos os riachos).</summary>
+    void StreamPaintMasks(float wx, float wz, float pl, float fo, float mo, float co, float de,
+                          ref float bed, ref float bank)
+    {
+        if (!StreamsActive) return;
+        for (int i = 0; i < activeStreams.Count; i++)
+        {
+            var s = activeStreams[i];
+            float bw = PickWeight(s.biome, pl, fo, mo, co, de);
+            if (bw < s.fadeEnd) continue;
+            float c = StreamMasks(wx, wz, bw, s, out float valley);
+            bed = Mathf.Max(bed, c);
+            bank = Mathf.Max(bank, Mathf.Clamp01(valley - c));
+        }
     }
 
     void SnapPlayerToGround()
@@ -798,6 +997,24 @@ public class InfiniteTerrain : MonoBehaviour
                 if (bowl > 0f) h = Mathf.Lerp(h, lakeBed, bowl);
             }
         }
+
+        // ---- RIACHOS: canais por curva de nível de noise, por bioma (padrão: só
+        //      Floresta Antiga). Vale raso até pertinho da água + canal abaixo do
+        //      waterLevel — a MESMA lâmina dos lagos preenche o leito, sem nova
+        //      superfície. Min() nunca LEVANTA terreno (desaguar em lago é seguro).
+        //      Depois dos lagos de propósito: a bacia já escavada tem prioridade.
+        if (enableStreams && activeStreams != null)
+            for (int i = 0; i < activeStreams.Count; i++)
+            {
+                var s = activeStreams[i];
+                float bw = PickWeight(s.biome, plains, forest, mount, cold, desert);
+                if (bw < s.fadeEnd) continue;               // early-out: fora do bioma
+                float channel = StreamMasks(wx, wz, bw, s, out float valley);
+                if (valley <= 0f) continue;
+                h = Mathf.Min(h, Mathf.Lerp(h, waterLevel + s.bankHeight, valley));
+                if (channel > 0f)
+                    h = Mathf.Min(h, Mathf.Lerp(h, waterLevel - s.depth, channel));
+            }
         return h;
     }
 

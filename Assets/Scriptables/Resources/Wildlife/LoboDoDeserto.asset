@@ -1,0 +1,350 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e3c19f96ab8fb4439f6c22b28a18950, type: 3}
+  m_Name: LoboDoDeserto
+  m_EditorClassIdentifier: 
+  speciesName: Lobo
+  description: "Alcateias pequenas e n\xF4mades que cruzam grandes dist\xE2ncias
+    entre um o\xE1sis e outro, ca\xE7ando lebres e javalis. O grande predador do
+    deserto."
+  social: 2
+  groupSize: {x: 2, y: 4}
+  soloChance: 0
+  memberSpacing: 4
+  catchUpDistance: 12
+  roles:
+  - name: Alfa
+    kind: 0
+    prefabs:
+    - {fileID: 1219990563721821349, guid: 75b2a2cffbcf64843a5b9dfb3f3278af, type: 3}
+    - {fileID: 1727291535665117382, guid: c881f79ce9be6f440ab694c780259c33, type: 3}
+    - {fileID: 6557084123349629819, guid: 6cf447d02bc5f9e468ae1a65253d7962, type: 3}
+    - {fileID: 8052376724319783112, guid: 058a5de92bbf69a4ebfa360ccd6971eb, type: 3}
+    controller: {fileID: 9100000, guid: af966e8eb071ec544aa6f9959798e944, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_6
+      - Idle_7
+      extras:
+      - Scratching
+      - Defecate
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: Digging_start
+        loops:
+        - Digging_loop
+        end: Digging_end
+      digWalk: 
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop_1
+        - Lie_loop_2
+        end: Lie_end
+      lieBelly:
+        start: Lie_belly_start
+        loops:
+        - Lie_belly_loop_1
+        - Lie_belly_loop_2
+        end: Lie_belly_end
+      sit:
+        start: Sitting_start
+        loops:
+        - Sitting_loop_1
+        - Sitting_loop_2
+        end: Sitting_end
+      sleep:
+        start: Lie_Sleep_start
+        loops:
+        - Lie_Sleep_loop
+        end: Lie_Sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: 
+        loops: []
+        end: 
+      stalkIdle:
+        start: Crouch_Idle_start
+        loops:
+        - Crouch_Idle_loop_1
+        - Crouch_Idle_loop_2
+        end: Crouch_Idle_end
+      stalkWalk: Crouch_F_IP
+      howl: Howl
+      eatCarcass: Eat_tear
+      jumpPlace: Jump_Place_IP
+      attacks:
+      - Attack_Bite
+      - Attack_F
+      - Attack_J
+      - Attack_L
+      - Attack_R
+      chargeAttack: 
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_B
+      - Hit_F
+      - Hit_M
+      runFast: RunFast_F_IP
+    count: {x: 1, y: 1}
+    chance: 1
+    scaleRange: {x: 1.02, y: 1.1}
+    speedMul: 1
+  - name: Adulto
+    kind: 1
+    prefabs:
+    - {fileID: 1219990563721821349, guid: 75b2a2cffbcf64843a5b9dfb3f3278af, type: 3}
+    - {fileID: 1727291535665117382, guid: c881f79ce9be6f440ab694c780259c33, type: 3}
+    - {fileID: 6557084123349629819, guid: 6cf447d02bc5f9e468ae1a65253d7962, type: 3}
+    - {fileID: 8052376724319783112, guid: 058a5de92bbf69a4ebfa360ccd6971eb, type: 3}
+    controller: {fileID: 9100000, guid: af966e8eb071ec544aa6f9959798e944, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_6
+      - Idle_7
+      extras:
+      - Scratching
+      - Defecate
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: Digging_start
+        loops:
+        - Digging_loop
+        end: Digging_end
+      digWalk: 
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop_1
+        - Lie_loop_2
+        end: Lie_end
+      lieBelly:
+        start: Lie_belly_start
+        loops:
+        - Lie_belly_loop_1
+        - Lie_belly_loop_2
+        end: Lie_belly_end
+      sit:
+        start: Sitting_start
+        loops:
+        - Sitting_loop_1
+        - Sitting_loop_2
+        end: Sitting_end
+      sleep:
+        start: Lie_Sleep_start
+        loops:
+        - Lie_Sleep_loop
+        end: Lie_Sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: 
+        loops: []
+        end: 
+      stalkIdle:
+        start: Crouch_Idle_start
+        loops:
+        - Crouch_Idle_loop_1
+        - Crouch_Idle_loop_2
+        end: Crouch_Idle_end
+      stalkWalk: Crouch_F_IP
+      howl: Howl
+      eatCarcass: Eat_tear
+      jumpPlace: Jump_Place_IP
+      attacks:
+      - Attack_Bite
+      - Attack_F
+      - Attack_J
+      - Attack_L
+      - Attack_R
+      chargeAttack: 
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_B
+      - Hit_F
+      - Hit_M
+      runFast: RunFast_F_IP
+    count: {x: 1, y: 3}
+    chance: 1
+    scaleRange: {x: 0.94, y: 1.06}
+    speedMul: 1
+  - name: Filhote
+    kind: 2
+    prefabs:
+    - {fileID: 27772106115297035, guid: 00232bf662fd05046b60d4207e469f0f, type: 3}
+    - {fileID: 3910319455163902011, guid: 1caad09d39942734ea3b420b24868827, type: 3}
+    - {fileID: 5281760435629431164, guid: 978447718bf80f94c81e110d6dcc89b0, type: 3}
+    - {fileID: 2081035412301097653, guid: da13b8dd915dcf849b9f9206873a541b, type: 3}
+    controller: {fileID: 9100000, guid: 2858f20840558624eac502146d6737f6, type: 2}
+    anims:
+      idles:
+      - Idle_1
+      - Idle_2
+      - Idle_3
+      - Idle_4
+      - Idle_6
+      - Idle_7
+      extras:
+      - Scratching
+      - Defecate
+      graze:
+        start: EatDrink_start
+        loops:
+        - Eat_loop
+        end: EatDrink_end
+      grazeWalk: 
+      drink:
+        start: EatDrink_start
+        loops:
+        - Drink_loop
+        end: EatDrink_end
+      dig:
+        start: Digging_start
+        loops:
+        - Digging_loop
+        end: Digging_end
+      digWalk: 
+      lie:
+        start: Lie_start
+        loops:
+        - Lie_loop_1
+        - Lie_loop_2
+        end: Lie_end
+      lieBelly:
+        start: Lie_belly_start
+        loops:
+        - Lie_belly_loop_1
+        - Lie_belly_loop_2
+        end: Lie_belly_end
+      sit:
+        start: Sitting_start
+        loops:
+        - Sitting_loop_1
+        - Sitting_loop_2
+        end: Sitting_end
+      sleep:
+        start: Lie_Sleep_start
+        loops:
+        - Lie_Sleep_loop
+        end: Lie_Sleep_end
+      hide:
+        start: 
+        loops: []
+        end: 
+      stand:
+        start: 
+        loops: []
+        end: 
+      stalkIdle:
+        start: Crouch_Idle_start
+        loops:
+        - Crouch_Idle_loop_1
+        - Crouch_Idle_loop_2
+        end: Crouch_Idle_end
+      stalkWalk: Crouch_F_IP
+      howl: Howl
+      eatCarcass: Eat_tear
+      jumpPlace: Jump_Place_IP
+      attacks:
+      - Attack_Bite
+      - Attack_F
+      - Attack_J
+      - Attack_L
+      - Attack_R
+      chargeAttack: 
+      deaths:
+      - Death_L
+      - Death_R
+      hits:
+      - Hit_B
+      - Hit_F
+      - Hit_M
+      runFast: RunFast_F_IP
+    count: {x: 0, y: 1}
+    chance: 0.35
+    scaleRange: {x: 0.85, y: 1}
+    speedMul: 0.9
+  biomes:
+  - biome: 4
+    minWeight: 0.35
+    affinity: 0.7
+  spawnWeight: 2
+  maxActiveGroups: 1
+  activity: 15
+  walkSpeed: 1.2
+  trotSpeed: 3.7
+  runSpeed: 9
+  turnSpeed: 280
+  bravery: 0.75
+  aggression: 0.5
+  curiosity: 0.5
+  alertness: 0.8
+  grazing: 0.1
+  restfulness: 0.4
+  waterAffinity: 0.55
+  unpredictability: 0
+  playfulness: 0.9
+  sightRange: 85
+  fleeDistance: 20
+  attackRange: 14
+  meleeRange: 2
+  attackDamage: 12
+  ignoreBelowGrowth: 0.2
+  panicAboveGrowth: 0.6
+  territorial: 0
+  territoryRadius: 90
+  migrationChancePerMinute: 0.2
+  migrationDistance: {x: 350, y: 700}
+  health: 70
+  nutrition: 40
+  predator: 1
+  preySpecies:
+  - Lebre
+  - Javali
+  huntChancePerMinute: 0.35

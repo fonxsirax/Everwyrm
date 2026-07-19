@@ -149,6 +149,44 @@ A caça possui três etapas:
 
 Como o sistema é único, qualquer criatura nova automaticamente cria novas experiências.
 
+## Fauna (Ecossistema Vivo)
+
+A fauna existe para o mundo, não para o jogador. Rebanhos pastam, migram, caçam e descansam mesmo quando ninguém está olhando — o jogador apenas testemunha.
+
+Um único sistema de IA parametrizável controla todas as espécies (mesma filosofia da IA dos dragões). Cada espécie é apenas um conjunto de dados: biomas, raridade, organização social, personalidade, migração e cadeia alimentar. Espécie nova = novo asset de dados, zero código.
+
+### Organização Social
+
+- **Solitário** — quase sempre sozinho (urso, alce).
+- **Rebanho** — grupos grandes e frouxos (cervos, lebres).
+- **Alcateia** — grupos organizados com líder (lobos).
+- **Híbrido** — sozinho ou em pequenos grupos, decidido proceduralmente (javali, raposa).
+
+Grupos são coesos de verdade: âncora compartilhada, fuga coletiva, migrações espontâneas cruzando o mundo. Filhotes nunca existem sem os adultos e ficam colados na mãe.
+
+### Espécies
+
+| Espécie | Social | Personalidade |
+|---|---|---|
+| Lebre | Rebanho frouxo, muito comum | Pânico fácil; dispara e se esconde no mato; filhotes junto dos adultos |
+| Raposa | Híbrido (maioria solitária) | Curiosa — chega perto para observar antes de fugir; caça lebres em tocaia |
+| Cervo | Rebanho 5–9 | Extremamente tímido, vigília constante, pasta andando; Stag ocasional liderando |
+| Cervo solitário | Solitário raro | Stag territorial; pode investir contra dragões jovens |
+| Cervo-Real | Rebanho 6–12 nos Campos | Migra longe com frequência — as grandes travessias de vale |
+| Alce | Solitário | Corajoso e imponente; ignora dragões pequenos; vive na beira dos lagos; perigoso se provocado |
+| Alce com cria | Par raro | A mãe é mais agressiva que o macho |
+| Javali | Híbrido 2–6 | Fuça o chão em bando; imprevisível — ora foge, ora ataca |
+| Urso | Solitário territorial | Investiga barulhos, levanta em duas patas para intimidar, decide entre ignorar e atacar |
+| Ursa com filhotes | Raríssima | Protege as crias com agressividade máxima |
+| Lobo | Alcateia 3–6 | Patrulha territórios enormes, uiva em coro, caça cervos e lebres de verdade |
+
+### Interações Emergentes
+
+- Lobos abatem presas que viram carcaças reais — o jogador pode assustá-los e roubar a caça.
+- O tamanho do dragão muda tudo: filhotes são ignorados (ou caçados); um Colossal causa pânico geral.
+- Pousar perto faz barulho: uns fogem, curiosos investigam.
+- A Dominância Territorial (faro) revela a fauna próxima — presas e predadores.
+
 ## Sistema de Crescimento
 
 O crescimento depende de: tempo vivido e alimentação. Não existe XP tradicional. Comer bem acelera o crescimento; passar fome desacelera. Isso conecta sobrevivência diretamente à progressão.

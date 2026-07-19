@@ -12,6 +12,7 @@ public class Carcass : MonoBehaviour
 
     [SerializeField] float nutritionTotal = 40f;
     [SerializeField] float nutritionPerBite = 12f;
+    [SerializeField] bool showVisual = true;   // false: o corpo do animal É o visual
 
     float remaining;
     Transform visual;
@@ -19,19 +20,23 @@ public class Carcass : MonoBehaviour
 
     public bool IsEmpty => remaining <= 0f;
 
-    public static Carcass Spawn(Vector3 position, float nutrition)
+    public static Carcass Spawn(Vector3 position, float nutrition, bool buildVisual = true)
     {
         var go = new GameObject("Carcass");
         go.transform.position = position;
         var c = go.AddComponent<Carcass>();
         c.nutritionTotal = nutrition;
+        c.showVisual = buildVisual;
         return c;
     }
 
-    void Awake()
+    // Start (não Awake): Spawn() ajusta nutritionTotal DEPOIS do AddComponent —
+    // em Awake a carcaça congelava no valor default do campo.
+    void Start()
     {
         remaining = nutritionTotal;
-        BuildVisual();
+        if (showVisual) BuildVisual();
+        else { visual = transform; initialScale = 1f; }
     }
 
     void OnEnable() => All.Add(this);
