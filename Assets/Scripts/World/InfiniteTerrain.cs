@@ -54,8 +54,16 @@ public class InfiniteTerrain : MonoBehaviour
     public float waterLevel = 3.2f;
     [SerializeField] float lakeDepth = 7f;          // profundidade máxima da escavação
     [SerializeField] float lakePatchSize = 550f;    // tamanho das manchas de bacia (m)
+    [Tooltip("Oásis no deserto: manchas ENORMES e raríssimas. Maior = oásis maiores e mais raros.")]
+    [SerializeField] float oasisPatchSize = 1500f;
     [Tooltip("Lado do quad de água que segue o jogador (deve cobrir o raio de tiles).")]
     [SerializeField] float waterQuadSize = 1800f;
+    [Tooltip("Escava um lago garantido a ~70 m do spawn do jogador (bom p/ testar).")]
+    [SerializeField] bool guaranteedStartLake = true;
+    [SerializeField] float startLakeRadius = 50f;
+
+    Vector2 startLakeCenter;
+    bool startLakeSet;
 
     [Header("Vegetação da Floresta/Campos (ALP)")]
     public GameObject[] treePrefabs;            // Floresta Antiga (+ raras nos Campos)
@@ -211,6 +219,13 @@ public class InfiniteTerrain : MonoBehaviour
             if (p != null) player = p.transform;
         }
         if (player == null) { enabled = false; return; }
+
+        // lago garantido perto do spawn — definir ANTES do primeiro tile
+        if (enableLakes && guaranteedStartLake)
+        {
+            startLakeCenter = new Vector2(player.position.x + 70f, player.position.z);
+            startLakeSet = true;
+        }
 
         EnsureWaterSurface();
         BuildTile(TileOf(player.position));     // tile inicial síncrono
@@ -749,14 +764,39 @@ public class InfiniteTerrain : MonoBehaviour
 
         float h = plains * hPlains + forest * hForest + mount * hMount + cold * hTundra + desert * hDesert;
 
-        // ---- LAGOS: bacias raras escavadas abaixo do waterLevel em terreno úmido
-        //      (Campos/Floresta/Tundra). Margens suaves; deserto e montanha ficam secos.
+        // ---- LAGOS: bacias raras em terreno úmido (Campos/Floresta/Tundra).
+        //      A bacia PUXA o chão para baixo da lâmina d'água (não só subtrai),
+        //      então toda mancha vira lago de verdade, mesmo na Floresta alta.
+        //      Margens suaves; deserto e montanha ficam secos.
         if (enableLakes)
         {
+            float lakeBed = waterLevel - lakeDepth * 0.6f;
             float lk = Mathf.PerlinNoise(wx / lakePatchSize + oxT + 191.3f,
                                          wz / lakePatchSize + ozT + 67.9f);
-            float basin = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.68f, 0.80f, lk));
-            h -= basin * lakeDepth * (plains + forest * 0.8f + cold * 0.6f);
+            float basin = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.66f, 0.78f, lk));
+            float wet = Mathf.Min(1f, plains + forest * 0.9f + cold * 0.7f);
+            h = Mathf.Lerp(h, lakeBed, basin * wet);
+
+            // OÁSIS: raríssimos no deserto (threshold alto num noise de manchas
+            // enormes) — quando um existe, é um lago GRANDE no meio da areia.
+            if (desert > 0.01f)
+            {
+                float oa = Mathf.PerlinNoise(wx / oasisPatchSize + oxM + 431.7f,
+                                             wz / oasisPatchSize + ozM + 129.3f);
+                // threshold altíssimo: achar um oásis é EVENTO — quilômetros de areia
+                // entre um e outro. (Baixar o 0.86 torna mais comum.)
+                float oasis = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.86f, 0.92f, oa));
+                h = Mathf.Lerp(h, lakeBed, oasis * desert);
+            }
+
+            // lago garantido perto do spawn (independe de bioma — é p/ teste)
+            if (startLakeSet)
+            {
+                float d = Vector2.Distance(new Vector2(wx, wz), startLakeCenter);
+                float bowl = 1f - Mathf.SmoothStep(0f, 1f,
+                    Mathf.InverseLerp(startLakeRadius * 0.55f, startLakeRadius, d));
+                if (bowl > 0f) h = Mathf.Lerp(h, lakeBed, bowl);
+            }
         }
         return h;
     }

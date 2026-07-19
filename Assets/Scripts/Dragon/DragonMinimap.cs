@@ -20,20 +20,16 @@ public class DragonMinimap : MonoBehaviour
 
     // Ícones vêm do asset Assets/Scriptables/Resources/MinimapIcons.asset
     // (MinimapIconSet) — configure sprites/cores/tamanhos lá, sem tocar na cena.
-    Sprite dragonSprite, foodSprite, treeSprite;
+    Sprite dragonSprite, foodSprite;
     Color dragonColor = Color.white;
     Color foodColor = new(1f, 0.7f, 0.25f);
-    Color treeColor = new(0.35f, 0.75f, 0.3f, 0.8f);
-    float dragonSize = 24f, foodSize = 14f, treeSize = 6f;
-    [SerializeField] int maxTreeMarkers = 400;
+    float dragonSize = 24f, foodSize = 14f;
 
     Transform dragon;
     DragonAttributes attrs;
-    RectTransform center, treeLayer, foodLayer, arrow;
+    RectTransform center, foodLayer, arrow;
     readonly List<Image> foodMarkers = new();
-    readonly List<Image> treeMarkers = new();
-    static readonly List<Vector2> treeBuffer = new();
-    Sprite generatedArrow, generatedX, generatedDot;
+    Sprite generatedArrow, generatedX;
     float nextUpdate;
 
     public void Bind(DragonController d, DragonAttributes a)
@@ -46,13 +42,10 @@ public class DragonMinimap : MonoBehaviour
         {
             dragonSprite = icons.dragonSprite;
             foodSprite = icons.foodSprite;
-            treeSprite = icons.treeSprite;
             dragonColor = icons.dragonColor;
             foodColor = icons.foodColor;
-            treeColor = icons.treeColor;
             dragonSize = icons.dragonSize;
             foodSize = icons.foodSize;
-            treeSize = icons.treeSize;
         }
         Build();
     }
@@ -84,22 +77,6 @@ public class DragonMinimap : MonoBehaviour
         }
         for (int i = used; i < foodMarkers.Count; i++)
             foodMarkers[i].gameObject.SetActive(false);
-
-        // árvores (pontos verdes) — cache de posições do mundo procedural
-        int treesUsed = 0;
-        if (InfiniteTerrain.Instance != null)
-        {
-            treeBuffer.Clear();
-            InfiniteTerrain.Instance.GetTreesNear(origin, range, treeBuffer, maxTreeMarkers);
-            foreach (var t in treeBuffer)
-            {
-                var m = GetTreeMarker(treesUsed++);
-                m.rectTransform.anchoredPosition =
-                    new Vector2(t.x - origin.x, t.y - origin.z) / range * uiRadius;
-            }
-        }
-        for (int i = treesUsed; i < treeMarkers.Count; i++)
-            treeMarkers[i].gameObject.SetActive(false);
     }
 
     // --------------------------------------------------------------- BUILD
@@ -124,8 +101,7 @@ public class DragonMinimap : MonoBehaviour
         center.anchorMin = center.anchorMax = new Vector2(0.5f, 0.5f);
         center.sizeDelta = Vector2.zero;
 
-        // camadas em ordem: árvores embaixo, comida no meio, seta SEMPRE por cima
-        treeLayer = MakeLayerRect("Trees");
+        // camadas em ordem: comida embaixo, seta SEMPRE por cima
         foodLayer = MakeLayerRect("Foods");
 
         var arrowImg = new GameObject("Dragon", typeof(Image)).GetComponent<Image>();
@@ -162,35 +138,6 @@ public class DragonMinimap : MonoBehaviour
         var m = foodMarkers[index];
         m.gameObject.SetActive(true);
         return m;
-    }
-
-    Image GetTreeMarker(int index)
-    {
-        while (treeMarkers.Count <= index)
-        {
-            var img = new GameObject("Tree", typeof(Image)).GetComponent<Image>();
-            img.transform.SetParent(treeLayer, false);
-            img.sprite = treeSprite != null ? treeSprite : (generatedDot ??= DotSprite());
-            img.color = treeColor;
-            img.raycastTarget = false;
-            img.rectTransform.sizeDelta = new Vector2(treeSize, treeSize);
-            treeMarkers.Add(img);
-        }
-        var m = treeMarkers[index];
-        m.gameObject.SetActive(true);
-        return m;
-    }
-
-    static Sprite DotSprite()
-    {
-        const int s = 8;
-        var tex = NewTex(s);
-        for (int y = 0; y < s; y++)
-            for (int x = 0; x < s; x++)
-                if (Vector2.Distance(new Vector2(x, y), new Vector2(s / 2f, s / 2f)) < s / 2f - 0.5f)
-                    tex.SetPixel(x, y, Color.white);
-        tex.Apply();
-        return Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f));
     }
 
     // ------------------------------------------------- SPRITES PROCEDURAIS
