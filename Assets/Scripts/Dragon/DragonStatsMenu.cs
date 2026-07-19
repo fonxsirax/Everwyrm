@@ -98,12 +98,14 @@ public class DragonStatsMenu : MonoBehaviour
             $"Idade: {FormatAge(growth.AgeSeconds)}\n" +
             $"Carne comida: {vitals.TotalEaten:0}";
 
+        var flight = dragon.GetComponent<DragonFlight>();
         statsText.text =
             $"Corrida máx: {dragon.MaxGroundSpeed:0.0} m/s\n" +
             $"Voo máx: {dragon.MaxFlightSpeed:0.0} m/s\n" +
             $"Tempo até correr: {dragon.TimeToRun:0.0} s\n" +
             $"Vida máx: {vitals.MaxHealthEff:0}\n" +
             $"Energia máx: {vitals.MaxEnergyEff:0}\n" +
+            (flight != null ? $"Decolagem (subida): {flight.TakeoffClimbTime:0.0} s\n" : "") +
             $"Fome: -{vitals.HungerDecayEff * 60f:0.0}/min\n" +
             $"Faro (dominância): {a.DominanceRadius:0} m\n" +
             $"Dano: x{a.DamageMul:0.00}   Chama: x{a.FlameSizeMul:0.00}";
@@ -113,7 +115,8 @@ public class DragonStatsMenu : MonoBehaviour
     {
         0 => $"+{attrs.SpeedPerPoint:P0} vel. máxima · +{attrs.AccelSpeedPerPoint:P0} aceleração",
         1 => $"+{attrs.DamagePerPoint:P0} dano · +{attrs.FlamePerPoint:P0} chama · +{attrs.DominancePerPoint:0} m de faro",
-        _ => $"+{attrs.HealthPerPoint:P0} vida · +{attrs.EnergyPerPoint:P0} energia · -{attrs.HungerResistPerPoint:P0} fome",
+        _ => $"+{attrs.HealthPerPoint:P0} vida · +{attrs.EnergyPerPoint:P0} energia · " +
+             $"-{attrs.HungerResistPerPoint:P0} fome · +{attrs.TakeoffClimbPerPoint:P0} decolagem",
     };
 
     static string ConditionLabel(float c) =>

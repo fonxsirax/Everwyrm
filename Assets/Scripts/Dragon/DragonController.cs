@@ -15,6 +15,8 @@ using UnityEngine.SceneManagement;
 ///         Alt esquiva aérea · Sem bater asas ~1s = planar
 ///         Peso importa: gordo sobe mal e afunda planando; grande plana melhor
 ///         Energia zerada = estol e queda!
+///  Água : entra andando em lago fundo ou pousando na água (queda amortecida).
+///         W/S nada · A/D vira · Space decola da água. Gordo nada mais devagar.
 ///  Morto: Enter renasce.
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
@@ -53,6 +55,15 @@ public class DragonController : MonoBehaviour
     [SerializeField] float landMaxSpeed = 11f;
     [SerializeField] LayerMask groundMask = 0;
 
+    [Header("Natação")]
+    [SerializeField] float swimSpeed = 3.4f;        // nado pra frente
+    [SerializeField] float swimBackSpeed = 1.2f;
+    [SerializeField] float swimTurnSpeed = 85f;
+    [SerializeField] float swimAccel = 4.5f;
+    [SerializeField] float buoyDepth = 0.85f;       // quanto do corpo fica submerso (m × escala)
+    [SerializeField] float minSwimDepth = 1.1f;     // profundidade mínima p/ boiar (senão anda)
+    [SerializeField] float swimCost = 2f;           // energia/s nadando
+
     [Header("Alimentação")]
     [SerializeField] float eatRange = 4.5f;
 
@@ -87,6 +98,7 @@ public class DragonController : MonoBehaviour
     static readonly int P_Die        = Animator.StringToHash("Die");
     static readonly int P_DeathVar   = Animator.StringToHash("DeathVar");
     static readonly int P_IdleVar    = Animator.StringToHash("IdleVar");
+    static readonly int P_Swim       = Animator.StringToHash("Swimming");
 
     CharacterController cc;
     Animator anim;
@@ -95,7 +107,7 @@ public class DragonController : MonoBehaviour
     DragonAttributes attrs;              // opcional
     DragonFlight flight;                 // opcional (voo skill-based)
 
-    bool flying, gliding, stalling, resting, dead;
+    bool flying, gliding, stalling, resting, dead, swimming;
     float planarSpeed, flySpeed, verticalVel;
     float momentum;                      // 0..1 — corrida automática
     float yaw, pitch, roll;
@@ -110,6 +122,7 @@ public class DragonController : MonoBehaviour
     public bool IsFlying => flying;
     public bool IsResting => resting;
     public bool IsDead => dead;
+    public bool IsSwimming => swimming;
     public float MaxGroundSpeed => EffRunSpeed;          // p/ menu de atributos
     public float MaxFlightSpeed => maxFlySpeed * S;
     public float TimeToRun => AccelTime;
@@ -142,6 +155,8 @@ public class DragonController : MonoBehaviour
         attrs = GetComponent<DragonAttributes>();
         flight = GetComponent<DragonFlight>();
         if (flight == null) flight = gameObject.AddComponent<DragonFlight>(); // garante o módulo de voo
+        if (GetComponent<DragonSounds>() == null)
+            gameObject.AddComponent<DragonSounds>(); // receptor dos AnimationEvents "PlaySound" dos FBX
         anim.applyRootMotion = false;
         yaw = transform.eulerAngles.y;
 
@@ -183,10 +198,11 @@ public class DragonController : MonoBehaviour
         float v = Locked ? 0f : Input.GetAxis("Vertical");
 
         if (resting) RestUpdate();
+        else if (swimming) SwimUpdate(dt, h, v);
         else if (flying) FlightUpdate(dt, h, v);
         else GroundUpdate(dt, h, v);
 
-        if (!resting && !Locked) HandleActions();
+        if (!resting && !swimming && !Locked) HandleActions();
         UpdateHint();
 
         ApplyRotation(dt, h);
@@ -244,6 +260,11 @@ public class DragonController : MonoBehaviour
 
         Vector3 fwd = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
         cc.Move((fwd * planarSpeed + Vector3.up * verticalVel) * dt);
+
+        // andou até água funda: começa a nadar
+        if (DeepWaterAt(transform.position, out float surface) &&
+            transform.position.y < surface)
+            EnterSwim();
     }
 
     // ------------------------------------------------------------------- VOO
@@ -291,6 +312,15 @@ public class DragonController : MonoBehaviour
 
         Vector3 fwd = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
         cc.Move((fwd * flySpeed + Vector3.up * vy) * dt);
+
+        // desceu até a lâmina d'água sobre lago: mergulha e vira nado
+        // (vale até no estol — a água amortece a queda, sem dano)
+        if (vy < 0f && DeepWaterAt(transform.position, out float surface) &&
+            transform.position.y <= surface + 0.3f)
+        {
+            EnterSwim();
+            return;
+        }
 
         // carência maior pós-decolagem e pouso só em DESCIDA REAL (vy < -1.5):
         // o afundamento suave do planeio rápido (~-0.9) não força pouso
@@ -422,6 +452,79 @@ public class DragonController : MonoBehaviour
         }
     }
 
+    // ------------------------------------------------------------------ NADO
+    /// <summary>Água funda o bastante para boiar? (consulta o nível global de lagos)</summary>
+    bool DeepWaterAt(Vector3 pos, out float surfaceY)
+    {
+        surfaceY = 0f;
+        var world = InfiniteTerrain.Instance;
+        if (world == null || !world.HasLakes) return false;
+        surfaceY = world.WaterLevel;
+        return world.HeightAt(pos.x, pos.z) < surfaceY - minSwimDepth;
+    }
+
+    void SwimUpdate(float dt, float h, float v)
+    {
+        float s = S;
+        // gordo nada pior (mesma penalidade da corrida); exausto se arrasta
+        float mul = RunMul * (Exhausted ? 0.55f : 1f);
+        float target = v > 0.01f ? v * swimSpeed * mul
+                     : v < -0.01f ? v * swimBackSpeed
+                     : 0f;
+        target *= s;
+        planarSpeed = Mathf.MoveTowards(planarSpeed, target, swimAccel * s * dt);
+        yaw += h * swimTurnSpeed * dt;
+
+        // boia na linha d'água com um balanço sutil
+        float surface = InfiniteTerrain.Instance != null ? InfiniteTerrain.Instance.WaterLevel : 0f;
+        float floatY = surface - buoyDepth * transform.lossyScale.y
+                     + Mathf.Sin(Time.time * 1.3f) * 0.08f;
+        float vyMove = Mathf.Clamp(floatY - transform.position.y, -3f * dt, 2.5f * dt);
+
+        Vector3 fwd = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+        cc.Move(fwd * planarSpeed * dt + Vector3.up * vyMove);
+
+        vitals?.Drain(swimCost * CostMul * (Mathf.Abs(planarSpeed) > 0.3f ? 1f : 0.35f));
+
+        // Space: decola da água (explosão de asas — custa um pouco mais)
+        if (!Locked && Input.GetKeyDown(KeyCode.Space) &&
+            Spend(takeoffCost * 1.3f * CostMul))
+        {
+            ExitSwim();
+            EnterFlight();
+            return;
+        }
+
+        // chegou ao raso: sai andando
+        if (!DeepWaterAt(transform.position, out _))
+        {
+            ExitSwim();
+            verticalVel = -4f;
+        }
+    }
+
+    void EnterSwim()
+    {
+        if (swimming) return;
+        swimming = true;
+        flying = false;
+        gliding = false;
+        SetStall(false);
+        momentum = 0f;
+        verticalVel = 0f;
+        vertInput = 0f;
+        planarSpeed = Mathf.Min(Mathf.Abs(planarSpeed), swimSpeed * S);
+        anim.SetBool(P_Swim, true);
+        anim.SetBool(P_Flying, false);
+        anim.SetBool(P_Glide, false);
+    }
+
+    void ExitSwim()
+    {
+        swimming = false;
+        anim.SetBool(P_Swim, false);
+    }
+
     // -------------------------------------------------------------- ESTADOS
     void EnterFlight()
     {
@@ -464,7 +567,7 @@ public class DragonController : MonoBehaviour
 
     void OnStageUp(DragonGrowth.LifeStage newStage)
     {
-        if (dead || flying || resting) return;
+        if (dead || flying || resting || swimming) return;
         anim.SetTrigger(P_Roar);          // celebra crescer de fase rugindo
         Lock(2.4f);
     }
@@ -482,6 +585,8 @@ public class DragonController : MonoBehaviour
         dead = true;
         resting = false;
         flying = false;
+        swimming = false;
+        anim.SetBool(P_Swim, false);
         anim.SetFloat(P_DeathVar, UnityEngine.Random.Range(0, 2));
         anim.SetTrigger(P_Die);
     }
@@ -505,9 +610,15 @@ public class DragonController : MonoBehaviour
         turnSmoothed = Mathf.MoveTowards(turnSmoothed, h, 4f * dt);
         anim.SetFloat(P_Turn, turnSmoothed);
 
-        float animSpeed = planarSpeed >= 0f
-            ? planarSpeed / EffRunSpeed * 3f
-            : -Mathf.InverseLerp(0f, reverseSpeed * S, -planarSpeed);
+        float animSpeed;
+        if (swimming)
+            animSpeed = planarSpeed >= 0f
+                ? planarSpeed / (swimSpeed * S) * 2f          // 2 = nado rápido no blend
+                : -Mathf.InverseLerp(0f, swimBackSpeed * S, -planarSpeed);
+        else
+            animSpeed = planarSpeed >= 0f
+                ? planarSpeed / EffRunSpeed * 3f
+                : -Mathf.InverseLerp(0f, reverseSpeed * S, -planarSpeed);
         anim.SetFloat(P_Speed, animSpeed, 0.12f, dt);
 
         anim.SetFloat(P_Vertical, vertInput, 0.15f, dt);

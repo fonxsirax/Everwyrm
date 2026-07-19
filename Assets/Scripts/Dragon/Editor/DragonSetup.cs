@@ -21,7 +21,6 @@ public static class DragonSetup
     const string OutDir = "Assets/Dragao";
     const string ControllerPath = OutDir + "/Dragon Player.controller";
 
-    [MenuItem("Tools/Dragão/Setup Completo")]
     public static void SetupAll()
     {
         var controller = BuildAnimator();
@@ -31,8 +30,15 @@ public static class DragonSetup
         Debug.Log("<b>Dragão pronto!</b> WASD anda · Space decola · LMB/Q/E ataca · F fogo · T ruge · R dorme · Alt esquiva.");
     }
 
+    /// <summary>Regenera animator + prefab sem tocar na cena aberta (auto-setup).</summary>
+    public static void RegenerateAnimatorAndPrefab()
+    {
+        ConfigurePrefab(BuildAnimator());
+        AssetDatabase.SaveAssets();
+        Debug.Log("<b>Dragão atualizado:</b> Animator regenerado com os estados novos.");
+    }
+
     // ------------------------------------------------------------- ANIMATOR
-    [MenuItem("Tools/Dragão/1 - Só gerar Animator")]
     public static AnimatorController BuildAnimator()
     {
         cache.Clear();
@@ -43,7 +49,7 @@ public static class DragonSetup
         var c = AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
         foreach (var p in new[] { "Speed", "Turn", "Vertical", "IdleVar", "DodgeDir", "HitVar", "DeathVar" })
             c.AddParameter(p, AnimatorControllerParameterType.Float);
-        foreach (var p in new[] { "Flying", "Glide", "Rest", "Falling" })
+        foreach (var p in new[] { "Flying", "Glide", "Rest", "Falling", "Swimming" })
             c.AddParameter(p, AnimatorControllerParameterType.Bool);
         foreach (var p in new[] { "Flap", "Roar", "Attack", "Fire", "Dodge", "Hit", "Die" })
             c.AddParameter(p, AnimatorControllerParameterType.Trigger);
@@ -112,6 +118,18 @@ public static class DragonSetup
         var fall = State(sm, "Stall Fall", Clip("Unka Fly InPlace.FBX", "UPFall High"));
         var land = State(sm, "Land", Clip("Unka Fly InPlace.FBX", "UPFall Land"));
 
+        // ---- Natação: blend 2D (Turn x Speed) — Speed 2 = nado rápido
+        var swim = sm.AddState("Swim");
+        swim.motion = Tree2D(c, "SwimTree", "Turn", "Speed", new (Motion, Vector2)[]
+        {
+            (Clip("Unka Swim InPlace.FBX", "UPSwim Idle"),       new Vector2( 0, 0)),
+            (Clip("Unka Swim InPlace.FBX", "UPSwim Turn Left"),  new Vector2(-1, 0)),
+            (Clip("Unka Swim InPlace.FBX", "UPSwim Turn Right"), new Vector2( 1, 0)),
+            (Clip("Unka Swim InPlace.FBX", "UPSwim Back"),       new Vector2( 0,-1)),
+            (Clip("Unka Swim InPlace.FBX", "UPSwim Forward"),    new Vector2( 0, 1)),
+            (Clip("Unka Swim InPlace.FBX", "UPSwim Fast"),       new Vector2( 0, 2)),
+        });
+
         // ---- Dormir
         var restStart = State(sm, "Rest Start", Clip("Unka Sleep.FBX", "USleep Start"));
         var restIdle = State(sm, "Rest Idle", Clip("Unka Sleep.FBX", "USleep Idle"));
@@ -168,6 +186,15 @@ public static class DragonSetup
         Cond(fly.AddTransition(land), 0.15f, (AnimatorConditionMode.IfNot, "Flying"));
         Cond(glide.AddTransition(land), 0.15f, (AnimatorConditionMode.IfNot, "Flying"));
         ExitTime(land.AddTransition(loco), 0.65f, 0.25f);
+
+        // natação: entra do chão (andou pra dentro do lago) ou caindo/pousando na água
+        Cond(loco.AddTransition(swim), 0.3f, (AnimatorConditionMode.If, "Swimming"));
+        Cond(swim.AddTransition(loco), 0.3f,
+            (AnimatorConditionMode.IfNot, "Swimming"), (AnimatorConditionMode.IfNot, "Flying"));
+        Cond(swim.AddTransition(takeoff), 0.12f, (AnimatorConditionMode.If, "Flying"));
+        Cond(fly.AddTransition(swim), 0.25f, (AnimatorConditionMode.If, "Swimming"));
+        Cond(glide.AddTransition(swim), 0.25f, (AnimatorConditionMode.If, "Swimming"));
+        Cond(fall.AddTransition(swim), 0.2f, (AnimatorConditionMode.If, "Swimming"));
 
         // estol
         Cond(fly.AddTransition(fall), 0.3f, (AnimatorConditionMode.If, "Falling"));
@@ -258,6 +285,8 @@ public static class DragonSetup
                 root.AddComponent<DragonAttributes>();
             if (root.GetComponent<DragonFlight>() == null)
                 root.AddComponent<DragonFlight>();
+            if (root.GetComponent<DragonSounds>() == null)
+                root.AddComponent<DragonSounds>();
 
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             Debug.Log("Prefab configurado: CharacterController + DragonController + DragonVitals + DragonGrowth.");

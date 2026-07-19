@@ -1385,6 +1385,8 @@ GameObject:
   - component: {fileID: 5542634034661111272}
   - component: {fileID: 343648079753751361}
   - component: {fileID: 7383170009394333558}
+  - component: {fileID: 2878444471970049892}
+  - component: {fileID: 7831661525013470528}
   m_Layer: 20
   m_Name: Unka Realistic
   m_TagString: Player
@@ -1494,6 +1496,13 @@ MonoBehaviour:
   groundMask:
     serializedVersion: 2
     m_Bits: 0
+  swimSpeed: 3.4
+  swimBackSpeed: 1.2
+  swimTurnSpeed: 85
+  swimAccel: 4.5
+  buoyDepth: 0.85
+  minSwimDepth: 1.1
+  swimCost: 2
   eatRange: 4.5
   runCost: 3.5
   flapCost: 3.5
@@ -1550,8 +1559,10 @@ MonoBehaviour:
   colossalAt: 0.85
   mealGrowthBonus: 0.0012
   startCondition: 0.5
-  conditionShiftPerMinute: 0.18
-  mealConditionNudge: 0.015
+  gainKgPerMinute: 1
+  lossKgPerMinute: 1
+  starvingLossKgPerMinute: 3
+  mealWeightNudgeKg: 2
   adultHealthyWeightKg: 950
 --- !u!114 &7383170009394333558
 MonoBehaviour:
@@ -1566,6 +1577,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxLevel: 10
+  startingPoints: 5
   speedPerPoint: 0.06
   accelSpeedPerPoint: 0.08
   accelResistPerPoint: 0.03
@@ -1576,6 +1588,37 @@ MonoBehaviour:
   healthPerPoint: 0.08
   energyPerPoint: 0.1
   hungerResistPerPoint: 0.04
+  takeoffClimbPerPoint: 0.12
+--- !u!114 &2878444471970049892
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1328021928562530}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f2c72148b63be84a9f2545313d6d7d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  profile: {fileID: 0}
+--- !u!114 &7831661525013470528
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1328021928562530}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 24bbb9262a19f9f4bb8e09a13fa7e30d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sounds:
+  - eventName: Wing Flap
+    clips: []
+    volume: 1
+    pitchRange: {x: 0.92, y: 1.08}
 --- !u!1 &1334724701867080
 GameObject:
   m_ObjectHideFlags: 0

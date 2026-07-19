@@ -34,6 +34,7 @@ public class DragonAttributes : MonoBehaviour
     [SerializeField] float healthPerPoint = 0.08f;
     [SerializeField] float energyPerPoint = 0.10f;       // duração do voo
     [SerializeField] float hungerResistPerPoint = 0.04f; // fome cai mais devagar
+    [SerializeField] float takeoffClimbPerPoint = 0.12f; // duração da subida de decolagem
 
     DragonGrowth growth;
 
@@ -55,6 +56,8 @@ public class DragonAttributes : MonoBehaviour
     public float MaxHealthMul => 1f + Resistencia * healthPerPoint;
     public float MaxEnergyMul => 1f + Resistencia * energyPerPoint;
     public float HungerDecayMul => Mathf.Max(0.4f, 1f - Resistencia * hungerResistPerPoint);
+    /// <summary>Resistência estica a fase de subida contínua da decolagem (DragonFlight).</summary>
+    public float TakeoffClimbMul => 1f + Resistencia * takeoffClimbPerPoint;
 
     // ---- Observer
     public event Action<DragonAttributes> OnChanged;
@@ -111,6 +114,7 @@ public class DragonAttributes : MonoBehaviour
     public float HealthPerPoint => healthPerPoint;
     public float EnergyPerPoint => energyPerPoint;
     public float HungerResistPerPoint => hungerResistPerPoint;
+    public float TakeoffClimbPerPoint => takeoffClimbPerPoint;
 
     void OnGrowth(DragonGrowth g)
     {

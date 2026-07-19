@@ -49,7 +49,9 @@ public class FoodSpawner : MonoBehaviour
         // mundo procedural: altura exata da superfície gerada (nada de comida voando)
         if (InfiniteTerrain.Instance != null)
         {
-            pos.y = InfiniteTerrain.Instance.HeightAt(pos.x, pos.z);
+            var world = InfiniteTerrain.Instance;
+            pos.y = world.HeightAt(pos.x, pos.z);
+            if (world.HasLakes && pos.y < world.WaterLevel + 0.3f) return;   // não spawna no lago
             Carcass.Spawn(pos, Random.Range(nutritionRange.x, nutritionRange.y));
             return;
         }

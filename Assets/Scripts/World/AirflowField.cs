@@ -45,7 +45,7 @@ public class MountainUpdrafts : MonoBehaviour, IAirflowProvider
         var world = InfiniteTerrain.Instance;
         if (world == null) return Vector3.zero;
 
-        world.BiomeWeights(pos.x, pos.z, out _, out _, out float mount, out _);
+        world.BiomeWeights(pos.x, pos.z, out _, out _, out float mount, out _, out _);
         if (mount < minMountainWeight) return Vector3.zero;
 
         float above = pos.y - world.HeightAt(pos.x, pos.z);

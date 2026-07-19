@@ -20,6 +20,7 @@ public class DragonFlight : MonoBehaviour
 
     DragonVitals vitals;
     DragonGrowth growth;
+    DragonAttributes attrs;
 
     float vy;                 // velocidade vertical atual
     int flapsLeft;
@@ -40,11 +41,16 @@ public class DragonFlight : MonoBehaviour
     float ClimbMul => growth != null ? growth.ClimbMul : 1f;
     float SinkMul => growth != null ? growth.SinkMul : 1f;
     float CostMul => growth != null ? growth.EnergyCostMul : 1f;
+    float TakeoffMul => attrs != null ? attrs.TakeoffClimbMul : 1f;
+
+    /// <summary>Duração efetiva da fase de subida de decolagem (Resistência estica).</summary>
+    public float TakeoffClimbTime => profile.takeoffClimbTime * TakeoffMul;
 
     void Awake()
     {
         vitals = GetComponent<DragonVitals>();
         growth = GetComponent<DragonGrowth>();
+        attrs = GetComponent<DragonAttributes>();
         if (profile == null) profile = Resources.Load<FlightProfile>("FlightProfile");
         if (profile == null) profile = ScriptableObject.CreateInstance<FlightProfile>();
     }
@@ -55,7 +61,7 @@ public class DragonFlight : MonoBehaviour
         vy = initialClimb;
         flapsLeft = profile.flapsPerCycle;
         lastFlapTime = Time.time;
-        takeoffClimbUntil = Time.time + profile.takeoffClimbTime;
+        takeoffClimbUntil = Time.time + TakeoffClimbTime;   // Resistência estica a fase
         releasedSinceFlap = true;
         OnFlapsChanged?.Invoke(flapsLeft, profile.flapsPerCycle);
     }
