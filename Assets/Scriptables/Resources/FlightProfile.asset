@@ -11,21 +11,21 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0b7e2d4a91c845f3b8a6e5d90c31f7a4, type: 3}
   m_Name: FlightProfile
-  m_EditorClassIdentifier:
+  m_EditorClassIdentifier: 
   takeoffClimbTime: 3
   takeoffClimbRate: 6.5
   takeoffClimbEnergyPerSec: 4
   flapsPerCycle: 2
-  flapMinInterval: 0.32
+  flapMinInterval: 1.08
   cycleRecovery: 0.45
-  flapLift: 9
+  flapLift: 20
   flapForwardBoost: 1.1
   maxRiseSpeed: 12
   sinkAtSpeed: 0.7
   sinkAtStall: 3.8
   slownessPower: 1.4
   verticalResponse: 4.5
-  diveSink: 14
   glideAnimDelay: 1
+  diveSink: 14
   energyPerFlap: 2
   windInfluence: 1
