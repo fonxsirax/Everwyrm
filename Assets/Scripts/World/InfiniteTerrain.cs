@@ -37,6 +37,12 @@ public class InfiniteTerrain : MonoBehaviour
     [Header("Tamanho das manchas de bioma (metros aprox.)")]
     [SerializeField] float biomePatchSize = 700f;   // menor = biomas mais próximos uns dos outros
 
+    [Header("Cobertura da Floresta")]
+    [Tooltip("Com vários biomas: 0 = floresta rara (só manchas úmidas) · 1 = floresta dominante. " +
+             "Com SÓ a floresta marcada (Campos desligado): a floresta preenche tudo e o slider " +
+             "controla as clareiras — 1 = quase nenhuma, valores menores = mais/maiores clareiras.")]
+    [SerializeField, Range(0f, 1f)] float forestCoverage = 0.6f;
+
     [Header("Vegetação")]
     public GameObject[] treePrefabs;            // Floresta Antiga (+ raras nos Campos)
     public GameObject[] bushPrefabs;            // arbustos: floresta densa + campos esparsos
@@ -354,9 +360,29 @@ public class InfiniteTerrain : MonoBehaviour
             ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.55f, 0.72f, mountains)) : 0f;
         cold = enableTundra
             ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.62f, 0.78f, 1f - temp)) * (1f - mount) : 0f;
-        forest = enableForest
-            ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.5f, 0.68f, moist)) * (1f - mount) * (1f - cold) : 0f;
-        plains = enablePlains ? Mathf.Max(0f, 1f - mount - cold - forest) : 0f;
+
+        if (enableForest && !enablePlains)
+        {
+            // MODO FLORESTA-FUNDO: com Campos desligado, a floresta preenche tudo e só
+            // sobram CLAREIRAS pequenas (grama plana e mais baixa, tipo cratera). Isso mata
+            // os "campos imensos" — antes o fallback forçava Campos onde a umidade era baixa.
+            // forestCoverage controla a raridade/tamanho das clareiras (1 = quase nenhuma).
+            float clg = Mathf.PerlinNoise(wx * f * 3f + oxD + 313.7f, wz * f * 3f + ozD + 217.1f);
+            float clgLo = Mathf.Lerp(0.55f, 0.82f, forestCoverage);
+            float clearing = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(clgLo, clgLo + 0.10f, clg));
+            float free = (1f - mount) * (1f - cold);
+            plains = free * clearing;         // clareira de grama (pequena)
+            forest = free * (1f - clearing);  // floresta cobre o resto
+        }
+        else
+        {
+            // MODO NORMAL (Campos = fundo; floresta em manchas úmidas).
+            // cobertura desliza o limiar: mais cobertura => floresta nasce com menos umidade.
+            float fLo = Mathf.Lerp(0.60f, 0.28f, forestCoverage);
+            forest = enableForest
+                ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(fLo, fLo + 0.14f, moist)) * (1f - mount) * (1f - cold) : 0f;
+            plains = enablePlains ? Mathf.Max(0f, 1f - mount - cold - forest) : 0f;
+        }
 
         // normaliza (se desligar tudo, vira Campos)
         float sum = plains + forest + mount + cold;
