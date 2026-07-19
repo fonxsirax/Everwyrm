@@ -76,12 +76,12 @@ public static class DesertSetup
         var world = UnityEngine.Object.FindFirstObjectByType<InfiniteTerrain>();
         if (world != null)
         {
-            GameObject[] Get(params string[] names)
+            InfiniteTerrain.PaintTree[] Get(params string[] names)
             {
                 var list = new List<GameObject>();
                 foreach (var n in names)
                     if (converted.TryGetValue(n, out var go)) list.Add(go);
-                return list.ToArray();
+                return InfiniteTerrain.PaintTree.From(list);
             }
             world.desertFormationPrefabs = Get("SM_RockSide_A1", "SM_Rock_Side-A2");
             world.desertRockPrefabs = Get("SM_Small_Rock_2", "SM_Small_Rock_3", "SM_Small_Rock_4");

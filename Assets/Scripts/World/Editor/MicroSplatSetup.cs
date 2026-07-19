@@ -51,6 +51,14 @@ public static class MicroSplatSetup
             AssetDatabase.Refresh();
         }
 
+        // Auto-preenche os campos do InfiniteTerrain ANTES de montar as camadas —
+        // o OnValidate só roda quando o objeto é tocado no Inspector, então uma
+        // referência quebrada/limpa na cena aberta derrubava o menu com
+        // "Camada X sem textura" até o usuário selecionar o objeto na mão.
+        typeof(InfiniteTerrain).GetMethod("OnValidate",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?.Invoke(it, null);
+
         // campos privados do InfiniteTerrain (tiling/dimensões/cor da neve)
         var so = new SerializedObject(it);
         float tile = so.FindProperty("groundTextureTile").floatValue;
@@ -59,16 +67,20 @@ public static class MicroSplatSetup
         Color snowColor = so.FindProperty("snowColor").colorValue;
 
         // ordem OBRIGATÓRIA = canais do alphamap em InfiniteTerrain.BuildTile:
-        // 0 grama · 1 floresta · 2 rocha de montanha · 3 neve · 4 areia · 5 rocha do deserto
-        var layers = new[]
+        // 0 grama · 1 floresta · 2 rocha de montanha · 3 neve · 4 areia
+        // · 5 rocha do deserto · 6 folhas congeladas (opcional, Winter pack)
+        var layerList = new System.Collections.Generic.List<TerrainLayer>
         {
             LayerAsset("MS_0_Grama", it.grassDiffuse, it.grassNormal, it.grassMask, tile),
             LayerAsset("MS_1_Floresta", it.forestDiffuse, it.forestNormal, it.forestMask, tile),
             LayerAsset("MS_2_RochaMontanha", it.rockDiffuse, it.rockNormal, it.rockMask, tile * 1.6f),
-            LayerAsset("MS_3_Neve", SnowTexture(it, snowColor), it.snowNormal, it.snowMask, tile),
+            it.snowLayer != null ? it.snowLayer   // neve funda do Winter pack
+                : LayerAsset("MS_3_Neve", SnowTexture(it, snowColor), it.snowNormal, it.snowMask, tile),
             it.sandLayer,
             it.desertRockLayer
         };
+        if (it.winterGroundLayer != null) layerList.Add(it.winterGroundLayer);
+        var layers = layerList.ToArray();
         for (int i = 0; i < layers.Length; i++)
             if (layers[i] == null || layers[i].diffuseTexture == null)
             {

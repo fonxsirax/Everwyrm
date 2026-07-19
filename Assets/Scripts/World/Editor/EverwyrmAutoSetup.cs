@@ -38,6 +38,15 @@ static class EverwyrmAutoSetup
         if (WinterSetup.IsInstalled && !WinterSetup.IsConverted)
             WinterSetup.Convert();
 
+        // 2c) materiais de FX do Winter pack (neve/nuvem) ainda em shader builtin (rosa)?
+        if (WinterSetup.IsInstalled)
+        {
+            WinterSetup.EnsureFxMaterials();
+            // 2d) "AG Global Settings" na cena — sem ele os shaders do pack ficam
+            //     com manchas magenta (globais de vento/neve/tint não vinculados).
+            WinterSetup.EnsureGlobalSettings();
+        }
+
         // 3) Animator do dragão em dia?
         var controller = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>(ControllerPath);
         bool outdated = controller == null;

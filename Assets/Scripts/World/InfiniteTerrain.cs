@@ -27,7 +27,7 @@ public class InfiniteTerrain : MonoBehaviour
     public int seed = 20260718;
     [SerializeField] float tileSize = 250f;
     [SerializeField] int heightmapRes = 129;    // potência de 2 + 1
-    [SerializeField] int alphamapRes = 64;
+    [SerializeField] int alphamapRes = 128;     // 128 => ~2 m/pixel de blend no tile de 250 m
     [SerializeField] float maxHeight = 130f;
     [SerializeField] int loadRadius = 2;        // 2 => 5x5 tiles (~625 m de vista)
     [SerializeField] int tilesPerFrame = 1;
@@ -69,47 +69,68 @@ public class InfiniteTerrain : MonoBehaviour
     [Tooltip("Riachos serpenteando por bioma (padrão: só Floresta Antiga). O leito é escavado " +
              "abaixo do waterLevel, então a MESMA WaterSurface dos lagos preenche a água.")]
     public bool enableStreams = true;
-    [Tooltip("Config por bioma. Vazio = padrão (só Floresta Antiga). Para expandir a outros " +
-             "biomas no futuro, basta adicionar entradas aqui.")]
-    [SerializeField] List<StreamSettings> streamSettings = new();
     [Tooltip("Ripples com direção fixa na água — sensação de correnteza nos riachos " +
              "(deriva sutil também nos lagos).")]
     [SerializeField] bool streamFlowRipples = true;
     [SerializeField] float streamRippleSpeed = 3.5f;
 
     [Header("Vegetação da Floresta/Campos (ALP)")]
-    public GameObject[] treePrefabs;            // Floresta Antiga (+ raras nos Campos)
-    public GameObject[] bushPrefabs;            // arbustos: floresta densa + campos esparsos
-    public GameObject[] grassPrefabs;           // graminhas verdes
+    [Tooltip("Cada entrada = prefab + peso relativo (o 'pincel' serializável). Peso 0 desliga sem remover.")]
+    public PaintTree[] treePrefabs;             // Floresta Antiga (+ raras nos Campos)
+    public PaintTree[] bushPrefabs;             // arbustos: floresta densa + campos esparsos
+    public PaintTree[] grassPrefabs;            // graminhas verdes
+    [Tooltip("Moitas grandes (Thicket) — massas densas de vegetação, mais raras que arbustos.")]
+    public PaintTree[] forestThicketPrefabs;
+    [Tooltip("Serrapilheira (gravetos ForestStick* + folhas LeafDry*) — detalhe fino do chão da floresta.")]
+    public PaintTree[] forestLitterPrefabs;
     [SerializeField] int forestVegetationPerTile = 600;   // floresta BEM densa
     [SerializeField, Range(0f, 1f)] float bushShare = 0.25f;
     [SerializeField] int grassPerTile = 500;
+    [SerializeField] int forestThicketsPerTile = 40;
+    [SerializeField] int forestLitterPerTile = 450;
 
     [Header("Deserto Rochoso (RockyDesert)")]
     [Tooltip("Formações grandes de penhasco (SM_RockSide_*) — agrupadas em afloramentos, com collider.")]
-    public GameObject[] desertFormationPrefabs;
+    public PaintTree[] desertFormationPrefabs;
     [Tooltip("Pedras médias (SM_Small_Rock_2/3/4) — ao redor dos afloramentos.")]
-    public GameObject[] desertRockPrefabs;
+    public PaintTree[] desertRockPrefabs;
     [Tooltip("Seixos/pedrinhas (SM_Small_Rock_1/B1/B2) — preenchimento fino do chão.")]
-    public GameObject[] desertPebblePrefabs;
+    public PaintTree[] desertPebblePrefabs;
     [Tooltip("Árvores mortas (SM_Tree_*) — marcos raríssimos, aparecem no minimapa.")]
-    public GameObject[] desertTreePrefabs;
+    public PaintTree[] desertTreePrefabs;
     [Tooltip("Tufos de grama seca (SM_DeadGrass_*) — manchas de vegetação nas áreas abertas.")]
-    public GameObject[] desertGrassPrefabs;
+    public PaintTree[] desertGrassPrefabs;
     [Tooltip("Multiplicador geral de densidade do deserto (1 = calibrado pela Demo Scene do pacote).")]
     [SerializeField, Range(0.1f, 2f)] float desertDensity = 1f;
 
     [Header("Tundra/Montanha (Winter Environment — preenchido pelo WinterSetup)")]
-    [Tooltip("Abetos nevados (firs) — a mata da Tundra e a treeline da Montanha.")]
-    public GameObject[] winterFirPrefabs;
-    [Tooltip("Bétulas nevadas (birch) — esparsas, quebram a monotonia dos abetos.")]
-    public GameObject[] winterBirchPrefabs;
-    [Tooltip("Arbustos nevados — preenchimento baixo da Tundra.")]
-    public GameObject[] winterBushPrefabs;
-    [Tooltip("Pedras/rochas nevadas — detalhe da Tundra e das encostas da Montanha.")]
-    public GameObject[] winterRockPrefabs;
-    [Tooltip("Multiplicador geral de densidade da Tundra/Montanha (recalibrar pela Demo do pack).")]
+    [Tooltip("Abetos nevados (Tree_A) — a mata fechada da Tundra e a treeline da Montanha.")]
+    public PaintTree[] winterFirPrefabs;
+    [Tooltip("Pinheiros altos e ralos com raízes expostas (Tree_B) — quebram a silhueta dos bosques.")]
+    public PaintTree[] winterPinePrefabs;
+    [Tooltip("Decíduas nuas com neve (Tree_C, tipo bétula) — capões próprios nas áreas abertas.")]
+    public PaintTree[] winterBirchPrefabs;
+    [Tooltip("Arbustos nevados (Bush_A) — preenchimento baixo da Tundra.")]
+    public PaintTree[] winterBushPrefabs;
+    [Tooltip("Tufos de grama seca (Grass_A/B/C) — furam a neve nas áreas abertas.")]
+    public PaintTree[] winterGrassPrefabs;
+    [Tooltip("Pedras avulsas nevadas (Rock_*) — detalhe da Tundra e das encostas da Montanha.")]
+    public PaintTree[] winterRockPrefabs;
+    [Tooltip("Afloramentos grandes (Rock_Group) — marcos rochosos que reservam espaço.")]
+    public PaintTree[] winterOutcropPrefabs;
+    [Tooltip("Madeira caída (Log/Stump/Root) — troncos, tocos e raízes viradas junto da mata.")]
+    public PaintTree[] winterDeadwoodPrefabs;
+    [Tooltip("Galhada fina (Debris) — serrapilheira de inverno sob os bosques.")]
+    public PaintTree[] winterDebrisPrefabs;
+    [Tooltip("Multiplicador geral de densidade da Tundra/Montanha (1 = calibrado pela Demo do pack).")]
     [SerializeField, Range(0.1f, 2f)] float winterDensity = 1f;
+    [Tooltip("Neve funda do pack (Snow_01_Layer) — substitui a cor sólida no canal 3.")]
+    public TerrainLayer snowLayer;
+    [Tooltip("Folhas congeladas do pack (Leaves_01_Layer) — chão sob a mata da Tundra (canal 7; " +
+             "sem MicroSplat reconvertido, cai no canal de terra da floresta).")]
+    public TerrainLayer winterGroundLayer;
+    [Tooltip("Partícula de neve do pack (Snow_01) — segue o jogador dentro da Tundra/Montanha.")]
+    public GameObject winterSnowfallPrefab;
 
     [Header("Camadas de espalhamento (vazio = padrão gerado dos arrays acima)")]
     [Tooltip("Controle fino da distribuição. Deixe vazio para usar o conjunto padrão " +
@@ -124,6 +145,11 @@ public class InfiniteTerrain : MonoBehaviour
     public TerrainLayer sandLayer;        // Deserto: areia (RockyDesert/Terrain_Sand)
     public TerrainLayer desertRockLayer;  // Deserto: rocha de encosta (RockyDesert/Terrain_Rock)
     [SerializeField] float groundTextureTile = 12f;
+    [Tooltip("Fração do chão da floresta pintada com grama fora das manchas de terra " +
+             "(0 = chão todo de terra como antes, 1 = grama pura entre as manchas).")]
+    [Range(0f, 1f)] [SerializeField] float forestGrassShare = 0.85f;
+    [Tooltip("Limiar do noise das manchas de terra da floresta — maior = manchas mais raras/menores.")]
+    [Range(0f, 1f)] [SerializeField] float forestDirtThreshold = 0.68f;
 
     [Header("MicroSplat (gerar via Tools > Everwyrm > MicroSplat — Converter Terreno)")]
     [Tooltip("Material template do MicroSplat: cada tile ganha um MicroSplatTerrain sincronizado " +
@@ -153,6 +179,33 @@ public class InfiniteTerrain : MonoBehaviour
     public enum Biome { Campos, Floresta, Montanha, Tundra, Deserto }
 
     /// <summary>
+    /// Um prefab "paint tree" com peso relativo dentro da camada — o análogo
+    /// serializável do pincel de árvores do terreno. weight 2 = sorteado 2x mais
+    /// que weight 1; 0 = desligado sem precisar tirar da lista.
+    /// </summary>
+    [Serializable]
+    public class PaintTree
+    {
+        public GameObject prefab;
+        [Tooltip("Proporção relativa dentro da camada (0 = desligado).")]
+        [Min(0f)] public float weight = 1f;
+
+        public PaintTree() { }
+        public PaintTree(GameObject p, float w = 1f) { prefab = p; weight = w; }
+        public static implicit operator PaintTree(GameObject p) => new(p);
+
+        /// <summary>Converte listas de GameObject (setups de editor) com peso 1.</summary>
+        public static PaintTree[] From(IEnumerable<GameObject> prefabs)
+        {
+            var list = new List<PaintTree>();
+            if (prefabs != null)
+                foreach (var p in prefabs)
+                    if (p != null) list.Add(new PaintTree(p));
+            return list.ToArray();
+        }
+    }
+
+    /// <summary>
     /// Uma "espécie" de objeto espalhado no mundo e todas as suas regras de
     /// distribuição. O gerador processa as camadas NA ORDEM: coloque primeiro as
     /// grandes (blockRadius) para as pequenas respeitarem o espaço delas.
@@ -162,7 +215,7 @@ public class InfiniteTerrain : MonoBehaviour
     {
         public string name = "Camada";
         public Biome biome = Biome.Campos;
-        public GameObject[] prefabs;
+        public PaintTree[] prefabs;
 
         [Tooltip("Pontos sorteados por tile (antes dos filtros)")]
         [Min(0)] public int attemptsPerTile = 100;
@@ -188,6 +241,18 @@ public class InfiniteTerrain : MonoBehaviour
         public float clusterSize = 90f;
         [Tooltip("Camadas com o MESMO grupo compartilham as manchas (pedras junto de formações). -1 = grupo próprio")]
         public int clusterGroup = -1;
+        [Tooltip("Quanto da área fica dentro das manchas — 0.15 = ilhas raras, 0.5 = metade do chão.")]
+        [Range(0f, 1f)] public float clusterCoverage = 0.5f;
+        [Tooltip("Borda da mancha: 0 = recorte duro, 1 = a densidade cai bem devagar até sumir.")]
+        [Range(0f, 1f)] public float clusterEdgeSoftness = 0.5f;
+        [Tooltip("2ª octava de noise que quebra o contorno redondo da mancha (0 = desligada).")]
+        [Range(0f, 1f)] public float clusterIrregularity = 0f;
+
+        [Tooltip("0 = espécies misturadas ponto a ponto · 1 = cada região tem UMA espécie dominante " +
+                 "(bosques/manchas puras). Respeita os pesos dos PaintTrees.")]
+        [Range(0f, 1f)] public float speciesClumping = 0f;
+        [Tooltip("Tamanho das regiões de espécie dominante (metros).")]
+        public float speciesPatchSize = 60f;
 
         [Tooltip("Distância mínima entre instâncias DESTA camada (0 = livre)")]
         public float minSpacing = 0f;
@@ -199,8 +264,23 @@ public class InfiniteTerrain : MonoBehaviour
         [Tooltip("Instâncias entram no minimapa (árvores/marcos)")]
         public bool landmark = false;
 
+        [Tooltip("≥ 0: a máscara de AGRUPAMENTO desta camada também pinta este canal do " +
+                 "alphamap (ex.: folhas congeladas sob os bosques da Tundra). -1 = não pinta.")]
+        public int groundPaint = -1;
+
         [NonSerialized] public int protoBase;   // offset no array de TreePrototypes
         [NonSerialized] public int protoCount;
+        [NonSerialized] public float[] cumWeights;   // pesos acumulados p/ sorteio ponderado
+
+        /// <summary>Índice do prefab sorteado (0..protoCount-1) a partir de um roll [0..1).</summary>
+        public int PickPrototype(float roll01)
+        {
+            if (cumWeights == null || cumWeights.Length == 0) return 0;
+            float target = roll01 * cumWeights[cumWeights.Length - 1];
+            for (int i = 0; i < cumWeights.Length - 1; i++)
+                if (target <= cumWeights[i]) return i;
+            return cumWeights.Length - 1;
+        }
     }
 
     /// <summary>
@@ -249,7 +329,8 @@ public class InfiniteTerrain : MonoBehaviour
     Material terrainMat;
     TreePrototype[] prototypes;                 // união dos prefabs de todas as camadas
     List<ScatterLayer> activeLayers;            // scatterLayers ou o padrão
-    List<StreamSettings> activeStreams;         // streamSettings habilitados ou o padrão
+    List<ScatterLayer> groundPaintLayers;       // camadas que também pintam o chão
+    List<StreamSettings> activeStreams;         // riachos ativos (config em DefaultStreams)
     readonly Dictionary<int, Vector2> clusterOffsets = new();
     float oxT, ozT, oxM, ozM, oxH, ozH, oxD, ozD; // offsets de noise (seed)
 
@@ -266,18 +347,22 @@ public class InfiniteTerrain : MonoBehaviour
         terrainMat = shader != null ? new Material(shader) : null;
 
         // Ordem dos canais do alphamap:
-        // 0 grama · 1 floresta · 2 rocha de montanha · 3 neve · 4 areia · 5 rocha do deserto
-        layers = new[]
+        // 0 grama · 1 floresta · 2 rocha de montanha · 3 neve · 4 areia
+        // · 5 rocha do deserto · 6 folhas congeladas (opcional, Winter pack)
+        var layerList = new List<TerrainLayer>
         {
             MakeLayer(grassDiffuse, grassNormal, grassMask, grassColor, groundTextureTile),
             MakeLayer(forestDiffuse, forestNormal, forestMask, forestColor, groundTextureTile),
             MakeLayer(rockDiffuse, rockNormal, rockMask, rockColor, groundTextureTile * 1.6f),
-            MakeLayer(snowDiffuse, snowNormal, snowMask, snowColor, groundTextureTile),
+            snowLayer != null ? snowLayer
+                              : MakeLayer(snowDiffuse, snowNormal, snowMask, snowColor, groundTextureTile),
             sandLayer != null ? sandLayer
                               : MakeLayer(null, null, null, sandColor, groundTextureTile),
             desertRockLayer != null ? desertRockLayer
                               : MakeLayer(null, null, null, desertRockColor, groundTextureTile * 1.6f)
         };
+        if (winterGroundLayer != null) layerList.Add(winterGroundLayer);
+        layers = layerList.ToArray();
 
         BuildScatterSetup();
         BuildStreamSetup();
@@ -300,6 +385,7 @@ public class InfiniteTerrain : MonoBehaviour
         }
 
         EnsureWaterSurface();
+        EnsureSnowfall();
         BuildTile(TileOf(player.position));     // tile inicial síncrono
         SnapPlayerToGround();
     }
@@ -308,6 +394,7 @@ public class InfiniteTerrain : MonoBehaviour
     {
         if (player == null) return;
         UpdateWaterFollow();
+        UpdateSnowfall();
         Vector2Int center = TileOf(player.position);
 
         // enfileira tiles do raio (mais próximos primeiro)
@@ -356,12 +443,13 @@ public class InfiniteTerrain : MonoBehaviour
         activeLayers = scatterLayers != null && scatterLayers.Count > 0
             ? scatterLayers : DefaultLayers();
 
-        // remove prefabs incompatíveis/vazios e monta o array único de prototypes.
+        // remove prefabs incompatíveis/vazios/peso 0 e monta o array único de prototypes.
         // UM prototype inválido quebra a renderização de TODOS os trees do tile,
         // então o filtro aqui é obrigatório.
         foreach (var l in activeLayers)
             if (l.prefabs != null)
-                l.prefabs = Array.FindAll(l.prefabs, IsTreeCompatible);
+                l.prefabs = Array.FindAll(l.prefabs,
+                    e => e != null && e.weight > 0f && IsTreeCompatible(e.prefab));
         activeLayers.RemoveAll(l => l.prefabs == null || l.prefabs.Length == 0);
 
         var protos = new List<TreePrototype>();
@@ -369,8 +457,14 @@ public class InfiniteTerrain : MonoBehaviour
         {
             l.protoBase = protos.Count;
             l.protoCount = l.prefabs.Length;
-            foreach (var p in l.prefabs)
-                protos.Add(new TreePrototype { prefab = p });
+            l.cumWeights = new float[l.prefabs.Length];
+            float acc = 0f;
+            for (int i = 0; i < l.prefabs.Length; i++)
+            {
+                acc += l.prefabs[i].weight;
+                l.cumWeights[i] = acc;
+                protos.Add(new TreePrototype { prefab = l.prefabs[i].prefab });
+            }
         }
         prototypes = protos.ToArray();
 
@@ -389,6 +483,28 @@ public class InfiniteTerrain : MonoBehaviour
                     (float)(r.NextDouble() * 8000.0 - 4000.0));
             }
         }
+
+        // camadas cuja mancha de agrupamento também pinta o alphamap
+        groundPaintLayers = activeLayers.FindAll(l => l.groundPaint >= 0 && l.clusterStrength > 0f);
+    }
+
+    /// <summary>
+    /// Máscara PURA [0..1] das manchas de agrupamento de uma camada num ponto do
+    /// mundo (1 = miolo da mancha, 0 = fora). Compartilhada pelo scatter (que a
+    /// dilui com clusterStrength) e pelo splatmap (groundPaint, que a usa crua) —
+    /// os objetos e o chão sob eles enxergam exatamente as mesmas manchas.
+    /// </summary>
+    float ClusterMask(ScatterLayer layer, Vector2 cOff, float wx, float wz)
+    {
+        float n = Mathf.PerlinNoise(wx / layer.clusterSize + cOff.x,
+                                    wz / layer.clusterSize + cOff.y);
+        if (layer.clusterIrregularity > 0f)
+            n += (Mathf.PerlinNoise(wx * 3.1f / layer.clusterSize + cOff.x + 57.3f,
+                                    wz * 3.1f / layer.clusterSize + cOff.y + 21.7f)
+                  - 0.5f) * 0.5f * layer.clusterIrregularity;
+        float lo = Mathf.Lerp(0.85f, 0.05f, layer.clusterCoverage);
+        float wdt = Mathf.Lerp(0.02f, 0.52f, layer.clusterEdgeSoftness);
+        return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(lo, lo + wdt, n));
     }
 
     /// <summary>
@@ -401,8 +517,7 @@ public class InfiniteTerrain : MonoBehaviour
         activeStreams = new List<StreamSettings>();
         if (!enableStreams) return;
 
-        var list = streamSettings != null && streamSettings.Count > 0
-            ? streamSettings : DefaultStreams();
+        var list = DefaultStreams();
         for (int i = 0; i < list.Count; i++)
         {
             var s = list[i];
@@ -416,8 +531,28 @@ public class InfiniteTerrain : MonoBehaviour
         }
     }
 
-    /// <summary>Padrão de riachos: decisão de design — SÓ na Floresta Antiga.</summary>
-    static List<StreamSettings> DefaultStreams() => new() { new StreamSettings() };
+    /// <summary>
+    /// Config dos riachos (decisão de design: SÓ na Floresta Antiga). Canal de
+    /// 10–20 m escavado 1.8 m abaixo do waterLevel, meandros de ~430 m, presentes
+    /// em ~1/4 do bioma em bacias de ~2.6 km — achar um riacho é semi-raro.
+    /// </summary>
+    static List<StreamSettings> DefaultStreams() => new()
+    {
+        new StreamSettings
+        {
+            name = "Riachos da Floresta",
+            biome = Biome.Floresta,
+            courseSize = 430f,
+            channelWidth = 0.026f,
+            depth = 1.8f,
+            bankHeight = 0.6f,
+            valleyWidthMul = 2.6f,
+            density = 0.25f,
+            regionSize = 2600f,
+            fadeStart = 0.55f,
+            fadeEnd = 0.25f,
+        }
+    };
 
     /// <summary>
     /// Conjunto padrão de camadas — Floresta/Campos como sempre foram, e o Deserto
@@ -435,45 +570,98 @@ public class InfiniteTerrain : MonoBehaviour
         return new List<ScatterLayer>
         {
             // ---------------- FLORESTA ANTIGA (densa) ----------------
+            // Árvores: cobertura quase contínua com ONDAS suaves de densidade (mata
+            // fechada ↔ trechos ralos) e bosques de espécie dominante (stands de maple
+            // no meio dos ForestTree, como mata real — não um mosaico ponto a ponto).
             new()
             {
                 name = "Floresta — árvores", biome = Biome.Floresta, prefabs = treePrefabs,
                 attemptsPerTile = treeAttempts, minBiomeWeight = 0.4f, density = 1f,
                 scaleRange = new Vector2(0.85f, 1.4f), aspectJitter = 0.1f,
-                maxSlope = 0.5f, landmark = true
+                maxSlope = 0.5f, landmark = true,
+                clusterStrength = 0.25f, clusterSize = 220f, clusterCoverage = 0.55f,
+                clusterEdgeSoftness = 0.8f, clusterIrregularity = 0.4f,
+                speciesClumping = 0.55f, speciesPatchSize = 150f
             },
+            // Arbustos: o coração do pedido — manchas GRANDES e irregulares com borda
+            // suave, mancha tendendo a UMA espécie. Divide o noise (clusterGroup 2) com
+            // as moitas: moita no miolo, arbusto na periferia = gradiente denso→aberto.
+            // attempts ~2.3x: com ~1/3 da área dentro das manchas, mantém a população
+            // total e concentra o excedente nelas.
             new()
             {
                 name = "Floresta — arbustos", biome = Biome.Floresta, prefabs = bushPrefabs,
-                attemptsPerTile = bushAttempts, minBiomeWeight = 0.4f, density = 1f,
-                scaleRange = new Vector2(0.8f, 1.2f), maxSlope = 0.5f
+                attemptsPerTile = Mathf.RoundToInt(bushAttempts * 2.3f), minBiomeWeight = 0.4f,
+                density = 1f, scaleRange = new Vector2(0.8f, 1.2f), maxSlope = 0.5f,
+                clusterStrength = 0.85f, clusterSize = 38f, clusterGroup = 2,
+                clusterCoverage = 0.32f, clusterEdgeSoftness = 0.7f, clusterIrregularity = 0.7f,
+                speciesClumping = 0.6f, speciesPatchSize = 45f
             },
+            new()
+            {
+                name = "Floresta — moitas", biome = Biome.Floresta, prefabs = forestThicketPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(forestThicketsPerTile * 1.7f),
+                minBiomeWeight = 0.45f, density = 0.9f,
+                scaleRange = new Vector2(0.9f, 1.4f), aspectJitter = 0.15f, maxSlope = 0.45f,
+                minSpacing = 10f,
+                clusterStrength = 0.9f, clusterSize = 38f, clusterGroup = 2,   // miolo das manchas
+                clusterCoverage = 0.14f, clusterEdgeSoftness = 0.5f, clusterIrregularity = 0.6f
+            },
+            // Graminhas: base espalhada + adensamento fraco em clareiras de luz;
+            // espécie por região = "cantos de flores" em vez de confete uniforme.
             new()
             {
                 name = "Floresta — graminhas", biome = Biome.Floresta, prefabs = grassPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(grassPerTile * 0.6f), minBiomeWeight = 0.4f,
-                density = 1f, scaleRange = new Vector2(0.9f, 1.6f), maxSlope = 0.5f
+                attemptsPerTile = Mathf.RoundToInt(grassPerTile * 1.3f), minBiomeWeight = 0.4f,
+                density = 1f, scaleRange = new Vector2(0.9f, 1.6f), maxSlope = 0.5f,
+                clusterStrength = 0.35f, clusterSize = 24f, clusterCoverage = 0.45f,
+                clusterEdgeSoftness = 0.85f, clusterIrregularity = 0.5f,
+                speciesClumping = 0.6f, speciesPatchSize = 28f
+            },
+            // Serrapilheira: quase uniforme (gravetos caem em todo lugar), só uma
+            // ondulação leve p/ juntar folhas em "bolsões".
+            new()
+            {
+                name = "Floresta — serrapilheira", biome = Biome.Floresta, prefabs = forestLitterPrefabs,
+                attemptsPerTile = forestLitterPerTile, minBiomeWeight = 0.35f, density = 1f,
+                scaleRange = new Vector2(0.8f, 1.3f), aspectJitter = 0.2f, maxSlope = 0.55f,
+                clusterStrength = 0.3f, clusterSize = 60f, clusterCoverage = 0.5f,
+                clusterEdgeSoftness = 0.9f, clusterIrregularity = 0.4f
             },
 
             // ---------------- CAMPOS (esparsos) ----------------
+            // Árvores: em vez do polvilhado regular, capões raros (grupos de 2–5) com
+            // muitos tiles quase vazios entre eles — silhueta clássica de savana/campo.
             new()
             {
                 name = "Campos — árvores isoladas", biome = Biome.Campos, prefabs = treePrefabs,
-                attemptsPerTile = 10, minBiomeWeight = 0.5f, density = 0.9f,
+                attemptsPerTile = 14, minBiomeWeight = 0.5f, density = 0.9f,
                 scaleRange = new Vector2(0.85f, 1.4f), maxSlope = 0.5f,
-                minSpacing = 18f, landmark = true
+                minSpacing = 18f, landmark = true,
+                clusterStrength = 0.55f, clusterSize = 90f, clusterCoverage = 0.18f,
+                clusterEdgeSoftness = 0.5f, clusterIrregularity = 0.5f
             },
+            // Arbustos: ilhas de vegetação no capim aberto — poucas, grandes, de uma
+            // espécie só; o resto do campo fica limpo de verdade.
             new()
             {
                 name = "Campos — arbustos", biome = Biome.Campos, prefabs = bushPrefabs,
-                attemptsPerTile = 20, minBiomeWeight = 0.5f, density = 0.9f,
-                scaleRange = new Vector2(0.8f, 1.2f), maxSlope = 0.5f, minSpacing = 8f
+                attemptsPerTile = 46, minBiomeWeight = 0.5f, density = 0.9f,
+                scaleRange = new Vector2(0.8f, 1.2f), maxSlope = 0.5f, minSpacing = 8f,
+                clusterStrength = 0.85f, clusterSize = 50f, clusterCoverage = 0.18f,
+                clusterEdgeSoftness = 0.6f, clusterIrregularity = 0.7f,
+                speciesClumping = 0.6f, speciesPatchSize = 60f
             },
+            // Graminhas: ondas LARGAS de pradaria (denso ↔ ralo bem gradual) e campos
+            // de flores por região de espécie.
             new()
             {
                 name = "Campos — graminhas", biome = Biome.Campos, prefabs = grassPrefabs,
                 attemptsPerTile = grassPerTile, minBiomeWeight = 0.35f, density = 1f,
-                scaleRange = new Vector2(0.9f, 1.6f), maxSlope = 0.5f
+                scaleRange = new Vector2(0.9f, 1.6f), maxSlope = 0.5f,
+                clusterStrength = 0.4f, clusterSize = 90f, clusterCoverage = 0.5f,
+                clusterEdgeSoftness = 0.9f, clusterIrregularity = 0.4f,
+                speciesClumping = 0.55f, speciesPatchSize = 70f
             },
 
             // ---------------- DESERTO ROCHOSO ----------------
@@ -489,6 +677,7 @@ public class InfiniteTerrain : MonoBehaviour
                 scaleRange = new Vector2(1.8f, 5.5f), aspectJitter = 0.2f,
                 minSlope = 0.35f, maxSlope = 99f,       // SÓ nas encostas: revestem os cânions
                 clusterStrength = 0.35f, clusterSize = 130f, clusterGroup = 0,
+                clusterIrregularity = 0.5f,
                 minSpacing = 5f, blockRadius = 5f
             },
             new()
@@ -499,6 +688,7 @@ public class InfiniteTerrain : MonoBehaviour
                 scaleRange = new Vector2(1f, 3f), aspectJitter = 0.15f,
                 maxSlope = 0.35f,                       // grupos de rocha no piso aberto
                 clusterStrength = 0.85f, clusterSize = 140f, clusterGroup = 0,
+                clusterIrregularity = 0.6f,
                 minSpacing = 6f, blockRadius = 6f
             },
             new()
@@ -508,6 +698,7 @@ public class InfiniteTerrain : MonoBehaviour
                 attemptsPerTile = Mathf.RoundToInt(60 * d), minBiomeWeight = 0.4f, density = 0.6f,
                 scaleRange = new Vector2(0.7f, 1.3f), aspectJitter = 0.2f, maxSlope = 0.6f,
                 clusterStrength = 0.5f, clusterSize = 130f, clusterGroup = 0,   // junto das formações
+                clusterIrregularity = 0.5f,
                 minSpacing = 2.5f
             },
             new()
@@ -525,6 +716,7 @@ public class InfiniteTerrain : MonoBehaviour
                 attemptsPerTile = Mathf.RoundToInt(260 * d), minBiomeWeight = 0.4f, density = 0.7f,
                 scaleRange = new Vector2(1.4f, 3f), maxSlope = 0.5f,   // tufos GRANDES (demo: mediana 2.3)
                 clusterStrength = 0.55f, clusterSize = 80f,            // manchas nas áreas abertas
+                clusterEdgeSoftness = 0.75f, clusterIrregularity = 0.6f,
                 avoidBlockers = 1f
             },
             new()
@@ -537,42 +729,119 @@ public class InfiniteTerrain : MonoBehaviour
             },
 
             // ---------------- TUNDRA (Winter Environment) ----------------
-            // Taiga aberta: bosques de abetos em manchas, bétulas raras entre eles,
-            // arbustos e pedras preenchendo as clareiras. Arrays vazios até o
-            // WinterSetup rodar (BuildScatterSetup descarta camadas vazias).
-            // Densidades = chute inicial — recalibrar pela Demo do pack (como no deserto).
+            // Calibrada com os DADOS REAIS das Demos do pack (por tile de 250 m,
+            // média bruta ↔ efetiva dentro dos corredores vestidos): ~232↔6.695
+            // grupos de grama, ~165↔2.576 arbustos, ~68↔631 árvores, ~32 pedras,
+            // ~10 afloramentos, ~19 madeiras caídas, ~18 debris. Escalas medianas
+            // ~1.0 (árvores), 0.9 (arbustos), 0.73 (grama), SEM aspect jitter
+            // (100% das árvores da demo têm width == height).
+            // A mata principal da demo é Tree_B (pinheiros) com TAPETE DE FOLHAS
+            // no chão — o groundPaint 6 reproduz isso sob os bosques daqui.
+            // Ordem importa: afloramentos primeiro (reservam espaço).
             new()
             {
-                name = "Tundra — abetos", biome = Biome.Tundra, prefabs = winterFirPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(180 * w), minBiomeWeight = 0.4f, density = 0.9f,
-                scaleRange = new Vector2(0.9f, 1.5f), aspectJitter = 0.1f, maxSlope = 0.5f,
-                clusterStrength = 0.45f, clusterSize = 110f, clusterGroup = 1,  // bosques
-                minSpacing = 4f, landmark = true
-            },
-            new()
-            {
-                name = "Tundra — bétulas", biome = Biome.Tundra, prefabs = winterBirchPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(25 * w), minBiomeWeight = 0.45f, density = 0.7f,
-                scaleRange = new Vector2(0.9f, 1.3f), maxSlope = 0.5f,
-                clusterStrength = 0.3f, clusterSize = 110f, clusterGroup = 1,   // na borda dos bosques
-                minSpacing = 10f
-            },
-            new()
-            {
-                name = "Tundra — arbustos", biome = Biome.Tundra, prefabs = winterBushPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(120 * w), minBiomeWeight = 0.4f, density = 0.8f,
-                scaleRange = new Vector2(0.8f, 1.3f), maxSlope = 0.55f
+                name = "Tundra — afloramentos", biome = Biome.Tundra,
+                prefabs = winterOutcropPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(30 * w), minBiomeWeight = 0.4f, density = 0.5f,
+                scaleRange = new Vector2(0.8f, 1.9f), maxSlope = 0.4f,
+                clusterStrength = 0.6f, clusterSize = 140f, clusterGroup = 3,   // morros rochosos
+                clusterCoverage = 0.25f, clusterEdgeSoftness = 0.5f, clusterIrregularity = 0.5f,
+                minSpacing = 12f, blockRadius = 6f
             },
             new()
             {
                 name = "Tundra — pedras", biome = Biome.Tundra, prefabs = winterRockPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(90 * w), minBiomeWeight = 0.35f, density = 0.7f,
-                scaleRange = new Vector2(0.5f, 1.6f), aspectJitter = 0.2f, maxSlope = 0.7f,
-                clusterStrength = 0.3f, clusterSize = 90f
+                attemptsPerTile = Mathf.RoundToInt(70 * w), minBiomeWeight = 0.35f, density = 0.7f,
+                scaleRange = new Vector2(0.35f, 1.9f), aspectJitter = 0.2f, maxSlope = 0.7f,
+                clusterStrength = 0.45f, clusterSize = 140f, clusterGroup = 3,  // junto dos afloramentos
+                clusterIrregularity = 0.5f
+            },
+            // Bosques: pinheiros altos (Tree_B) são a espinha dorsal — manchas
+            // GRANDES com borda suave; o chão sob elas vira folhas congeladas
+            // (groundPaint = canal 6, a MESMA máscara de noise).
+            new()
+            {
+                name = "Tundra — bosques (pinheiros)", biome = Biome.Tundra,
+                prefabs = winterPinePrefabs,
+                attemptsPerTile = Mathf.RoundToInt(380 * w), minBiomeWeight = 0.4f, density = 0.95f,
+                scaleRange = new Vector2(0.6f, 1.5f), maxSlope = 0.5f,
+                clusterStrength = 0.8f, clusterSize = 150f, clusterGroup = 1,
+                clusterCoverage = 0.42f, clusterEdgeSoftness = 0.65f, clusterIrregularity = 0.5f,
+                speciesClumping = 0.35f, speciesPatchSize = 90f,
+                minSpacing = 3.5f, landmark = true, groundPaint = 6
+            },
+            // Abetos densos (Tree_A): acento DENTRO dos mesmos bosques — trechos
+            // de mata fechada azulada no meio do pinheiral ralo.
+            new()
+            {
+                name = "Tundra — abetos", biome = Biome.Tundra, prefabs = winterFirPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(90 * w), minBiomeWeight = 0.4f, density = 0.7f,
+                scaleRange = new Vector2(0.75f, 1.3f), maxSlope = 0.5f,
+                clusterStrength = 0.7f, clusterSize = 150f, clusterGroup = 1,
+                clusterCoverage = 0.42f, clusterEdgeSoftness = 0.65f, clusterIrregularity = 0.5f,
+                speciesClumping = 0.5f, speciesPatchSize = 70f,
+                minSpacing = 4f, landmark = true
+            },
+            // Bétulas (Tree_C): capões PRÓPRIOS nas áreas abertas — grupos raros e
+            // fechados de decíduas nuas, longe do miolo dos pinheirais.
+            new()
+            {
+                name = "Tundra — capões de bétulas", biome = Biome.Tundra,
+                prefabs = winterBirchPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(120 * w), minBiomeWeight = 0.45f, density = 0.8f,
+                scaleRange = new Vector2(0.75f, 1.6f), maxSlope = 0.5f,
+                clusterStrength = 0.8f, clusterSize = 70f,
+                clusterCoverage = 0.16f, clusterEdgeSoftness = 0.55f, clusterIrregularity = 0.6f,
+                speciesClumping = 0.5f, speciesPatchSize = 50f,
+                minSpacing = 4f, landmark = true
+            },
+            // Madeira caída: troncos/tocos/raízes viradas na borda e dentro da
+            // mata (compartilham o noise dos bosques, mais fraco = vazam p/ fora).
+            new()
+            {
+                name = "Tundra — madeira caída", biome = Biome.Tundra,
+                prefabs = winterDeadwoodPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(60 * w), minBiomeWeight = 0.4f, density = 0.65f,
+                scaleRange = new Vector2(0.5f, 1.2f), aspectJitter = 0.15f, maxSlope = 0.5f,
+                clusterStrength = 0.5f, clusterSize = 150f, clusterGroup = 1,
+                clusterCoverage = 0.42f, clusterEdgeSoftness = 0.75f, clusterIrregularity = 0.5f,
+                minSpacing = 5f, avoidBlockers = 1f
+            },
+            // Arbustos: o preenchimento onipresente da demo (165/tile) — manchas
+            // médias irregulares, uma espécie dominante por mancha.
+            new()
+            {
+                name = "Tundra — arbustos", biome = Biome.Tundra, prefabs = winterBushPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(420 * w), minBiomeWeight = 0.4f, density = 0.9f,
+                scaleRange = new Vector2(0.3f, 1.4f), maxSlope = 0.55f,
+                clusterStrength = 0.55f, clusterSize = 60f,
+                clusterCoverage = 0.45f, clusterEdgeSoftness = 0.75f, clusterIrregularity = 0.6f,
+                speciesClumping = 0.5f, speciesPatchSize = 40f
+            },
+            // Grama seca: a categoria mais numerosa da demo (232/tile, mediana
+            // 0.73) — tufos furando a neve em ondas largas, com regiões de UMA
+            // variedade (A/B/C) como campos naturais.
+            new()
+            {
+                name = "Tundra — grama seca", biome = Biome.Tundra, prefabs = winterGrassPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(700 * w), minBiomeWeight = 0.35f, density = 1f,
+                scaleRange = new Vector2(0.45f, 1.25f), maxSlope = 0.55f,
+                clusterStrength = 0.45f, clusterSize = 55f,
+                clusterCoverage = 0.5f, clusterEdgeSoftness = 0.85f, clusterIrregularity = 0.5f,
+                speciesClumping = 0.6f, speciesPatchSize = 45f
+            },
+            // Debris: galhada fina sob os bosques — a serrapilheira do inverno.
+            new()
+            {
+                name = "Tundra — debris", biome = Biome.Tundra, prefabs = winterDebrisPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(70 * w), minBiomeWeight = 0.35f, density = 0.7f,
+                scaleRange = new Vector2(0.4f, 1.3f), aspectJitter = 0.25f, maxSlope = 0.6f,
+                clusterStrength = 0.45f, clusterSize = 150f, clusterGroup = 1,
+                clusterCoverage = 0.42f, clusterEdgeSoftness = 0.8f, clusterIrregularity = 0.5f
             },
 
             // ---------------- MONTANHA (treeline + pedras nevadas) ----------------
-            // Abetos só nas encostas BAIXAS (heightRange limita a treeline ~60 m;
+            // Árvores só nas encostas BAIXAS (heightRange limita a treeline ~60 m;
             // hMount vai a ~130 m) — acima disso, só rocha nua e pedras com neve
             // perto dos picos (a neve do terreno pinta a partir de h01 > 0.75).
             new()
@@ -580,10 +849,31 @@ public class InfiniteTerrain : MonoBehaviour
                 name = "Montanha — treeline (abetos)", biome = Biome.Montanha,
                 prefabs = winterFirPrefabs,
                 attemptsPerTile = Mathf.RoundToInt(70 * w), minBiomeWeight = 0.45f, density = 0.7f,
-                scaleRange = new Vector2(0.8f, 1.3f), aspectJitter = 0.1f,
-                maxSlope = 0.55f, heightRange = new Vector2(-1000f, 60f),
+                scaleRange = new Vector2(0.8f, 1.3f), maxSlope = 0.55f,
+                heightRange = new Vector2(-1000f, 60f),
                 clusterStrength = 0.4f, clusterSize = 120f,
+                clusterEdgeSoftness = 0.7f, clusterIrregularity = 0.5f,
                 minSpacing = 6f, landmark = true
+            },
+            // Pinheiros esparsos morrendo na subida — os últimos sobreviventes
+            // acima da mata fechada, cada vez mais raros até a rocha nua.
+            new()
+            {
+                name = "Montanha — pinheiros da treeline", biome = Biome.Montanha,
+                prefabs = winterPinePrefabs,
+                attemptsPerTile = Mathf.RoundToInt(30 * w), minBiomeWeight = 0.45f, density = 0.55f,
+                scaleRange = new Vector2(0.6f, 1.2f), maxSlope = 0.6f,
+                heightRange = new Vector2(30f, 75f),
+                clusterStrength = 0.3f, clusterSize = 90f,
+                minSpacing = 9f
+            },
+            new()
+            {
+                name = "Montanha — madeira caída", biome = Biome.Montanha,
+                prefabs = winterDeadwoodPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(14 * w), minBiomeWeight = 0.45f, density = 0.5f,
+                scaleRange = new Vector2(0.5f, 1.1f), aspectJitter = 0.15f, maxSlope = 0.55f,
+                heightRange = new Vector2(-1000f, 65f), minSpacing = 8f
             },
             new()
             {
@@ -623,8 +913,11 @@ public class InfiniteTerrain : MonoBehaviour
         td.SetHeights(0, 0, heights);
 
         // ---- texturas por bioma + inclinação
-        //      6 canais: grama/floresta/rocha de montanha/neve/areia/rocha do deserto
-        var alphas = new float[alphamapRes, alphamapRes, 6];
+        //      canais: 0 grama · 1 floresta · 2 rocha de montanha · 3 neve · 4 areia
+        //      · 5 rocha do deserto · 6 folhas congeladas (só com o Winter pack)
+        int nCh = layers.Length;
+        var alphas = new float[alphamapRes, alphamapRes, nCh];
+        var chAcc = new float[nCh];
         float aStep = tileSize / (alphamapRes - 1);
         for (int z = 0; z < alphamapRes; z++)
             for (int x = 0; x < alphamapRes; x++)
@@ -644,14 +937,44 @@ public class InfiniteTerrain : MonoBehaviour
                 float sBed = 0f, sBank = 0f;
                 StreamPaintMasks(wx, wz, plains, forest, mount, cold, desert, ref sBed, ref sBank);
 
-                float g = plains, f = forest + sBank * 1.6f, r = rock + sBed * 1.4f, s = snow;
-                float sum = g + f + r + s + sand + dRock + 0.0001f;
-                alphas[z, x, 0] = g / sum;
-                alphas[z, x, 1] = f / sum;
-                alphas[z, x, 2] = r / sum;
-                alphas[z, x, 3] = s / sum;
-                alphas[z, x, 4] = sand / sum;
-                alphas[z, x, 5] = dRock / sum;
+                // chão da floresta: grama como base, terra só em manchas de noise
+                // (antes era 100% terra e o sub-bosque ficava marrom demais).
+                // 2ª octava quebra o contorno redondo do Perlin; a 3ª (fina, ~3 m)
+                // esfarela a borda — precisa do alphamapRes 128 p/ ser resolvida.
+                float dn = Mathf.PerlinNoise(wx * 0.025f + oxM + 91.3f, wz * 0.025f + ozM + 47.9f);
+                dn += (Mathf.PerlinNoise(wx * 0.08f + oxM + 217.4f, wz * 0.08f + ozM + 133.8f) - 0.5f) * 0.35f;
+                dn += (Mathf.PerlinNoise(wx * 0.35f + oxM + 411.7f, wz * 0.35f + ozM + 305.2f) - 0.5f) * 0.15f;
+                float dirtPatch = Mathf.SmoothStep(0f, 1f,
+                    Mathf.InverseLerp(forestDirtThreshold, forestDirtThreshold + 0.12f, dn));
+                float dirtShare = Mathf.Lerp(1f - forestGrassShare, 1f, dirtPatch);
+
+                Array.Clear(chAcc, 0, nCh);
+                chAcc[0] = plains + forest * (1f - dirtShare);
+                chAcc[1] = forest * dirtShare + sBank * 1.6f;
+                chAcc[2] = rock + sBed * 1.4f;
+                chAcc[3] = snow;
+                chAcc[4] = sand;
+                chAcc[5] = dRock;
+
+                // camadas com groundPaint: a MESMA mancha de agrupamento que junta
+                // os objetos pinta o chão sob eles (folhas congeladas sob os bosques
+                // da Tundra). Sem o 7º canal (MicroSplat antigo), cai na terra (1).
+                if (groundPaintLayers != null)
+                    for (int i = 0; i < groundPaintLayers.Count; i++)
+                    {
+                        var pl = groundPaintLayers[i];
+                        float bw = PickWeight(pl.biome, plains, forest, mount, cold, desert);
+                        if (bw < 0.05f) continue;
+                        float mask = ClusterMask(pl, clusterOffsets[pl.clusterGroup], wx, wz);
+                        int ch = pl.groundPaint < nCh ? pl.groundPaint : 1;
+                        // ^1.5 concentra no miolo da mancha; 2.2 deixa as folhas
+                        // dominarem a neve lá dentro (borda continua nevada)
+                        chAcc[ch] += Mathf.Pow(mask, 1.5f) * bw * 2.2f;
+                    }
+
+                float sum = 0.0001f;
+                for (int c = 0; c < nCh; c++) sum += chAcc[c];
+                for (int c = 0; c < nCh; c++) alphas[z, x, c] = chAcc[c] / sum;
             }
         td.SetAlphamaps(0, 0, alphas);
 
@@ -750,6 +1073,40 @@ public class InfiniteTerrain : MonoBehaviour
         lakeSurface.transform.position = new Vector3(sx, waterLevel, sz);
     }
 
+    // ------------------------------------------------------ NEVE AMBIENTE
+    Transform snowfall;
+    ParticleSystem[] snowfallPs;
+    float snowfallNext;
+
+    /// <summary>
+    /// UMA partícula de neve do Winter pack seguindo o jogador — emite só na
+    /// Tundra e na Montanha (o mesmo padrão da WaterSurface única dos lagos).
+    /// </summary>
+    void EnsureSnowfall()
+    {
+        if (winterSnowfallPrefab == null || snowfall != null) return;
+        var go = Instantiate(winterSnowfallPrefab, transform);
+        go.name = "Snowfall (Winter pack)";
+        snowfall = go.transform;
+        snowfallPs = go.GetComponentsInChildren<ParticleSystem>(true);
+    }
+
+    void UpdateSnowfall()
+    {
+        if (snowfall == null || Time.time < snowfallNext) return;
+        snowfallNext = Time.time + 0.5f;    // amostrar bioma 2x/s basta
+
+        BiomeWeights(player.position.x, player.position.z,
+                     out _, out _, out float mount, out float cold, out _);
+        bool snowing = cold > 0.45f || mount > 0.6f;
+        snowfall.position = player.position;
+        for (int i = 0; i < snowfallPs.Length; i++)
+        {
+            var em = snowfallPs[i].emission;
+            if (em.enabled != snowing) em.enabled = snowing;
+        }
+    }
+
     // ------------------------------------------------ MOTOR DE ESPALHAMENTO
     /// <summary>
     /// Processa todas as ScatterLayers de um tile. Determinístico por (seed, tile).
@@ -783,14 +1140,13 @@ public class InfiniteTerrain : MonoBehaviour
                 float p = layer.density *
                           Mathf.Sqrt(Mathf.InverseLerp(layer.minBiomeWeight, 1f, w));
 
-                // 2) agrupamento: manchas de noise → aglomerados naturais + áreas abertas
+                // 2) agrupamento: manchas de noise → aglomerados naturais + áreas abertas.
+                //    coverage move o limiar (fração da área nas manchas), edgeSoftness
+                //    abre a largura da transição e irregularity soma uma 2ª octava que
+                //    quebra o contorno redondo do Perlin puro.
+                //    Defaults (0.5/0.5/0) reproduzem o limiar antigo InverseLerp(0.45, 0.72).
                 if (layer.clusterStrength > 0f)
-                {
-                    float n = Mathf.PerlinNoise(wx / layer.clusterSize + cOff.x,
-                                                wz / layer.clusterSize + cOff.y);
-                    float mask = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.45f, 0.72f, n));
-                    p *= Mathf.Lerp(1f, mask, layer.clusterStrength);
-                }
+                    p *= Mathf.Lerp(1f, ClusterMask(layer, cOff, wx, wz), layer.clusterStrength);
                 if (roll > p) continue;
 
                 // 2.5) riachos: nada dentro do canal nem nas margens do vale
@@ -816,11 +1172,21 @@ public class InfiniteTerrain : MonoBehaviour
                 float t = Mathf.Pow((float)rng.NextDouble(), 1.6f);
                 float scale = Mathf.Lerp(layer.scaleRange.x, layer.scaleRange.y, t);
                 float aspect = 1f + ((float)rng.NextDouble() * 2f - 1f) * layer.aspectJitter;
+
+                // espécie: roll aleatório puxado p/ um noise regional — regiões com UMA
+                // dominante (bosques de maple, mancha de um só arbusto), sem draw extra do rng
+                float pickRoll = (float)rng.NextDouble();
+                if (layer.speciesClumping > 0f && layer.protoCount > 1)
+                {
+                    float sn = Mathf.PerlinNoise(wx / layer.speciesPatchSize + cOff.x + 137.9f,
+                                                 wz / layer.speciesPatchSize + cOff.y + 71.3f);
+                    pickRoll = Mathf.Lerp(pickRoll, sn, layer.speciesClumping);
+                }
                 instances.Add(new TreeInstance
                 {
                     // altura interpolada do PRÓPRIO heightmap: cravado no chão
                     position = new Vector3(nx, td.GetInterpolatedHeight(nx, nz) / maxHeight, nz),
-                    prototypeIndex = layer.protoBase + rng.Next(layer.protoCount),
+                    prototypeIndex = layer.protoBase + layer.PickPrototype(pickRoll),
                     heightScale = scale,
                     widthScale = scale * aspect,
                     rotation = (float)(rng.NextDouble() * Math.PI * 2.0),
@@ -1046,7 +1412,13 @@ public class InfiniteTerrain : MonoBehaviour
 
         float hPlains = 6f + FBM(wx, wz, 0.008f, 2) * 8f;
         float hForest = 8f + FBM(wx, wz, 0.011f, 3) * 14f;
-        float hTundra = 5f + FBM(wx, wz, 0.007f, 2) * 6f;
+
+        // Tundra: planície ondulada + DRIFTS de neve — cristas ridged suaves e
+        // ALONGADAS (frequência anisotrópica = neve soprada numa direção), sutis
+        // (≤ ~2.5 m) para dar vida ao manto branco sem virar campo de dunas.
+        float drift = 1f - Mathf.Abs(2f * Mathf.PerlinNoise(wx * 0.013f + oxT + 57.1f,
+                                                            wz * 0.009f + ozT + 88.7f) - 1f);
+        float hTundra = 5f + FBM(wx, wz, 0.007f, 2) * 6f + drift * drift * 2.5f;
 
         // Deserto: perfil da Demo do RockyDesert — piso de cânion com dunas/ondulações
         // + MESETAS em DOIS níveis (~28 m e ~52 m) com paredões íngremes de borda
@@ -1141,6 +1513,13 @@ public class InfiniteTerrain : MonoBehaviour
             ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.55f, 0.72f, mountains)) : 0f;
         cold = enableTundra
             ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.62f, 0.78f, 1f - temp)) * (1f - mount) : 0f;
+
+        // MODO TUNDRA-FUNDO: só Tundra (e opcionalmente Montanha) marcada — o frio
+        // preenche tudo que não é montanha, como nos modos -fundo da floresta/deserto.
+        // Bom p/ testar o bioma de inverno sem procurar as manchas frias.
+        if (enableTundra && !enablePlains && !enableForest && !enableDesert)
+            cold = 1f - mount;
+
         float free = (1f - mount) * (1f - cold);   // terreno plano restante (nem montanha nem tundra)
 
         // Deserto = quente + seco. Fica fora de montanha/tundra por causa do 'free'.
@@ -1244,31 +1623,87 @@ public class InfiniteTerrain : MonoBehaviour
     }
 
 #if UNITY_EDITOR
-    // Auto-preenche assets dos pacotes (ALP + RockyDesert) — funciona sem rodar menus.
+    static bool msLayerWarned;   // aviso de MicroSplat desatualizado só 1x por sessão
+
+    // Auto-preenche assets dos pacotes (ALP + RockyDesert + Winter) — sem rodar menus.
     void OnValidate()
     {
         if (Application.isPlaying) return;
 
         // ---- ALP (floresta/campos)
+        const string G = "Assets/ALP_Assets/Nature Package - Forest Environment_/GroundTextures/";
+        const string V = "Assets/ALP_Assets/Nature Package - Forest Environment_/_Vegetation/HDRP/HDRP_Prefabs/";
+        // paint tree do pack ALP com peso (os *Group de árvore ficam de fora:
+        // um cluster inteiro numa instância flutua nas encostas)
+        PaintTree N(string name, float w = 1f) => new(P(V + name + "_HDRP.prefab"), w);
+
+        bool dirty = false;
+
+        // ---- migração one-shot: valores ANTIGOS default → novos defaults.
+        //      (se você já ajustou p/ outro valor no Inspector, nada muda aqui)
+        if (alphamapRes == 64) { alphamapRes = 128; dirty = true; }
+        if (Mathf.Approximately(forestGrassShare, 0.8f)) { forestGrassShare = 0.85f; dirty = true; }
+        if (Mathf.Approximately(forestDirtThreshold, 0.62f)) { forestDirtThreshold = 0.68f; dirty = true; }
+
         if (grassDiffuse == null)
         {
-            const string G = "Assets/ALP_Assets/Nature Package - Forest Environment_/GroundTextures/";
-            const string V = "Assets/ALP_Assets/Nature Package - Forest Environment_/_Vegetation/HDRP/HDRP_Prefabs/";
-
             grassDiffuse = T(G + "Grass_001.tif"); grassNormal = T(G + "Grass_001_N.png"); grassMask = T(G + "Grass_001_mask.png");
             forestDiffuse = T(G + "Ground01.tif"); forestNormal = T(G + "Ground01_N.png"); forestMask = T(G + "Ground01_mask.png");
             rockDiffuse = T(G + "Ground02.tif"); rockNormal = T(G + "Ground02_N.png"); rockMask = T(G + "Ground02_mask.png");
-
-            if (Empty(treePrefabs))
-                treePrefabs = new[] { P(V + "ForestTree01_HDRP.prefab"), P(V + "ForestTree02_HDRP.prefab"),
-                                      P(V + "ForestTree03_HDRP.prefab"), P(V + "ForestTree04_HDRP.prefab") };
-            if (Empty(bushPrefabs))
-                bushPrefabs = new[] { P(V + "ForestBush01_HDRP.prefab"), P(V + "ForestBush02_HDRP.prefab"),
-                                      P(V + "ForestBush03_HDRP.prefab"), P(V + "ForestBush04_HDRP.prefab") };
-            if (Empty(grassPrefabs))
-                grassPrefabs = new[] { P(V + "FlowerGrass01_HDRP.prefab"), P(V + "FlowerGrass02_HDRP.prefab"),
-                                       P(V + "GrassPlant02_HDRP.prefab"), P(V + "GrassPlant03_HDRP.prefab") };
-            UnityEditor.EditorUtility.SetDirty(this);
+            dirty = true;
+        }
+        if (Empty(treePrefabs))
+        {
+            // ForestTree = espinha dorsal; MapleSpring entra como variação (peso menor
+            // p/ as 9 variantes não dominarem a mata)
+            treePrefabs = new[]
+            {
+                N("ForestTree01"), N("ForestTree02"), N("ForestTree03"),
+                N("ForestTree04"), N("ForestTree05"),
+                N("MapleSpringTree01", 0.25f), N("MapleSpringTree02", 0.25f),
+                N("MapleSpringTree03", 0.25f), N("MapleSpringTree03_1", 0.25f),
+                N("MapleSpringTree04", 0.25f), N("MapleSpringTree05", 0.25f),
+                N("MapleSpringTree06", 0.25f), N("MapleSpringTree06_1", 0.25f),
+                N("MapleSpringTree06_2", 0.25f),
+            };
+            dirty = true;
+        }
+        if (Empty(bushPrefabs))
+        {
+            bushPrefabs = new[]
+            {
+                N("ForestBush01"), N("ForestBush02"), N("ForestBush03"), N("ForestBush04"),
+                N("ForestBush05"), N("ForestBush06"), N("ForestBush07"), N("ForestBush08"),
+                N("ForestBush09"), N("ForestBush10"), N("ForestBush11"),
+                N("MapleSpringBushes01", 0.5f), N("MapleSpringBushes02", 0.5f),
+                N("MapleSpringBushes03", 0.5f),
+            };
+            dirty = true;
+        }
+        if (Empty(grassPrefabs))
+        {
+            grassPrefabs = new[]
+            {
+                N("FlowerGrass01"), N("FlowerGrass02"), N("FlowerGrass03"), N("FlowerGrass04"),
+                N("GrassPlant02"), N("GrassPlant03"), N("GrassPlant04"), N("GrassPlant05"),
+            };
+            dirty = true;
+        }
+        if (Empty(forestThicketPrefabs))
+        {
+            forestThicketPrefabs = new[] { N("Thicket01"), N("Thicket02") };
+            dirty = true;
+        }
+        if (Empty(forestLitterPrefabs))
+        {
+            forestLitterPrefabs = new[]
+            {
+                N("ForestStick01"), N("ForestStick02"), N("ForestStick03"),
+                N("ForestStickSmall01"), N("ForestStickSmall02"), N("ForestStickSmall03"),
+                N("ForestStick01Group", 0.5f), N("ForestStickGroup01", 0.5f),
+                N("LeafDry01"), N("LeafDry01Group", 0.5f),
+            };
+            dirty = true;
         }
 
         // ---- RockyDesert (deserto). Prefere os prefabs CONVERTIDOS para HDRP
@@ -1277,35 +1712,106 @@ public class InfiniteTerrain : MonoBehaviour
         const string Orig = "Assets/RockyDesert/Prefabs/";
         string D(string name) => System.IO.File.Exists(Conv + name + ".prefab")
             ? Conv + name + ".prefab" : Orig + name + ".prefab";
+        PaintTree DP(string name, float w = 1f) => new(P(D(name)), w);
 
-        bool dirty = false;
         if (Empty(desertFormationPrefabs))
         {
-            desertFormationPrefabs = new[] { P(D("SM_RockSide_A1")), P(D("SM_Rock_Side-A2")) };
+            desertFormationPrefabs = new[] { DP("SM_RockSide_A1"), DP("SM_Rock_Side-A2") };
             dirty = true;
         }
         if (Empty(desertRockPrefabs))
         {
-            desertRockPrefabs = new[] { P(D("SM_Small_Rock_2")), P(D("SM_Small_Rock_3")),
-                                        P(D("SM_Small_Rock_4")) };
+            desertRockPrefabs = new[] { DP("SM_Small_Rock_2"), DP("SM_Small_Rock_3"),
+                                        DP("SM_Small_Rock_4") };
             dirty = true;
         }
         if (Empty(desertPebblePrefabs))
         {
-            desertPebblePrefabs = new[] { P(D("SM_Small_Rock_1")), P(D("SM_Small_Rock_B1")),
-                                          P(D("SM_Small_Rock_B2")) };
+            desertPebblePrefabs = new[] { DP("SM_Small_Rock_1"), DP("SM_Small_Rock_B1"),
+                                          DP("SM_Small_Rock_B2") };
             dirty = true;
         }
         if (Empty(desertTreePrefabs))
         {
-            desertTreePrefabs = new[] { P(D("SM_Tree_1")), P(D("SM_Tree_A")), P(D("SM_Tree_B")) };
+            desertTreePrefabs = new[] { DP("SM_Tree_1"), DP("SM_Tree_A"), DP("SM_Tree_B") };
             dirty = true;
         }
         if (Empty(desertGrassPrefabs))
         {
-            desertGrassPrefabs = new[] { P(D("SM_DeadGrass_A")), P(D("SM_DeadGrass_A1")),
-                                         P(D("SM_DeadGrass_A2")) };
+            desertGrassPrefabs = new[] { DP("SM_DeadGrass_A"), DP("SM_DeadGrass_A1"),
+                                         DP("SM_DeadGrass_A2") };
             dirty = true;
+        }
+
+        // ---- Winter (tundra/montanha): reencontra os prefabs limpos da conversão
+        //      (Tools > Everwyrm > Winter) se os arrays estiverem vazios.
+        if ((Empty(winterFirPrefabs) || Empty(winterPinePrefabs) || Empty(winterBirchPrefabs) ||
+             Empty(winterBushPrefabs) || Empty(winterGrassPrefabs) || Empty(winterRockPrefabs) ||
+             Empty(winterOutcropPrefabs) || Empty(winterDeadwoodPrefabs) || Empty(winterDebrisPrefabs)) &&
+            UnityEditor.AssetDatabase.IsValidFolder("Assets/Everwyrm/Winter"))
+        {
+            // mesmas categorias do WinterSetup.Categories (primeira que bater vence;
+            // rock_group ANTES de rock_)
+            var cats = new (List<GameObject> list, string[] keys)[]
+            {
+                (new List<GameObject>(), new[] { "tree_a" }),                   // abetos
+                (new List<GameObject>(), new[] { "tree_b" }),                   // pinheiros
+                (new List<GameObject>(), new[] { "tree_c" }),                   // bétulas
+                (new List<GameObject>(), new[] { "bush" }),
+                (new List<GameObject>(), new[] { "grass_" }),
+                (new List<GameObject>(), new[] { "rock_group" }),               // afloramentos
+                (new List<GameObject>(), new[] { "rock_" }),
+                (new List<GameObject>(), new[] { "log_", "stump_", "root_" }),  // madeira caída
+                (new List<GameObject>(), new[] { "debris_" }),
+            };
+            foreach (var guid in UnityEditor.AssetDatabase.FindAssets(
+                         "t:Prefab", new[] { "Assets/Everwyrm/Winter" }))
+            {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                string n = System.IO.Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+                var go = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (go == null) continue;
+                foreach (var (list, keys) in cats)
+                {
+                    bool hit = false;
+                    foreach (var k in keys) if (n.Contains(k)) { hit = true; break; }
+                    if (hit) { list.Add(go); break; }
+                }
+            }
+            void Fill(ref PaintTree[] arr, List<GameObject> list)
+            {
+                if (Empty(arr) && list.Count > 0) { arr = PaintTree.From(list); dirty = true; }
+            }
+            Fill(ref winterFirPrefabs, cats[0].list);
+            Fill(ref winterPinePrefabs, cats[1].list);
+            Fill(ref winterBirchPrefabs, cats[2].list);
+            Fill(ref winterBushPrefabs, cats[3].list);
+            Fill(ref winterGrassPrefabs, cats[4].list);
+            Fill(ref winterOutcropPrefabs, cats[5].list);
+            Fill(ref winterRockPrefabs, cats[6].list);
+            Fill(ref winterDeadwoodPrefabs, cats[7].list);
+            Fill(ref winterDebrisPrefabs, cats[8].list);
+        }
+
+        // ---- chão/neve ambiente do Winter pack
+        const string WPack = "Assets/ANGRY MESH/Nature Pack - Winter Environment";
+        if (snowLayer == null)
+        {
+            snowLayer = UnityEditor.AssetDatabase.LoadAssetAtPath<TerrainLayer>(
+                WPack + "/Sources/Terrain Layers/Snow_01_Layer.terrainlayer");
+            if (snowLayer != null) dirty = true;
+        }
+        if (winterGroundLayer == null)
+        {
+            winterGroundLayer = UnityEditor.AssetDatabase.LoadAssetAtPath<TerrainLayer>(
+                WPack + "/Sources/Terrain Layers/Leaves_01_Layer.terrainlayer");
+            if (winterGroundLayer != null) dirty = true;
+        }
+        if (winterSnowfallPrefab == null)
+        {
+            winterSnowfallPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
+                WPack + "/Prefabs/Particles/Snow_01.prefab");
+            if (winterSnowfallPrefab != null) dirty = true;
         }
         if (sandLayer == null)
         {
@@ -1332,11 +1838,27 @@ public class InfiniteTerrain : MonoBehaviour
                 dirty = true;
             }
         }
+
+        // MicroSplat gerado com menos camadas do que o chão usa agora? Avisar 1x —
+        // sem reconversão, a Tundra fica sem a neve/folhas novas no shader.
+        if (!msLayerWarned && microSplatMaterial != null)
+        {
+            int want = winterGroundLayer != null ? 7 : 6;
+            if (microSplatMaterial.GetTexture("_Diffuse") is Texture2DArray arr && arr.depth < want)
+            {
+                msLayerWarned = true;
+                Debug.LogWarning($"[InfiniteTerrain] MicroSplat foi gerado com {arr.depth} camadas, " +
+                    $"mas o chão agora tem {want} (neve funda + folhas congeladas do Winter pack). " +
+                    "Reconverta: apague Assets/Everwyrm/MicroSplat, limpe o campo Micro Splat Material " +
+                    "e rode Tools > Everwyrm > MicroSplat — Converter Terreno.");
+            }
+        }
         if (dirty) UnityEditor.EditorUtility.SetDirty(this);
 
         static Texture2D T(string p) => UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(p);
         static GameObject P(string p) => UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(p);
-        static bool Empty(GameObject[] a) => a == null || a.Length == 0 || a[0] == null;
+        static bool Empty(PaintTree[] a) =>
+            a == null || a.Length == 0 || a[0] == null || a[0].prefab == null;
         static U MS<U>(string filter) where U : UnityEngine.Object
         {
             var g = UnityEditor.AssetDatabase.FindAssets(filter, new[] { "Assets/Everwyrm/MicroSplat" });
