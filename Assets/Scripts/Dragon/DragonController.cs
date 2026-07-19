@@ -93,6 +93,7 @@ public class DragonController : MonoBehaviour
     DragonVitals vitals;                 // opcional
     DragonGrowth growth;                 // opcional
     DragonAttributes attrs;              // opcional
+    DragonFlight flight;                 // opcional (voo skill-based)
 
     bool flying, gliding, stalling, resting, dead;
     float planarSpeed, flySpeed, verticalVel;
@@ -139,6 +140,8 @@ public class DragonController : MonoBehaviour
         vitals = GetComponent<DragonVitals>();
         growth = GetComponent<DragonGrowth>();
         attrs = GetComponent<DragonAttributes>();
+        flight = GetComponent<DragonFlight>();
+        if (flight == null) flight = gameObject.AddComponent<DragonFlight>(); // garante o módulo de voo
         anim.applyRootMotion = false;
         yaw = transform.eulerAngles.y;
 
@@ -244,9 +247,10 @@ public class DragonController : MonoBehaviour
     }
 
     // ------------------------------------------------------------------- VOO
+    // Voo como habilidade: 1 toque de Space = 1 batida, 2 por ciclo (DragonFlight).
+    // Entre batidas: planeio com sustentação pela velocidade; updrafts ajudam.
     void FlightUpdate(float dt, float h, float v)
     {
-        bool climbing = Input.GetKey(KeyCode.Space) && !Exhausted;
         bool diving = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.C);
 
         float s = S;
@@ -254,42 +258,46 @@ public class DragonController : MonoBehaviour
         if (v > 0.1f) target = Mathf.Lerp(cruiseSpeed, maxFlySpeed, v) * s;
         else if (v < -0.1f) target = Mathf.Lerp(cruiseSpeed, minFlySpeed, -v) * s;
         if (diving) target = maxFlySpeed * s;
-        if (climbing) target *= 0.8f;
         if (stalling) target = minFlySpeed * s;
         flySpeed = Mathf.MoveTowards(flySpeed, target, flyAccel * s * dt);
 
         float turnFactor = Mathf.Lerp(1.25f, 0.8f, Speed01);
         yaw += h * turnSpeedAir * turnFactor * dt;
 
-        bool takeoffPush = Time.time - takeoffTime < 0.7f;
-        float targetVert = climbing || takeoffPush ? 1f : diving || stalling ? -1f : 0f;
-        vertInput = Mathf.MoveTowards(vertInput, targetVert, 4f * dt);
+        // ---- ciclo de batidas de asa
+        bool flapPressed = !Locked && Input.GetKeyDown(KeyCode.Space);
+        bool held = Input.GetKey(KeyCode.Space);
+        float vy = flight != null
+            ? flight.Tick(dt, flapPressed, held, diving, Speed01, s,
+                          transform.position, ref flySpeed)
+            : Time.time - takeoffTime < 0.9f ? climbRate * s     // fallback sem módulo
+            : diving ? -diveRate * s : -glideSink * SinkMul;
 
-        if (climbing || takeoffPush) { lastFlapTime = Time.time; gliding = false; }
-        else if (Time.time - lastFlapTime > glideDelay) gliding = true;
+        gliding = flight == null || flight.IsGliding;
 
+        // ---- estol: sem energia pra bater asas e devagar demais
         if (Exhausted)
         {
-            gliding = true;
             if (!stalling && flySpeed < (minFlySpeed + 1f) * s) SetStall(true);
         }
         else if (stalling) SetStall(false);
-        vitals?.Drain((climbing ? climbCost : gliding ? glideCost : flapCost) * CostMul);
+        if (stalling) vy = -stallSink;
 
-        // peso no voo: gordo sobe mal (ClimbMul) e afunda planando (SinkMul);
-        // dragão grande plana melhor (SinkMul cai com o tamanho)
-        float vy = stalling ? -stallSink
-                 : vertInput > 0.01f ? climbRate * ClimbMul * s * vertInput
-                 : vertInput < -0.01f ? diveRate * s * vertInput
-                 : gliding ? -glideSink * SinkMul : -0.6f;
+        vitals?.Drain(glideCost * CostMul);   // sustentação passiva: custo mínimo
+
+        // pitch e animação seguem o movimento vertical REAL
+        vertInput = Mathf.MoveTowards(vertInput,
+            Mathf.Clamp(vy / Mathf.Max(1f, climbRate * s), -1f, 1f), 5f * dt);
 
         Vector3 fwd = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
         cc.Move((fwd * flySpeed + Vector3.up * vy) * dt);
 
-        if (Time.time - takeoffTime < 0.8f) return;
+        // carência maior pós-decolagem e pouso só em DESCIDA REAL (vy < -1.5):
+        // o afundamento suave do planeio rápido (~-0.9) não força pouso
+        if (Time.time - takeoffTime < 1.5f) return;
         if (cc.isGrounded) { Land(); return; }
 
-        if (vy < 0f && (stalling || flySpeed <= landMaxSpeed * s))
+        if ((stalling || flySpeed <= landMaxSpeed * s) && vy < -1.5f)
         {
             Vector3 origin = transform.position + cc.center;
             if (Physics.SphereCast(origin, cc.radius * 0.9f, Vector3.down,
@@ -372,7 +380,9 @@ public class DragonController : MonoBehaviour
         nextHintCheck = Time.time + 0.25f;
 
         string hint = "";
-        if (!flying && !resting && !dead)
+        if (flying && flight != null && flight.CurrentWind.y > 1.5f)
+            hint = "^ Corrente ascendente — plane nela!";
+        else if (!flying && !resting && !dead)
         {
             if (Carcass.FindNearest(transform.position, eatRange * S) != null)
                 hint = "G — comer";
@@ -422,6 +432,7 @@ public class DragonController : MonoBehaviour
         lastFlapTime = Time.time;
         flySpeed = Mathf.Max(planarSpeed, (minFlySpeed + 2f) * S);
         vertInput = 1f;
+        flight?.OnEnterFlight(9f * S);   // impulso de decolagem + ciclo de batidas cheio
         anim.SetBool(P_Flying, true);
         anim.SetBool(P_Glide, false);
     }

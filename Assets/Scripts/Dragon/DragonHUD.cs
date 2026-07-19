@@ -14,6 +14,8 @@ public class DragonHUD : MonoBehaviour
     DragonController dragon;
     DragonGrowth growth;
     DragonAttributes attrs;
+    DragonFlight flight;
+    readonly System.Collections.Generic.List<Image> flapPips = new();
 
     RectTransform healthFill, energyFill, hungerFill, growthFill;
     Transform canvasRoot;
@@ -58,6 +60,10 @@ public class DragonHUD : MonoBehaviour
         minimap.transform.SetParent(canvasRoot, false);
         minimap.Bind(dragon, attrs);
 
+        // pips de batida de asa (ciclo de voo)
+        flight = v.GetComponent<DragonFlight>();
+        if (flight != null) flight.OnFlapsChanged += OnFlaps;
+
         OnStats(vitals);
     }
 
@@ -79,6 +85,28 @@ public class DragonHUD : MonoBehaviour
             attrs.OnChanged -= OnAttrs;
             attrs.OnLevelUp -= OnLevelUp;
         }
+        if (flight != null) flight.OnFlapsChanged -= OnFlaps;
+    }
+
+    /// <summary>Pips ao lado da barra de Energia: batidas de asa disponíveis no ciclo.</summary>
+    void OnFlaps(int left, int total)
+    {
+        while (flapPips.Count < total)
+        {
+            var pip = new GameObject("FlapPip", typeof(Image)).GetComponent<Image>();
+            pip.transform.SetParent(canvasRoot, false);
+            pip.raycastTarget = false;
+            var rt = pip.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0f, 0f);
+            rt.pivot = new Vector2(0f, 0f);
+            rt.anchoredPosition = new Vector2(30f + BarWidth + 10f + flapPips.Count * 16f, 52f);
+            rt.sizeDelta = new Vector2(12f, 18f);
+            flapPips.Add(pip);
+        }
+        for (int i = 0; i < flapPips.Count; i++)
+            flapPips[i].color = i < left
+                ? new Color(0.95f, 0.85f, 0.4f)          // batida disponível
+                : new Color(1f, 1f, 1f, 0.12f);          // gasta (recuperando)
     }
 
     // ------------------------------------------------------------ HANDLERS

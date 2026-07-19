@@ -256,6 +256,8 @@ public static class DragonSetup
                 root.AddComponent<DragonGrowth>();
             if (root.GetComponent<DragonAttributes>() == null)
                 root.AddComponent<DragonAttributes>();
+            if (root.GetComponent<DragonFlight>() == null)
+                root.AddComponent<DragonFlight>();
 
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             Debug.Log("Prefab configurado: CharacterController + DragonController + DragonVitals + DragonGrowth.");
@@ -310,6 +312,8 @@ public static class DragonSetup
         var world = Object.FindFirstObjectByType<InfiniteTerrain>();
         if (world == null)
             world = new GameObject("World (Infinite Terrain)").AddComponent<InfiniteTerrain>();
+        if (world.GetComponent<MountainUpdrafts>() == null)
+            world.gameObject.AddComponent<MountainUpdrafts>();   // correntes nas montanhas
 
         var dragon = Object.FindFirstObjectByType<DragonController>();
         if (dragon != null) world.player = dragon.transform;

@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0b7e2d4a91c845f3b8a6e5d90c31f7a4, type: 3}
+  m_Name: FlightProfile
+  m_EditorClassIdentifier:
+  takeoffClimbTime: 3
+  takeoffClimbRate: 6.5
+  takeoffClimbEnergyPerSec: 4
+  flapsPerCycle: 2
+  flapMinInterval: 0.32
+  cycleRecovery: 0.45
+  flapLift: 9
+  flapForwardBoost: 1.1
+  maxRiseSpeed: 12
+  sinkAtSpeed: 0.7
+  sinkAtStall: 3.8
+  slownessPower: 1.4
+  verticalResponse: 4.5
+  diveSink: 14
+  glideAnimDelay: 1
+  energyPerFlap: 2
+  windInfluence: 1
