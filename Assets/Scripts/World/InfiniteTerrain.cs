@@ -55,7 +55,7 @@ public class InfiniteTerrain : MonoBehaviour
     [Header("Lagos (HDRP Water System)")]
     public bool enableLakes = true;
     [Tooltip("Altura da lâmina d'água no mundo (m). Bacias escavadas abaixo disso viram lago.")]
-    public float waterLevel = 3.2f;
+    public float waterLevel = 5f;
     [SerializeField] float lakeDepth = 7f;          // profundidade máxima da escavação
     [SerializeField] float lakePatchSize = 550f;    // tamanho das manchas de bacia (m)
     [Tooltip("Oásis no deserto: manchas ENORMES e raríssimas. Maior = oásis maiores e mais raros.")]

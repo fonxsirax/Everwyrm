@@ -161,12 +161,13 @@ public class DragonHUD : MonoBehaviour
 
         statusText.text =
             v.IsDead ? "MORTO — Enter para renascer" :
+            dragon.IsStaggered ? "DESEQUILÍBRIO — recupere o voo!" :
             v.IsStarving ? "MORRENDO DE FOME!" :
             v.IsExhausted && dragon.IsFlying ? "EXAUSTO — ESTOL!" :
             v.IsExhausted ? "Exausto — descanse (R)" :
             v.IsHungerCritical ? "Faminto — cace algo" :
             dragon.IsResting ? "Descansando..." : "";
-        statusText.color = v.IsDead || v.IsStarving
+        statusText.color = v.IsDead || v.IsStarving || dragon.IsStaggered
             ? new Color(1f, 0.3f, 0.25f) : Color.white;
     }
 

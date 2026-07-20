@@ -15,6 +15,8 @@ using UnityEngine.SceneManagement;
 ///         Space sobe — soltar perto do fim da batida dá impulso extra (timing!)
 ///         Ctrl/C mergulha
 ///         Alt esquiva aérea · Sem bater asas ~1s = planar
+///         Colisão tem consequência: raspão desvia e freia; batida forte
+///         (rápida e de frente) derruba a sustentação — desequilíbrio + dano!
 ///         Peso importa: gordo sobe mal e afunda planando; grande plana melhor
 ///         Energia zerada = estol e queda!
 ///  Água : entra andando em lago fundo ou pousando na água (queda amortecida).
@@ -26,8 +28,8 @@ using UnityEngine.SceneManagement;
 public class DragonController : MonoBehaviour
 {
     [Header("Chão")]
-    [SerializeField] float walkSpeed = 3.2f;
-    [SerializeField] float runSpeed = 9.5f;
+    [SerializeField] float walkSpeed = 3.84f;   // +20% geral na locomoção terrestre
+    [SerializeField] float runSpeed = 11.4f;
     [SerializeField] float reverseSpeed = 1.7f;
     [SerializeField] float groundAccel = 9f;
     [SerializeField] float momentumDecay = 1.6f;   // freio ao soltar W
@@ -56,9 +58,19 @@ public class DragonController : MonoBehaviour
     [SerializeField] float landProbeDistance = 3.5f;
     [SerializeField] float landMaxSpeed = 11f;
     [SerializeField] float landApproachProbe = 16f;  // segurando S: busca chão até aqui
-    [SerializeField] float landDescendRate = 11f;    // descida na aproximação (longe do chão)
+    [SerializeField] float landDescendRate = 16f;    // descida na aproximação (longe do chão)
     [SerializeField] float landFlareRate = 3f;       // descida perto do chão ("flare" suave)
     [SerializeField] LayerMask groundMask = 0;
+
+    [Header("Colisão em voo")]
+    [SerializeField] float impactLight = 0.2f;       // fração da vel. máx.: abaixo é raspão
+    [SerializeField] float impactHeavy = 0.5f;       // fração da vel. máx.: desequilíbrio
+    [SerializeField] float impactSpeedLoss = 0.6f;   // perda de velocidade × impacto
+    [SerializeField] float impactKnockDown = 6f;     // tranco p/ baixo no impacto máx. (m/s)
+    [SerializeField] float impactMaxDamage = 18f;    // dano da colisão forte no impacto máx.
+    [SerializeField] float staggerTime = 1.2f;       // duração do desequilíbrio (s)
+    [SerializeField] float impactCooldown = 0.4f;    // intervalo mínimo entre reações
+    [SerializeField] float impactEnergyCost = 6f;    // energia da colisão leve × impacto
 
     [Header("Natação")]
     [SerializeField] float swimSpeed = 3.4f;        // nado pra frente
@@ -119,12 +131,15 @@ public class DragonController : MonoBehaviour
     float turnSmoothed, vertInput;
     float lastFlapTime, takeoffTime = -99f;
     float actionLockUntil;
+    Vector3 flightVel, pendingNormal;                // colisão em voo
+    float pendingImpact, lastImpactTime = -99f, staggerUntil = -99f;
     int meleeCombo;
     bool tailLeft, wingLeft;
     float nextIdleChange, nextHintCheck;
     string currentHint = "";
 
     public bool IsFlying => flying;
+    public bool IsStaggered => Time.time < staggerUntil;   // desequilíbrio pós-colisão
     public bool IsResting => resting;
     public bool IsDead => dead;
     public bool IsSwimming => swimming;
@@ -280,6 +295,8 @@ public class DragonController : MonoBehaviour
         bool diving = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.C);
 
         float s = S;
+        ProcessFlightImpact(s);   // consequências da colisão do frame anterior
+
         float target = cruiseSpeed * s;
         if (v > 0.1f) target = Mathf.Lerp(cruiseSpeed, maxFlySpeed, v) * s;
         else if (v < -0.1f) target = Mathf.Lerp(cruiseSpeed, minFlySpeed, -v) * s;
@@ -290,10 +307,10 @@ public class DragonController : MonoBehaviour
         float turnFactor = Mathf.Lerp(1.25f, 0.8f, Speed01);
         yaw += h * turnSpeedAir * turnFactor * dt;
 
-        // ---- pouso controlado: segurar S com chão ao alcance = aproximação.
-        //      Desce firme longe do solo, faz "flare" suave perto dele, e as
+        // ---- pouso controlado: segurar S = descida DECIDIDA rumo ao solo.
+        //      Alto (sem chão no alcance da sondagem) desce na taxa cheia; com o
+        //      chão à vista faz o gradiente até o "flare" suave do toque, e as
         //      condições de pouso abaixo completam a transição naturalmente.
-        //      Sem chão no alcance da sondagem, S segue só freando, como sempre.
         float landingSink = 0f;
         if (v < -0.1f && !stalling)
         {
@@ -305,6 +322,7 @@ public class DragonController : MonoBehaviour
                 float far01 = Mathf.Clamp01(ground.distance / (landApproachProbe * s));
                 landingSink = Mathf.Lerp(landFlareRate, landDescendRate, far01) * s;
             }
+            else landingSink = landDescendRate * s;
         }
 
         // ---- ciclo de batidas de asa
@@ -318,12 +336,13 @@ public class DragonController : MonoBehaviour
 
         gliding = flight == null || flight.IsGliding;
 
-        // ---- estol: sem energia pra bater asas e devagar demais
+        // ---- estol: sem energia pra bater asas e devagar demais.
+        //      Desequilíbrio pós-colisão também segura o estol até passar.
         if (Exhausted)
         {
             if (!stalling && flySpeed < (minFlySpeed + 1f) * s) SetStall(true);
         }
-        else if (stalling) SetStall(false);
+        else if (stalling && !IsStaggered) SetStall(false);
         if (stalling) vy = -stallSink;
 
         vitals?.Drain(glideCost * CostMul);   // sustentação passiva: custo mínimo
@@ -333,7 +352,8 @@ public class DragonController : MonoBehaviour
             Mathf.Clamp(vy / Mathf.Max(1f, climbRate * s), -1f, 1f), 5f * dt);
 
         Vector3 fwd = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
-        cc.Move((fwd * flySpeed + Vector3.up * vy) * dt);
+        flightVel = fwd * flySpeed + Vector3.up * vy;   // OnControllerColliderHit mede o impacto daqui
+        cc.Move(flightVel * dt);
 
         // desceu até a lâmina d'água sobre lago: mergulha e vira nado
         // (vale até no estol — a água amortece a queda, sem dano)
@@ -358,6 +378,71 @@ public class DragonController : MonoBehaviour
                     out _, landProbeDistance * s + cc.height * 0.5f,
                     groundMask, QueryTriggerInteraction.Ignore))
                 Land();
+        }
+    }
+
+    // -------------------------------------------------------- COLISÃO EM VOO
+    /// <summary>Colisões do CharacterController: em voo, guarda o impacto mais
+    /// forte do frame (árvore, rocha, penhasco) para o FlightUpdate reagir.</summary>
+    void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+        if (!flying) return;
+        if (hit.normal.y > 0.6f) return;   // superfície de pouso — Land() cuida
+
+        // só a componente da velocidade que ENTRA no obstáculo conta:
+        // raspão tangencial ≈ 0, batida frontal = velocidade cheia
+        float impact = -Vector3.Dot(flightVel, hit.normal);
+        if (impact > pendingImpact)
+        {
+            pendingImpact = impact;
+            pendingNormal = hit.normal;
+        }
+    }
+
+    /// <summary>Consequência proporcional: raspão passa batido, colisão leve
+    /// freia e desvia, colisão forte derruba a sustentação (desequilíbrio) —
+    /// o jogador precisa recuperar velocidade pra voltar a voar.</summary>
+    void ProcessFlightImpact(float s)
+    {
+        float impact = pendingImpact;
+        Vector3 n = pendingNormal;
+        pendingImpact = 0f;
+
+        if (impact <= 0f || IsStaggered) return;
+        if (Time.time - lastImpactTime < impactCooldown) return;
+        if (Time.time - takeoffTime < 1.5f) return;   // carência pós-decolagem
+
+        float impact01 = Mathf.Clamp01(impact / (maxFlySpeed * s));
+        if (impact01 < impactLight) return;           // raspão: navegação rente é permitida
+        lastImpactTime = Time.time;
+
+        // deflexão: o nariz escorrega para a tangente do obstáculo
+        Vector3 fwd = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+        Vector3 slide = Vector3.ProjectOnPlane(fwd, n);
+        slide.y = 0f;
+        if (slide.sqrMagnitude > 0.001f)
+        {
+            float slideYaw = Mathf.Atan2(slide.x, slide.z) * Mathf.Rad2Deg;
+            yaw = Mathf.LerpAngle(yaw, slideYaw, Mathf.Clamp01(0.35f + impact01 * 0.5f));
+        }
+
+        flySpeed *= 1f - impact01 * impactSpeedLoss;
+        flight?.Knock(-impactKnockDown * impact01);
+
+        if (impact01 >= impactHeavy)
+        {
+            // desequilíbrio: perde sustentação, cai e fica sem controle um instante
+            staggerUntil = Time.time + staggerTime;
+            SetStall(true);
+            flySpeed = Mathf.Min(flySpeed, minFlySpeed * s);
+            vitals?.Damage(impactMaxDamage * impact01);
+            Lock(staggerTime);
+            Debug.LogWarning($"Colisão FORTE em voo: impacto {impact:0.0} m/s ({impact01:P0}) — desequilíbrio!");
+        }
+        else
+        {
+            Spend(impactEnergyCost * impact01);
+            Debug.Log($"Colisão leve em voo: impacto {impact:0.0} m/s ({impact01:P0})");
         }
     }
 

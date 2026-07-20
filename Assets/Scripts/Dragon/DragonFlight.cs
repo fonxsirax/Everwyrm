@@ -75,6 +75,9 @@ public class DragonFlight : MonoBehaviour
     /// <summary>Fase híbrida: logo após decolar, segurar Space sobe contínuo.</summary>
     public bool InTakeoffClimb => Time.time < takeoffClimbUntil;
 
+    /// <summary>Tranco vertical externo (colisões em voo): soma direto no vy.</summary>
+    public void Knock(float deltaVy) => vy += deltaVy;
+
     /// <summary>
     /// Um passo da física de voo. Retorna a velocidade vertical.
     /// `flapPressed` = KeyDown deste frame; `held` = Space segurado.
@@ -114,14 +117,11 @@ public class DragonFlight : MonoBehaviour
                 {
                     float q = Mathf.Pow(Mathf.Clamp01(t / p.flapAnimDuration),
                                         p.flapBonusPower);
-                    float lift = p.flapBonusLift * q * ClimbMul * sizeScale;
-                    vy = Mathf.Min(vy + lift,
+                    vy = Mathf.Min(vy + p.flapBonusLift * q * ClimbMul * sizeScale,
                                    Mathf.Max(vy, p.maxRiseSpeed * sizeScale));
                     forwardSpeed += p.flapBonusForward * q * sizeScale;
-                    Debug.Log($"Bônus extra: +{lift:0.00} m/s (timing {q:P0}, soltou em {t:0.00}s/{p.flapAnimDuration:0.00}s)");
                     OnFlapBonus?.Invoke(q);
                 }
-                else Debug.LogError("bonus extra perdido");
                 bonusPending = false;
             }
             releasedSinceFlap = true;
@@ -164,13 +164,13 @@ public class DragonFlight : MonoBehaviour
         float targetVy = -sink + CurrentWind.y * p.windInfluence;
 
         // pouso controlado (S): garante descida mínima rumo ao solo, com
-        // resposta dobrada — o mergulho de pouso engata rápido e decidido.
+        // resposta TRIPLICADA — o mergulho de pouso engata rápido e decidido.
         // Nem updraft segura um dragão decidido a pousar.
         float response = p.verticalResponse;
         if (landingSink > 0f)
         {
             targetVy = Mathf.Min(targetVy, -landingSink);
-            response *= 2f;
+            response *= 3f;
         }
 
         vy = Mathf.MoveTowards(vy, targetVy, response * dt);
