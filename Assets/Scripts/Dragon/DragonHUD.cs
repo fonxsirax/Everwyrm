@@ -16,6 +16,8 @@ public class DragonHUD : MonoBehaviour
     DragonAttributes attrs;
     DragonFlight flight;
     readonly System.Collections.Generic.List<Image> flapPips = new();
+    int lastFlapsLeft;
+    Coroutine pipFlash;
 
     RectTransform healthFill, energyFill, hungerFill, growthFill;
     Transform canvasRoot;
@@ -62,7 +64,11 @@ public class DragonHUD : MonoBehaviour
 
         // pips de batida de asa (ciclo de voo)
         flight = v.GetComponent<DragonFlight>();
-        if (flight != null) flight.OnFlapsChanged += OnFlaps;
+        if (flight != null)
+        {
+            flight.OnFlapsChanged += OnFlaps;
+            flight.OnFlapBonus += OnFlapBonus;
+        }
 
         OnStats(vitals);
     }
@@ -85,12 +91,17 @@ public class DragonHUD : MonoBehaviour
             attrs.OnChanged -= OnAttrs;
             attrs.OnLevelUp -= OnLevelUp;
         }
-        if (flight != null) flight.OnFlapsChanged -= OnFlaps;
+        if (flight != null)
+        {
+            flight.OnFlapsChanged -= OnFlaps;
+            flight.OnFlapBonus -= OnFlapBonus;
+        }
     }
 
     /// <summary>Pips ao lado da barra de Energia: batidas de asa disponíveis no ciclo.</summary>
     void OnFlaps(int left, int total)
     {
+        lastFlapsLeft = left;
         while (flapPips.Count < total)
         {
             var pip = new GameObject("FlapPip", typeof(Image)).GetComponent<Image>();
@@ -103,10 +114,41 @@ public class DragonHUD : MonoBehaviour
             rt.sizeDelta = new Vector2(12f, 18f);
             flapPips.Add(pip);
         }
+        PaintPips();
+    }
+
+    void PaintPips()
+    {
         for (int i = 0; i < flapPips.Count; i++)
-            flapPips[i].color = i < left
-                ? new Color(0.95f, 0.85f, 0.4f)          // batida disponível
-                : new Color(1f, 1f, 1f, 0.12f);          // gasta (recuperando)
+            flapPips[i].color = BasePipColor(i);
+    }
+
+    Color BasePipColor(int i) => i < lastFlapsLeft
+        ? new Color(0.95f, 0.85f, 0.4f)              // batida disponível
+        : new Color(1f, 1f, 1f, 0.12f);              // gasta (recuperando)
+
+    /// <summary>Soltura no timing certo: pips brilham — quanto melhor, mais ciano.</summary>
+    void OnFlapBonus(float quality)
+    {
+        if (flapPips.Count == 0) return;
+        if (pipFlash != null) StopCoroutine(pipFlash);
+        pipFlash = StartCoroutine(FlashPips(quality));
+    }
+
+    System.Collections.IEnumerator FlashPips(float quality)
+    {
+        Color flash = Color.Lerp(new Color(1f, 0.95f, 0.6f),
+                                 new Color(0.45f, 1f, 1f), quality);
+        float dur = 0.25f + 0.3f * quality;
+        for (float t = 0f; t < dur; t += Time.deltaTime)
+        {
+            float k = 1f - t / dur;
+            for (int i = 0; i < flapPips.Count; i++)
+                flapPips[i].color = Color.Lerp(BasePipColor(i), flash, k);
+            yield return null;
+        }
+        PaintPips();
+        pipFlash = null;
     }
 
     // ------------------------------------------------------------ HANDLERS

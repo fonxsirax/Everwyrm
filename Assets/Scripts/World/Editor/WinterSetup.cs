@@ -23,9 +23,16 @@ using UnityEngine;
 ///   3. Reaponta os arrays winter* do InfiniteTerrain da cena aberta e liga as
 ///      TerrainLayers de chão do pack (neve + folhas congeladas).
 ///   4. Garante o prefab "AG Global Settings" na cena (o pack exige um por
-///      cena para vento/neve/tint funcionarem).
+///      cena para vento/neve/tint funcionarem) e converte os materiais de FX
+///      das partículas (shader builtin → HDRP/Unlit).
 ///
 /// Menu manual para iterar: Tools > Everwyrm > Winter — (Re)converter pack
+///
+/// LIÇÃO (caça ao "rosa parcial"): folhagem do pack usa transmissão/SSS com
+/// Diffusion Profiles (AG_Trees/AG_Grass, em Nature Pack - Common). Perfil NÃO
+/// registrado = partes magenta SEM erro no Console. Estão registrados na
+/// Diffusion Profile List do DefaultSettingsVolumeProfile do projeto — se o
+/// volume default for recriado, re-registrar por lá.
 /// </summary>
 public static class WinterSetup
 {
@@ -126,13 +133,13 @@ public static class WinterSetup
         // ---- 2. reconstrói prefabs limpos (materiais do pack MANTIDOS)
         var converted = new Dictionary<string, List<GameObject>>();
         int total = 0;
-        foreach (var (field, list) in EnumeratePairs(byCategory))
+        foreach (var kv in byCategory)
         {
-            converted[field] = new List<GameObject>();
-            foreach (var src in list)
+            converted[kv.Key] = new List<GameObject>();
+            foreach (var src in kv.Value)
             {
                 var clean = RebuildClean(src, src.name);
-                if (clean != null) { converted[field].Add(clean); total++; }
+                if (clean != null) { converted[kv.Key].Add(clean); total++; }
             }
         }
         AssetDatabase.SaveAssets();
@@ -198,7 +205,7 @@ public static class WinterSetup
     // IMPORTANTE: fadeMode/alturas são COPIADOS do LODGroup original — os
     // shaders de billboard (Tree Cross) do pack são autorados p/ renderizar com
     // CrossFade; reconstruir com fade None deixava o LOD de cruz magenta.
-    static readonly float[] LodHeights = { 0.18f, 0.09f, 0.045f, 0.02f };
+    const float SingleLodHeight = 0.18f;   // prefabs sem LODGroup (LOD único)
 
     static GameObject RebuildClean(GameObject src, string name)
     {
@@ -235,7 +242,7 @@ public static class WinterSetup
             {
                 all.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
                 lodRenderers.Add(all.ToArray());
-                lodParams.Add((LodHeights[0], 0f));
+                lodParams.Add((SingleLodHeight, 0f));
             }
         }
 
@@ -286,133 +293,6 @@ public static class WinterSetup
     {
         mr = r as MeshRenderer;
         return mr != null && mr.TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null;
-    }
-
-    // ------------------------------------------------- DIAGNÓSTICO DE MATERIAIS
-    // Identifica materiais com shader QUEBRADO (erro de compilação/não suportado —
-    // só detectável dentro do editor) nos prefabs convertidos e os troca por um
-    // fallback HDRP/Lit que preserva albedo/normal/alpha-clip. O pack original
-    // fica intacto: a troca acontece só nos prefabs de Assets/Everwyrm/Winter.
-    // Perde vento/neve dinâmica NAQUELE material, mas nunca fica rosa.
-    [MenuItem("Tools/Everwyrm/Winter — Diagnosticar-corrigir materiais (rosa)")]
-    public static void FixBrokenMaterials() =>
-        ReplaceMaterials(IsBroken, "com shader quebrado");
-
-    // Variante falhando SÓ em runtime (rosa parcial/ao longe) não aparece no
-    // ShaderHasError — este menu força o fallback nos billboards Cross, que são
-    // o caso relatado. A perda (vento/tint no LOD distante) é imperceptível.
-    [MenuItem("Tools/Everwyrm/Winter — Fallback p-os billboards Cross (rosa ao longe)")]
-    public static void FixCrossMaterials() =>
-        ReplaceMaterials(m => m.shader != null && m.shader.name.Contains("Tree Cross"),
-                         "de billboard Cross");
-
-    static void ReplaceMaterials(System.Func<Material, bool> match, string why)
-    {
-        EnsureFolder(OutRoot);
-        EnsureFolder(OutDir);
-        EnsureFolder(OutDir + "/Materials");
-
-        var replacements = new Dictionary<Material, Material>();
-        var report = new System.Text.StringBuilder();
-        int prefabsFixed = 0;
-
-        foreach (var guid in AssetDatabase.FindAssets("t:Prefab", new[] { OutDir }))
-        {
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-            var root = PrefabUtility.LoadPrefabContents(path);
-            bool touched = false;
-
-            foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true))
-            {
-                var mats = r.sharedMaterials;
-                bool rowTouched = false;
-                for (int i = 0; i < mats.Length; i++)
-                {
-                    var m = mats[i];
-                    if (m == null || !match(m)) continue;
-                    if (!replacements.TryGetValue(m, out var rep))
-                    {
-                        rep = BuildFallback(m);
-                        replacements[m] = rep;
-                        report.AppendLine($"  • {m.name} (shader: " +
-                            (m.shader != null ? m.shader.name : "AUSENTE") +
-                            $") — {AssetDatabase.GetAssetPath(m)}");
-                    }
-                    mats[i] = rep;
-                    rowTouched = true;
-                }
-                if (rowTouched) { r.sharedMaterials = mats; touched = true; }
-            }
-
-            if (touched)
-            {
-                PrefabUtility.SaveAsPrefabAsset(root, path);
-                prefabsFixed++;
-            }
-            PrefabUtility.UnloadPrefabContents(root);
-        }
-        AssetDatabase.SaveAssets();
-
-        if (replacements.Count == 0)
-            Debug.Log($"[WinterSetup] Nenhum material {why} nos prefabs de {OutDir}. " +
-                      "Se ainda houver rosa, selecione o objeto na cena/galeria e veja " +
-                      "o nome do material/shader no Inspector.");
-        else
-            Debug.LogWarning($"[WinterSetup] {replacements.Count} materiais {why} → fallback " +
-                             $"HDRP/Lit em {OutDir}/Materials ({prefabsFixed} prefabs atualizados):\n" +
-                             report);
-    }
-
-    static bool IsBroken(Material m)
-    {
-        var s = m.shader;
-        if (s == null || s.name == "Hidden/InternalErrorShader" ||
-            !s.isSupported || ShaderUtil.ShaderHasError(s)) return true;
-        // shader VÁLIDO do pipeline errado: compila sem erro mas renderiza rosa
-        // em HDRP (Standard/legacy/URP) — o caso que o teste acima não pega.
-        return s.name == "Standard" || s.name == "Autodesk Interactive" ||
-               s.name.StartsWith("Legacy Shaders/") || s.name.StartsWith("Particles/") ||
-               s.name.StartsWith("Mobile/") || s.name.StartsWith("Universal Render Pipeline/");
-    }
-
-    static Material BuildFallback(Material src)
-    {
-        string path = OutDir + "/Materials/" + src.name + "_Fallback.mat";
-        var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
-        if (existing != null) return existing;   // idempotente
-
-        var m = new Material(Shader.Find("HDRP/Lit"));
-        // nomes de propriedade conferidos nos materiais do pack (Bark/Branch/Grass/Cross)
-        m.SetTexture("_BaseColorMap", FirstTex(src, "_BaseAlbedoAOpacity", "_AlbedoAOpacity",
-            "_BaseAlbedoASmoothness", "_TopAlbedoASmoothness", "_Albedo", "_MainTex"));
-        m.SetTexture("_NormalMap", FirstTex(src, "_BaseNormalMap", "_NormalMap",
-            "_NM", "_NMTexture", "_BumpMap"));
-        m.SetFloat("_Smoothness", 0.1f);
-
-        // folhagem/billboard: alpha-clip + double-sided (mesma receita do DesertSetup)
-        if (src.HasProperty("_AlphaCutoffEnable") && src.GetFloat("_AlphaCutoffEnable") > 0.5f)
-        {
-            m.SetFloat("_AlphaCutoffEnable", 1f);
-            m.SetFloat("_AlphaCutoff",
-                src.HasProperty("_AlphaCutoff") ? src.GetFloat("_AlphaCutoff") : 0.35f);
-            m.EnableKeyword("_ALPHATEST_ON");
-            m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
-            m.SetFloat("_DoubleSidedEnable", 1f);
-            m.EnableKeyword("_DOUBLESIDED_ON");
-            m.SetFloat("_CullMode", (float)UnityEngine.Rendering.CullMode.Off);
-            m.SetFloat("_CullModeForward", (float)UnityEngine.Rendering.CullMode.Off);
-            m.doubleSidedGI = true;
-        }
-        ValidateHdrp(m);
-        AssetDatabase.CreateAsset(m, path);
-        return m;
-    }
-
-    static Texture FirstTex(Material src, params string[] props)
-    {
-        foreach (var p in props)
-            if (src.HasProperty(p) && src.GetTexture(p) != null) return src.GetTexture(p);
-        return null;
     }
 
     // ------------------------------------------------------------ MATERIAIS DE FX
@@ -519,11 +399,6 @@ public static class WinterSetup
         foreach (var k in keywords)
             if (lower.Contains(k)) return true;
         return false;
-    }
-
-    static IEnumerable<(string, List<GameObject>)> EnumeratePairs(Dictionary<string, List<GameObject>> d)
-    {
-        foreach (var kv in d) yield return (kv.Key, kv.Value);
     }
 
     static void EnsureFolder(string path)

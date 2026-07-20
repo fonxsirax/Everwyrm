@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -30,7 +31,10 @@ public class InfiniteTerrain : MonoBehaviour
     [SerializeField] int alphamapRes = 128;     // 128 => ~2 m/pixel de blend no tile de 250 m
     [SerializeField] float maxHeight = 130f;
     [SerializeField] int loadRadius = 2;        // 2 => 5x5 tiles (~625 m de vista)
-    [SerializeField] int tilesPerFrame = 1;
+    [Tooltip("Orçamento de CPU por frame (ms) para construir tiles. A construção é " +
+             "FATIADA: um tile nasce ao longo de vários frames sem estourar o frame " +
+             "(um tile inteiro num frame só custava ~114 ms = stutter visível).")]
+    [SerializeField] float buildBudgetMs = 4f;
 
     [Header("Biomas habilitados (para testar cada um)")]
     public bool enablePlains = true;      // Campos
@@ -84,8 +88,17 @@ public class InfiniteTerrain : MonoBehaviour
     [Tooltip("Serrapilheira (gravetos ForestStick* + folhas LeafDry*) — detalhe fino do chão da floresta.")]
     public PaintTree[] forestLitterPrefabs;
     [SerializeField] int forestVegetationPerTile = 600;   // floresta BEM densa
+    [Tooltip("Fração DESCONTADA da cota acima antes de sortear as árvores " +
+             "(arbustos têm contagem própria em forestBushPerTile).")]
     [SerializeField, Range(0f, 1f)] float bushShare = 0.25f;
     [SerializeField] int grassPerTile = 500;
+    [Tooltip("Tapete de sub-bosque da floresta (GrassPlant*) — a camada MAIS numerosa: " +
+             "manchas densas de grama alta com clareiras abertas entre elas.")]
+    public PaintTree[] forestGroundcoverPrefabs;
+    [Tooltip("Tentativas por tile do tapete de GrassPlant (o grosso da vegetação rasteira).")]
+    [SerializeField] int forestGroundcoverPerTile = 2600;
+    [Tooltip("Tentativas por tile dos arbustos da floresta (ForestBush*).")]
+    [SerializeField] int forestBushPerTile = 950;
     [SerializeField] int forestThicketsPerTile = 40;
     [SerializeField] int forestLitterPerTile = 450;
 
@@ -324,6 +337,9 @@ public class InfiniteTerrain : MonoBehaviour
     readonly Dictionary<Vector2Int, List<Vector2>> tileTrees = new(); // XZ das árvores (minimapa)
     readonly Queue<Vector2Int> buildQueue = new();
     readonly HashSet<Vector2Int> pending = new();
+    IEnumerator activeBuild;                    // tile em construção fatiada
+    Vector2Int activeCoord;
+    readonly System.Diagnostics.Stopwatch buildSw = new();
 
     TerrainLayer[] layers;
     Material terrainMat;
@@ -407,33 +423,60 @@ public class InfiniteTerrain : MonoBehaviour
                     if (!tiles.ContainsKey(c) && pending.Add(c)) buildQueue.Enqueue(c);
                 }
 
-        // constrói com orçamento
-        for (int i = 0; i < tilesPerFrame && buildQueue.Count > 0; i++)
+        // rede de segurança: o tile SOB o jogador nunca pode faltar (voo muito
+        // rápido pode atropelar a geração fatiada) — nesse caso raro, termina
+        // síncrono e paga um frame cheio em vez de deixar o dragão cair no vazio.
+        if (!tiles.ContainsKey(center))
         {
-            var c = buildQueue.Dequeue();
-            pending.Remove(c);
-            if (!tiles.ContainsKey(c) &&
-                Mathf.Max(Mathf.Abs(c.x - center.x), Mathf.Abs(c.y - center.y)) <= loadRadius)
-                BuildTile(c);
+            if (activeBuild != null && activeCoord == center)
+            {
+                while (activeBuild.MoveNext()) { }
+                activeBuild = null;
+            }
+            else BuildTile(center);
         }
 
-        // descarta os distantes
-        List<Vector2Int> remove = null;
+        // constrói em FATIAS com orçamento de ms — avança o tile ativo (e puxa o
+        // próximo da fila) até estourar o budget; cada yield é um ponto de corte.
+        buildSw.Restart();
+        while (buildSw.Elapsed.TotalMilliseconds < buildBudgetMs)
+        {
+            if (activeBuild == null)
+            {
+                bool found = false;
+                while (buildQueue.Count > 0)
+                {
+                    var c = buildQueue.Dequeue();
+                    pending.Remove(c);
+                    if (!tiles.ContainsKey(c) &&
+                        Mathf.Max(Mathf.Abs(c.x - center.x), Mathf.Abs(c.y - center.y)) <= loadRadius)
+                    {
+                        activeBuild = BuildTileSteps(c);
+                        activeCoord = c;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) break;
+            }
+            if (!activeBuild.MoveNext()) activeBuild = null;
+        }
+
+        // descarta UM tile distante por frame (Destroy de Terrain+TerrainData em
+        // lote concentrava o custo de GC num frame só)
         foreach (var kv in tiles)
             if (Mathf.Max(Mathf.Abs(kv.Key.x - center.x), Mathf.Abs(kv.Key.y - center.y)) > loadRadius + 1)
-                (remove ??= new List<Vector2Int>()).Add(kv.Key);
-        if (remove != null)
-            foreach (var c in remove)
             {
-                var t = tiles[c];
-                tiles.Remove(c);
-                tileTrees.Remove(c);
+                var t = kv.Value;
+                tiles.Remove(kv.Key);
+                tileTrees.Remove(kv.Key);
                 if (t != null)
                 {
                     var data = t.terrainData;
                     Destroy(t.gameObject);
                     Destroy(data);
                 }
+                break;
             }
     }
 
@@ -565,7 +608,6 @@ public class InfiniteTerrain : MonoBehaviour
         float d = desertDensity;
         float w = winterDensity;
         int treeAttempts = Mathf.RoundToInt(forestVegetationPerTile * (1f - bushShare));
-        int bushAttempts = forestVegetationPerTile - treeAttempts;
 
         return new List<ScatterLayer>
         {
@@ -583,19 +625,20 @@ public class InfiniteTerrain : MonoBehaviour
                 clusterEdgeSoftness = 0.8f, clusterIrregularity = 0.4f,
                 speciesClumping = 0.55f, speciesPatchSize = 150f
             },
-            // Arbustos: o coração do pedido — manchas GRANDES e irregulares com borda
-            // suave, mancha tendendo a UMA espécie. Divide o noise (clusterGroup 2) com
-            // as moitas: moita no miolo, arbusto na periferia = gradiente denso→aberto.
-            // attempts ~2.3x: com ~1/3 da área dentro das manchas, mantém a população
-            // total e concentra o excedente nelas.
+            // Arbustos (ForestBush01–11): manchas GRANDES e irregulares com borda
+            // suave, mancha tendendo a UMA espécie. Divide o noise (clusterGroup 2)
+            // com as moitas e o sub-bosque — do miolo p/ fora: moita → arbusto →
+            // grama alta → clareira, um gradiente contínuo denso→aberto.
+            // minSpacing curto: volume cheio sem arbusto nascendo DENTRO de arbusto.
             new()
             {
                 name = "Floresta — arbustos", biome = Biome.Floresta, prefabs = bushPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(bushAttempts * 2.3f), minBiomeWeight = 0.4f,
-                density = 1f, scaleRange = new Vector2(0.8f, 1.2f), maxSlope = 0.5f,
-                clusterStrength = 0.85f, clusterSize = 38f, clusterGroup = 2,
-                clusterCoverage = 0.32f, clusterEdgeSoftness = 0.7f, clusterIrregularity = 0.7f,
-                speciesClumping = 0.6f, speciesPatchSize = 45f
+                attemptsPerTile = forestBushPerTile, minBiomeWeight = 0.4f,
+                density = 1f, scaleRange = new Vector2(0.7f, 1.45f), aspectJitter = 0.12f,
+                maxSlope = 0.5f, minSpacing = 1.3f,
+                clusterStrength = 0.85f, clusterSize = 42f, clusterGroup = 2,
+                clusterCoverage = 0.38f, clusterEdgeSoftness = 0.75f, clusterIrregularity = 0.8f,
+                speciesClumping = 0.65f, speciesPatchSize = 40f
             },
             new()
             {
@@ -604,10 +647,40 @@ public class InfiniteTerrain : MonoBehaviour
                 minBiomeWeight = 0.45f, density = 0.9f,
                 scaleRange = new Vector2(0.9f, 1.4f), aspectJitter = 0.15f, maxSlope = 0.45f,
                 minSpacing = 10f,
-                clusterStrength = 0.9f, clusterSize = 38f, clusterGroup = 2,   // miolo das manchas
+                clusterStrength = 0.9f, clusterSize = 42f, clusterGroup = 2,   // miolo das manchas
                 clusterCoverage = 0.14f, clusterEdgeSoftness = 0.5f, clusterIrregularity = 0.6f
             },
-            // Graminhas: base espalhada + adensamento fraco em clareiras de luz;
+            // O TAPETE (GrassPlant02–05): a camada mais numerosa da floresta — manchas
+            // densas de grama alta com clareiras de chão limpo entre elas, espécie
+            // dominante por região p/ formar "cantos" coesos em vez de confete.
+            // Manchas PRÓPRIAS (fora do noise dos arbustos): o chão aberto entre os
+            // bosques também ganha vida, não só a periferia das moitas.
+            new()
+            {
+                name = "Floresta — tapete de grama", biome = Biome.Floresta,
+                prefabs = forestGroundcoverPrefabs,
+                attemptsPerTile = forestGroundcoverPerTile, minBiomeWeight = 0.35f,
+                density = 1f, scaleRange = new Vector2(0.65f, 1.9f), aspectJitter = 0.15f,
+                maxSlope = 0.55f,
+                clusterStrength = 0.7f, clusterSize = 30f, clusterCoverage = 0.5f,
+                clusterEdgeSoftness = 0.9f, clusterIrregularity = 0.75f,
+                speciesClumping = 0.7f, speciesPatchSize = 20f
+            },
+            // Sub-bosque: MAIS GrassPlant concentrado nas manchas dos arbustos (grupo 2,
+            // coverage maior = halo que transborda a mancha) — grama alta engolindo a
+            // base dos arbustos e desmanchando a borda deles no chão.
+            new()
+            {
+                name = "Floresta — sub-bosque", biome = Biome.Floresta,
+                prefabs = forestGroundcoverPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(forestGroundcoverPerTile * 0.45f),
+                minBiomeWeight = 0.4f, density = 1f,
+                scaleRange = new Vector2(0.85f, 2.1f), aspectJitter = 0.15f, maxSlope = 0.5f,
+                clusterStrength = 0.9f, clusterSize = 42f, clusterGroup = 2,
+                clusterCoverage = 0.52f, clusterEdgeSoftness = 0.9f, clusterIrregularity = 0.7f,
+                speciesClumping = 0.5f, speciesPatchSize = 26f
+            },
+            // Flores/graminhas variadas: acentos de cor espalhados por cima do tapete;
             // espécie por região = "cantos de flores" em vez de confete uniforme.
             new()
             {
@@ -890,9 +963,33 @@ public class InfiniteTerrain : MonoBehaviour
     Vector2Int TileOf(Vector3 pos) =>
         new(Mathf.FloorToInt(pos.x / tileSize), Mathf.FloorToInt(pos.z / tileSize));
 
+    /// <summary>Construção SÍNCRONA (tile inicial do spawn) — drena os passos num frame.</summary>
     void BuildTile(Vector2Int coord)
     {
+        var steps = BuildTileSteps(coord);
+        while (steps.MoveNext()) { }
+    }
+
+    /// <summary>
+    /// Construção FATIADA de um tile: cada yield é um ponto de corte onde o pump
+    /// do Update pode parar ao estourar o orçamento de ms do frame. O splatmap e
+    /// o scatter leem o HEIGHTMAP JÁ CALCULADO (SampleHeight01/SlopeFromGrid) em
+    /// vez de rechamar HeightAt/SlopeAt — era o custo dominante do tile
+    /// (SlopeAt = 3×HeightAt ≈ 45 amostras de Perlin POR PIXEL).
+    /// </summary>
+    IEnumerator BuildTileSteps(Vector2Int coord)
+    {
         float ox = coord.x * tileSize, oz = coord.y * tileSize;
+
+        // ---- alturas (bordas contínuas: noise em coordenadas de mundo)
+        float step = tileSize / (heightmapRes - 1);
+        var heights = new float[heightmapRes, heightmapRes];
+        for (int z = 0; z < heightmapRes; z++)
+        {
+            for (int x = 0; x < heightmapRes; x++)
+                heights[z, x] = HeightAt(ox + x * step, oz + z * step) / maxHeight;
+            if ((z & 3) == 3) yield return null;    // fatia: 4 linhas de noise
+        }
 
         var td = new TerrainData
         {
@@ -903,14 +1000,8 @@ public class InfiniteTerrain : MonoBehaviour
         // (size precisa ser re-aplicado após heightmapResolution)
         td.size = new Vector3(tileSize, maxHeight, tileSize);
         td.terrainLayers = layers;
-
-        // ---- alturas (bordas contínuas: noise em coordenadas de mundo)
-        float step = tileSize / (heightmapRes - 1);
-        var heights = new float[heightmapRes, heightmapRes];
-        for (int z = 0; z < heightmapRes; z++)
-            for (int x = 0; x < heightmapRes; x++)
-                heights[z, x] = HeightAt(ox + x * step, oz + z * step) / maxHeight;
         td.SetHeights(0, 0, heights);
+        yield return null;
 
         // ---- texturas por bioma + inclinação
         //      canais: 0 grama · 1 floresta · 2 rocha de montanha · 3 neve · 4 areia
@@ -919,14 +1010,17 @@ public class InfiniteTerrain : MonoBehaviour
         var alphas = new float[alphamapRes, alphamapRes, nCh];
         var chAcc = new float[nCh];
         float aStep = tileSize / (alphamapRes - 1);
+        float aNorm = 1f / (alphamapRes - 1);
         for (int z = 0; z < alphamapRes; z++)
+        {
+            float nz = z * aNorm;
             for (int x = 0; x < alphamapRes; x++)
             {
                 float wx = ox + x * aStep, wz = oz + z * aStep;
                 BiomeWeights(wx, wz, out float plains, out float forest, out float mount, out float cold, out float desert);
 
-                float h01 = HeightAt(wx, wz) / maxHeight;
-                float slope = SlopeAt(wx, wz);
+                float h01 = SampleHeight01(heights, heightmapRes, x * aNorm, nz);
+                float slope = SlopeFromGrid(heights, heightmapRes, x * aNorm, nz);
                 float slopeRock = Mathf.Clamp01(slope * 2.2f - 0.35f);
                 float rock = mount + slopeRock * (1f - desert);           // encostas fora do deserto
                 float snow = cold + Mathf.Clamp01((h01 - 0.75f) * 4f);    // neve só em picos altos/tundra
@@ -976,7 +1070,10 @@ public class InfiniteTerrain : MonoBehaviour
                 for (int c = 0; c < nCh; c++) sum += chAcc[c];
                 for (int c = 0; c < nCh; c++) alphas[z, x, c] = chAcc[c] / sum;
             }
+            if ((z & 7) == 7) yield return null;    // fatia: 8 linhas (loop barato agora)
+        }
         td.SetAlphamaps(0, 0, alphas);
+        yield return null;
 
         // ---- vegetação/props: camadas de espalhamento (tree instances: o detail
         //      system do Unity não aceita prefabs com LODGroup e falhava em silêncio)
@@ -985,7 +1082,9 @@ public class InfiniteTerrain : MonoBehaviour
         {
             td.treePrototypes = prototypes;
             td.RefreshPrototypes();
-            ScatterTile(coord, td, ox, oz, treeXZ);
+            yield return null;
+            var scatter = ScatterTileSteps(coord, td, ox, oz, heights, treeXZ);
+            while (scatter.MoveNext()) yield return null;
         }
         tileTrees[coord] = treeXZ;
 
@@ -1109,17 +1208,20 @@ public class InfiniteTerrain : MonoBehaviour
 
     // ------------------------------------------------ MOTOR DE ESPALHAMENTO
     /// <summary>
-    /// Processa todas as ScatterLayers de um tile. Determinístico por (seed, tile).
-    /// Filtros na ordem do mais barato ao mais caro: bioma → agrupamento/densidade
-    /// → inclinação/altura → espaçamento/bloqueio.
+    /// Processa todas as ScatterLayers de um tile, em FATIAS (yield a cada bloco
+    /// de tentativas). Determinístico por (seed, tile) — o fatiamento não muda a
+    /// ordem de consumo do rng. Filtros do mais barato ao mais caro: bioma →
+    /// agrupamento/densidade → relevo (do heightmap pronto) → espaçamento/bloqueio.
     /// </summary>
-    void ScatterTile(Vector2Int coord, TerrainData td, float ox, float oz, List<Vector2> treeXZ)
+    IEnumerator ScatterTileSteps(Vector2Int coord, TerrainData td, float ox, float oz,
+                                 float[,] heights, List<Vector2> treeXZ)
     {
         var rng = new System.Random(seed ^ (coord.x * 73856093) ^ (coord.y * 19349663));
         var instances = new List<TreeInstance>();
         var blockers = new List<Vector3>();          // x,z = posição · y = raio
         var spacingHash = new Dictionary<long, List<Vector2>>();
 
+        int work = 0;
         foreach (var layer in activeLayers)
         {
             if (layer.protoCount == 0) continue;
@@ -1129,6 +1231,8 @@ public class InfiniteTerrain : MonoBehaviour
 
             for (int i = 0; i < layer.attemptsPerTile; i++)
             {
+                if (++work >= 500) { work = 0; yield return null; }   // fatia
+
                 float nx = (float)rng.NextDouble(), nz = (float)rng.NextDouble();
                 double roll = rng.NextDouble();      // consumir SEMPRE mantém o determinismo
                 float wx = ox + nx * tileSize, wz = oz + nz * tileSize;
@@ -1150,13 +1254,13 @@ public class InfiniteTerrain : MonoBehaviour
                 if (roll > p) continue;
 
                 // 2.5) riachos: nada dentro do canal nem nas margens do vale
-                //      (barato — vem antes de SlopeAt, que custa 3x HeightAt)
                 if (StreamExcluded(wx, wz, bPl, bFo, bMo, bCo, bDe)) continue;
 
-                // 3) relevo
-                float slope = SlopeAt(wx, wz);
+                // 3) relevo — do heightmap JÁ CALCULADO (rechamar HeightAt/SlopeAt
+                //    aqui era o custo dominante do scatter: ~60 Perlin por tentativa)
+                float slope = SlopeFromGrid(heights, heightmapRes, nx, nz);
                 if (slope < layer.minSlope || slope > layer.maxSlope) continue;
-                float h = HeightAt(wx, wz);
+                float h = SampleHeight01(heights, heightmapRes, nx, nz) * maxHeight;
                 if (h < layer.heightRange.x || h > layer.heightRange.y) continue;
                 if ((enableLakes || StreamsActive) && h < waterLevel + 0.35f)
                     continue;   // nada dentro/na beira d'água
@@ -1571,13 +1675,30 @@ public class InfiniteTerrain : MonoBehaviour
         plains /= sum; forest /= sum; mount /= sum; cold /= sum; desert /= sum;
     }
 
-    float SlopeAt(float wx, float wz)
+    /// <summary>Amostra bilinear do heightmap normalizado do tile (nx/nz em [0..1]).</summary>
+    static float SampleHeight01(float[,] h, int res, float nx, float nz)
     {
-        const float e = 3f;
-        float h = HeightAt(wx, wz);
-        float dx = HeightAt(wx + e, wz) - h;
-        float dz = HeightAt(wx, wz + e) - h;
-        return Mathf.Sqrt(dx * dx + dz * dz) / e;
+        float gx = Mathf.Clamp01(nx) * (res - 1), gz = Mathf.Clamp01(nz) * (res - 1);
+        int x0 = Mathf.Min((int)gx, res - 2), z0 = Mathf.Min((int)gz, res - 2);
+        float tx = gx - x0, tz = gz - z0;
+        float a = Mathf.Lerp(h[z0, x0], h[z0, x0 + 1], tx);
+        float b = Mathf.Lerp(h[z0 + 1, x0], h[z0 + 1, x0 + 1], tx);
+        return Mathf.Lerp(a, b, tz);
+    }
+
+    /// <summary>
+    /// Inclinação por diferenças centrais na grade do heightmap já calculado —
+    /// mesma razão m/m do SlopeAt, ZERO chamadas de noise. Janela de 2 células
+    /// (~3.9 m no tile de 250 m/res 129) ≈ o passo e=3 m do SlopeAt analítico.
+    /// </summary>
+    float SlopeFromGrid(float[,] h, int res, float nx, float nz)
+    {
+        int x = Mathf.Clamp(Mathf.RoundToInt(Mathf.Clamp01(nx) * (res - 1)), 1, res - 2);
+        int z = Mathf.Clamp(Mathf.RoundToInt(Mathf.Clamp01(nz) * (res - 1)), 1, res - 2);
+        float span = 2f * tileSize / (res - 1);
+        float dx = (h[z, x + 1] - h[z, x - 1]) * maxHeight / span;
+        float dz = (h[z + 1, x] - h[z - 1, x]) * maxHeight / span;
+        return Mathf.Sqrt(dx * dx + dz * dz);
     }
 
     float FBM(float wx, float wz, float freq, int octaves)
@@ -1685,6 +1806,16 @@ public class InfiniteTerrain : MonoBehaviour
             grassPrefabs = new[]
             {
                 N("FlowerGrass01"), N("FlowerGrass02"), N("FlowerGrass03"), N("FlowerGrass04"),
+                N("GrassPlant02"), N("GrassPlant03"), N("GrassPlant04"), N("GrassPlant05"),
+            };
+            dirty = true;
+        }
+        if (Empty(forestGroundcoverPrefabs))
+        {
+            // só os GrassPlant (sem flores): o tapete é volume verde; as flores
+            // continuam como acentos na camada de graminhas.
+            forestGroundcoverPrefabs = new[]
+            {
                 N("GrassPlant02"), N("GrassPlant03"), N("GrassPlant04"), N("GrassPlant05"),
             };
             dirty = true;

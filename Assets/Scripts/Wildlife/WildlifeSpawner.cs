@@ -25,9 +25,9 @@ public class WildlifeSpawner : MonoBehaviour
     [SerializeField] float minPlayerDistance = 90f;   // nada de pop na cara do jogador
 
     [Header("Orçamento")]
-    [SerializeField] int maxAnimals = 120;
+    [SerializeField] int maxAnimals = 190;
     [SerializeField] float populateInterval = 2.5f;
-    [SerializeField] int attemptsPerCycle = 5;
+    [SerializeField] int attemptsPerCycle = 7;
 
     AnimalDefinition[] defs;
     readonly List<AnimalGroup> groups = new();
@@ -88,7 +88,7 @@ public class WildlifeSpawner : MonoBehaviour
     void Start()
     {
         // leva inicial: o mundo já nasce habitado (anel mais próximo)
-        for (int i = 0; i < 20; i++)
+        for (int i = 0; i < 30; i++)
             TrySpawnGroup(110f, spawnRadiusMax);
     }
 

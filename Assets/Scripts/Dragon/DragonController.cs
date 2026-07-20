@@ -11,7 +11,9 @@ using UnityEngine.SceneManagement;
 ///         Space parado = bate as asas · Space andando = DECOLA
 ///         LMB combo (mordida/garras) · Q cauda · E asas · F fogo · T rugido
 ///         Alt esquiva · R descansar · G comer carcaça próxima
-///  Voo  : W acelera · S freia · A/D vira · Space sobe · Ctrl/C mergulha
+///  Voo  : W acelera · S freia (SEGURE p/ pousar quando houver chão) · A/D vira
+///         Space sobe — soltar perto do fim da batida dá impulso extra (timing!)
+///         Ctrl/C mergulha
 ///         Alt esquiva aérea · Sem bater asas ~1s = planar
 ///         Peso importa: gordo sobe mal e afunda planando; grande plana melhor
 ///         Energia zerada = estol e queda!
@@ -53,6 +55,9 @@ public class DragonController : MonoBehaviour
     [Header("Pouso")]
     [SerializeField] float landProbeDistance = 3.5f;
     [SerializeField] float landMaxSpeed = 11f;
+    [SerializeField] float landApproachProbe = 16f;  // segurando S: busca chão até aqui
+    [SerializeField] float landDescendRate = 11f;    // descida na aproximação (longe do chão)
+    [SerializeField] float landFlareRate = 3f;       // descida perto do chão ("flare" suave)
     [SerializeField] LayerMask groundMask = 0;
 
     [Header("Natação")]
@@ -285,12 +290,29 @@ public class DragonController : MonoBehaviour
         float turnFactor = Mathf.Lerp(1.25f, 0.8f, Speed01);
         yaw += h * turnSpeedAir * turnFactor * dt;
 
+        // ---- pouso controlado: segurar S com chão ao alcance = aproximação.
+        //      Desce firme longe do solo, faz "flare" suave perto dele, e as
+        //      condições de pouso abaixo completam a transição naturalmente.
+        //      Sem chão no alcance da sondagem, S segue só freando, como sempre.
+        float landingSink = 0f;
+        if (v < -0.1f && !stalling)
+        {
+            Vector3 approach = transform.position + cc.center;
+            if (Physics.SphereCast(approach, cc.radius * 0.9f, Vector3.down,
+                    out var ground, landApproachProbe * s + cc.height * 0.5f,
+                    groundMask, QueryTriggerInteraction.Ignore))
+            {
+                float far01 = Mathf.Clamp01(ground.distance / (landApproachProbe * s));
+                landingSink = Mathf.Lerp(landFlareRate, landDescendRate, far01) * s;
+            }
+        }
+
         // ---- ciclo de batidas de asa
         bool flapPressed = !Locked && Input.GetKeyDown(KeyCode.Space);
         bool held = Input.GetKey(KeyCode.Space);
         float vy = flight != null
             ? flight.Tick(dt, flapPressed, held, diving, Speed01, s,
-                          transform.position, ref flySpeed)
+                          transform.position, ref flySpeed, landingSink)
             : Time.time - takeoffTime < 0.9f ? climbRate * s     // fallback sem módulo
             : diving ? -diveRate * s : -glideSink * SinkMul;
 
@@ -323,11 +345,13 @@ public class DragonController : MonoBehaviour
         }
 
         // carência maior pós-decolagem e pouso só em DESCIDA REAL (vy < -1.5):
-        // o afundamento suave do planeio rápido (~-0.9) não força pouso
+        // o afundamento suave do planeio rápido (~-0.9) não força pouso.
+        // Com intenção de pouso (S + chão perto), o flare gentil também conta.
         if (Time.time - takeoffTime < 1.5f) return;
         if (cc.isGrounded) { Land(); return; }
 
-        if ((stalling || flySpeed <= landMaxSpeed * s) && vy < -1.5f)
+        if ((stalling || flySpeed <= landMaxSpeed * s) &&
+            (vy < -1.5f || (landingSink > 0f && vy < -0.5f)))
         {
             Vector3 origin = transform.position + cc.center;
             if (Physics.SphereCast(origin, cc.radius * 0.9f, Vector3.down,

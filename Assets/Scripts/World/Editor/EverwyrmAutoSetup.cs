@@ -6,8 +6,10 @@ using UnityEngine;
 /// As checagens são baratas; o trabalho pesado só executa quando algo está
 /// faltando/desatualizado:
 ///  1. HDRP Water habilitado (lagos do InfiniteTerrain);
-///  2. Prefabs do RockyDesert convertidos para HDRP;
-///  3. Animator do dragão regenerado quando o setup ganha estados novos.
+///  2. Prefabs do RockyDesert e do Winter Environment convertidos, materiais
+///     de FX do inverno em HDRP e "AG Global Settings" na cena;
+///  3. Animator do dragão regenerado quando o setup ganha estados novos;
+///  4. Fauna (controllers + espécies) configurada.
 /// </summary>
 [InitializeOnLoad]
 static class EverwyrmAutoSetup
@@ -43,9 +45,21 @@ static class EverwyrmAutoSetup
         {
             WinterSetup.EnsureFxMaterials();
             // 2d) "AG Global Settings" na cena — sem ele os shaders do pack ficam
-            //     com manchas magenta (globais de vento/neve/tint não vinculados).
+            //     sem vento/neve/tint (globais não vinculados).
             WinterSetup.EnsureGlobalSettings();
         }
+
+        // limpeza one-shot: a galeria de diagnóstico (ferramenta já removida)
+        // ficou salva na cena Main — remover se ainda existir.
+        foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
+            if (root.name.StartsWith("Prefab Gallery"))
+            {
+                Object.DestroyImmediate(root);
+                UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(
+                    UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+                Debug.Log("[EverwyrmAutoSetup] Galeria de diagnóstico removida da cena — salve a cena.");
+                break;
+            }
 
         // 3) Animator do dragão em dia?
         var controller = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>(ControllerPath);

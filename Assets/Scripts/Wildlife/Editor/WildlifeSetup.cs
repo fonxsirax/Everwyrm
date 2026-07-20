@@ -369,11 +369,11 @@ public static class WildlifeSetup
         d.description = "Extremamente comum e assustada. Grandes números, fogem ao menor sinal " +
                         "de perigo e somem no mato (Hide). Filhotes sempre perto dos adultos.";
         d.social = Social.Rebanho;
-        d.groupSize = new Vector2Int(3, 7);
+        d.groupSize = new Vector2Int(4, 8);
         d.memberSpacing = 3f; d.catchUpDistance = 9f;
         d.roles = new[]
         {
-            Role("Hares/HareMale", RoleKind.Membro, "Adulta", 2, 5),
+            Role("Hares/HareMale", RoleKind.Membro, "Adulta", 2, 6),
             Role("Hares/HareYoung", RoleKind.Filhote, "Filhote", 1, 3, 0.75f, 0.95f, 0.88f, 1f),
         };
         d.biomes = new[]
@@ -381,7 +381,7 @@ public static class WildlifeSetup
             B(Biome.Campos, 0.2f, 1f), B(Biome.Floresta, 0.25f, 0.8f),
             B(Biome.Tundra, 0.25f, 0.55f), B(Biome.Deserto, 0.35f, 0.2f),
         };
-        d.spawnWeight = 14f; d.maxActiveGroups = 4;
+        d.spawnWeight = 14f; d.maxActiveGroups = 6;
         d.walkSpeed = 0.7f; d.trotSpeed = 2.4f; d.runSpeed = 7f; d.turnSpeed = 320f;
         d.bravery = 0.05f; d.aggression = 0f; d.curiosity = 0.15f; d.alertness = 0.9f;
         d.grazing = 0.7f; d.restfulness = 0.35f; d.waterAffinity = 0.15f;
@@ -411,7 +411,7 @@ public static class WildlifeSetup
             B(Biome.Floresta, 0.25f, 1f), B(Biome.Campos, 0.2f, 0.7f),
             B(Biome.Tundra, 0.25f, 0.5f), B(Biome.Deserto, 0.35f, 0.25f),
         };
-        d.spawnWeight = 6f; d.maxActiveGroups = 3;
+        d.spawnWeight = 6f; d.maxActiveGroups = 4;
         d.walkSpeed = 1f; d.trotSpeed = 3.2f; d.runSpeed = 8.2f; d.turnSpeed = 300f;
         d.bravery = 0.35f; d.aggression = 0.1f; d.curiosity = 0.95f; d.alertness = 0.75f;
         d.grazing = 0.3f; d.restfulness = 0.5f; d.waterAffinity = 0.25f;
@@ -431,16 +431,16 @@ public static class WildlifeSetup
                         "Eat_walk), um Stag ocasional liderando, filhotes junto das mães. " +
                         "Vigia o horizonte o tempo todo e dispara à menor ameaça.";
         d.social = Social.Rebanho;
-        d.groupSize = new Vector2Int(5, 9);
+        d.groupSize = new Vector2Int(6, 11);
         d.memberSpacing = 4.5f; d.catchUpDistance = 12f;
         d.roles = new[]
         {
             Role("Deers/DeerStag", RoleKind.Lider, "Stag", 1, 1, 0.55f, 1f, 1f, 1.08f),
-            Role("Deers/DeerDoe", RoleKind.Membro, "Corça", 3, 6),
+            Role("Deers/DeerDoe", RoleKind.Membro, "Corça", 4, 8),
             Role("Deers/DeerCalf", RoleKind.Filhote, "Filhote", 1, 3, 0.8f, 0.95f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Floresta, 0.25f, 1f), B(Biome.Campos, 0.2f, 0.75f) };
-        d.spawnWeight = 10f; d.maxActiveGroups = 3;
+        d.spawnWeight = 10f; d.maxActiveGroups = 5;
         d.walkSpeed = 1.2f; d.trotSpeed = 3.8f; d.runSpeed = 8.6f; d.turnSpeed = 240f;
         d.bravery = 0.08f; d.aggression = 0.02f; d.curiosity = 0.2f; d.alertness = 0.85f;
         d.grazing = 0.85f; d.restfulness = 0.3f; d.waterAffinity = 0.35f;
@@ -460,7 +460,7 @@ public static class WildlifeSetup
         d.groupSize = new Vector2Int(1, 1);
         d.roles = new[] { Role("Deers/DeerStag", RoleKind.Lider, "Stag", 1, 1, 1f, 1f, 1.02f, 1.1f) };
         d.biomes = new[] { B(Biome.Floresta, 0.3f, 0.9f), B(Biome.Campos, 0.25f, 0.6f) };
-        d.spawnWeight = 2.2f; d.maxActiveGroups = 2;
+        d.spawnWeight = 2.2f; d.maxActiveGroups = 3;
         d.walkSpeed = 1.25f; d.trotSpeed = 3.8f; d.runSpeed = 8.8f; d.turnSpeed = 230f;
         d.bravery = 0.5f; d.aggression = 0.35f; d.curiosity = 0.3f; d.alertness = 0.8f;
         d.grazing = 0.6f; d.restfulness = 0.3f; d.waterAffinity = 0.35f;
@@ -550,16 +550,16 @@ public static class WildlifeSetup
         d.description = "Pequenos grupos fuçando o chão (Dig_walk). Imprevisível: ora foge, " +
                         "ora parte para cima — nunca dá para ter certeza.";
         d.social = Social.Hibrido; d.soloChance = 0.3f;
-        d.groupSize = new Vector2Int(2, 6);
+        d.groupSize = new Vector2Int(3, 7);
         d.memberSpacing = 3.5f; d.catchUpDistance = 10f;
         d.roles = new[]
         {
             Role("Boars/BoarMale", RoleKind.Lider, "Macho", 1, 1, 0.8f, 1f, 1f, 1.08f),
-            Role("Boars/BoarFemale", RoleKind.Membro, "Fêmea", 1, 3),
+            Role("Boars/BoarFemale", RoleKind.Membro, "Fêmea", 2, 4),
             Role("Boars/BoarYoung", RoleKind.Filhote, "Filhote", 0, 4, 0.7f, 0.9f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Floresta, 0.25f, 1f), B(Biome.Campos, 0.25f, 0.6f) };
-        d.spawnWeight = 6.5f; d.maxActiveGroups = 3;
+        d.spawnWeight = 6.5f; d.maxActiveGroups = 5;
         d.walkSpeed = 1.1f; d.trotSpeed = 3.3f; d.runSpeed = 8f; d.turnSpeed = 260f;
         d.bravery = 0.5f; d.aggression = 0.45f; d.curiosity = 0.3f; d.alertness = 0.6f;
         d.grazing = 0.8f; d.restfulness = 0.35f; d.waterAffinity = 0.3f;
@@ -641,7 +641,7 @@ public static class WildlifeSetup
             B(Biome.Tundra, 0.25f, 1f), B(Biome.Floresta, 0.28f, 0.9f),
             B(Biome.Montanha, 0.3f, 0.5f),
         };
-        d.spawnWeight = 4.2f; d.maxActiveGroups = 2;
+        d.spawnWeight = 4.2f; d.maxActiveGroups = 3;
         d.walkSpeed = 1.2f; d.trotSpeed = 3.7f; d.runSpeed = 9f; d.turnSpeed = 280f;
         d.bravery = 0.75f; d.aggression = 0.5f; d.curiosity = 0.5f; d.alertness = 0.8f;
         d.grazing = 0.1f; d.restfulness = 0.45f; d.waterAffinity = 0.3f; d.playfulness = 0.9f;

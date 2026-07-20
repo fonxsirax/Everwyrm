@@ -8,8 +8,9 @@ using JBooth.MicroSplat;
 ///
 /// O InfiniteTerrain gera os tiles em RUNTIME, então não há terreno na cena para
 /// converter pelo botão padrão do MicroSplat. Este menu faz o caminho todo:
-///  1. Salva as 6 camadas como TerrainLayer assets na MESMA ordem dos canais do
-///     alphamap do InfiniteTerrain (grama/floresta/rocha/neve/areia/rocha deserto);
+///  1. Salva as camadas (6, ou 7 com o Winter pack) como TerrainLayer assets na
+///     MESMA ordem dos canais do alphamap do InfiniteTerrain (grama/floresta/
+///     rocha/neve/areia/rocha deserto/folhas congeladas);
 ///  2. Cria um terreno template com as dimensões reais dos tiles (250 m × 130 m);
 ///  3. Roda a conversão oficial (MicroSplatTerrainEditor.ConvertTerrains) — gera
 ///     shader, material, texture arrays e propData em Assets/Everwyrm/MicroSplat;

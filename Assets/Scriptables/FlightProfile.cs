@@ -24,6 +24,16 @@ public class FlightProfile : ScriptableObject
     [Tooltip("Tempo após a última batida para o ciclo renovar (precisa soltar o botão)")]
     public float cycleRecovery = 0.45f;
 
+    [Header("Bônus de timing (soltar Space no fim da batida)")]
+    [Tooltip("Duração da batida de asa — janela para soltar e ganhar o bônus (s)")]
+    public float flapAnimDuration = 1f;
+    [Tooltip("Impulso vertical EXTRA máximo, soltando exatamente no fim da batida (m/s)")]
+    public float flapBonusLift = 9f;
+    [Tooltip("Empurrão pra frente extra no bônus máximo (m/s)")]
+    public float flapBonusForward = 0.8f;
+    [Tooltip("Curva do bônus (maior = só soltura quase perfeita vale muito)")]
+    public float flapBonusPower = 2f;
+
     [Header("Força da batida")]
     [Tooltip("Impulso vertical por batida (m/s)")]
     public float flapLift = 9f;
