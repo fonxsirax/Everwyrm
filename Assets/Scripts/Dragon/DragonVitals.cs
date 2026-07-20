@@ -61,6 +61,10 @@ public class DragonVitals : MonoBehaviour
     // ---- Observer
     public event Action<DragonVitals> OnStatsChanged;
     public event Action OnDeath;
+    /// <summary>Dano sofrido: (quantidade, origem no mundo se conhecida).
+    /// Dispara TODO dano, inclusive DoT por frame — assinantes que reagem
+    /// (shake, som) devem filtrar/acumular (ver DragonDamageFeedback).</summary>
+    public event Action<float, Vector3?> OnDamaged;
 
     void Awake()
     {
@@ -142,10 +146,13 @@ public class DragonVitals : MonoBehaviour
         EmitStats();
     }
 
-    public void Damage(float amount)
+    public void Damage(float amount) => Damage(amount, null);
+
+    public void Damage(float amount, Vector3? source)
     {
-        if (IsDead) return;
+        if (IsDead || amount <= 0f) return;
         Health = Mathf.Max(0f, Health - amount);
+        OnDamaged?.Invoke(amount, source);
         if (Health <= 0f)
         {
             IsDead = true;

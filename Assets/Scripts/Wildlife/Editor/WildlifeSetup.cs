@@ -272,7 +272,7 @@ public static class WildlifeSetup
         foreach (var n in M(@"^Attack_")) if (!n.EndsWith("_IP")) attacks.Add(n);
 
         var extras = new List<string>();
-        foreach (var cand in new[] { "Scratching", "Defecate" })
+        foreach (var cand in new[] { "Scratching", "Defecate", "Shake", "Sniffing", "Sniff" })
         { var f = F(cand); if (f != null) extras.Add(f); }
 
         return new AnimalDefinition.AnimalAnimSet

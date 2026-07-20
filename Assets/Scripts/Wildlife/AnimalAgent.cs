@@ -51,7 +51,7 @@ public class AnimalAgent : MonoBehaviour
 
     // ---- movimento
     Vector3 pos;
-    float yaw, speed, moveSpeed;
+    float yaw, yawVel, speed, moveSpeed;
     Vector3 moveTarget;
     bool hasMoveTarget;
     float arriveRadius = 1.4f;
@@ -73,6 +73,8 @@ public class AnimalAgent : MonoBehaviour
     float lastHitAt = -99f, nextMelee, diedAt;
     float myHowlAt = -1f;             // resposta em coro ao uivo do líder
     bool respondedHowl;
+    float stalkPauseUntil, nextStalkRoll;   // tocaia: avanço ↔ congelar
+    AnimalAgent playmate;                   // brincadeira entre membros do grupo
 
     bool inLocomotion;
 
@@ -461,7 +463,7 @@ public class AnimalAgent : MonoBehaviour
                 if (Role.anims.attacks != null && Role.anims.attacks.Length > 0)
                     PerformOnce(Pick(Role.anims.attacks));
                 if (dist <= melee + 1.6f)
-                    WildlifeSpawner.DamageDragon(Def.attackDamage);
+                    WildlifeSpawner.DamageDragon(Def.attackDamage, transform.position);
             }
         }
         else
@@ -482,11 +484,34 @@ public class AnimalAgent : MonoBehaviour
 
         float dist = Vector3.Distance(pos, prey.pos);
 
-        // tocaia: raposa/lobo abaixados (Crouch_F_IP) até a distância do bote
+        // tocaia: raposa/lobo abaixados (Crouch_F_IP) até a distância do bote,
+        // alternando avanço e congelamento (Crouch_Idle) como um felino
         bool canStalk = !string.IsNullOrEmpty(Role.anims.stalkWalk);
         if (canStalk && dist > 17f && behaviour != B.Chase)
         {
             behaviour = B.Stalk;
+            float now = Time.time;
+
+            if (now < stalkPauseUntil)
+            {
+                StopMoving();
+                if (!Performing && Role.anims.stalkIdle.IsValid)
+                    Perform(Role.anims.stalkIdle, stalkPauseUntil - now);
+                return;
+            }
+            if (now >= nextStalkRoll)
+            {
+                nextStalkRoll = now + Random.Range(2.5f, 5f);
+                if (Random.value < 0.35f)
+                {
+                    stalkPauseUntil = now + Random.Range(1.2f, 2.8f);
+                    StopMoving();
+                    if (Role.anims.stalkIdle.IsValid)
+                        Perform(Role.anims.stalkIdle, stalkPauseUntil - now);
+                    return;
+                }
+            }
+
             gaitOverride = Role.anims.stalkWalk;
             MoveTo(prey.pos, Def.walkSpeed * 0.9f);
             return;
@@ -494,6 +519,7 @@ public class AnimalAgent : MonoBehaviour
 
         behaviour = B.Chase;
         gaitOverride = null;
+        CancelPerformance();   // se congelou na tocaia, o bote não pode esperar o end
         MoveTo(prey.pos, Def.runSpeed * 1.08f);   // sprint (RunFast entra no blend)
 
         float melee = Def.meleeRange * transform.localScale.y;
@@ -609,6 +635,23 @@ public class AnimalAgent : MonoBehaviour
         {
             if (behaviour == B.Wander || behaviour == B.Play)
                 if (!hasMoveTarget) NudgeWander();
+
+            // chegou à margem: abaixa e bebe (EatDrink_start → Drink_loop → end)
+            if (behaviour == B.Drink && !hasMoveTarget && !Performing &&
+                Role.anims.drink.IsValid)
+                Perform(Role.anims.drink,
+                        Mathf.Min(behaviourUntil - now, Random.Range(6f, 11f)));
+
+            // vigilância: quem pasta levanta a cabeça de tempos em tempos e
+            // varre o horizonte — espécies mais alertas fazem isso mais vezes
+            if (behaviour == B.Graze && Random.value < Def.alertness * 0.11f)
+            {
+                gaitOverride = null;
+                StopMoving();
+                CancelPerformanceSoft();   // EatDrink_end = a cabeça subindo
+                behaviour = B.Settle;
+                behaviourUntil = now + Random.Range(1.5f, 3.5f);
+            }
             return;
         }
 
@@ -617,14 +660,18 @@ public class AnimalAgent : MonoBehaviour
 
     void NudgeWander()
     {
-        if (behaviour == B.Play && Mother != null)
+        if (behaviour == B.Play)
         {
-            // filhote orbita a mãe em arcos curtos — e dá pulinhos
-            Vector2 c = Random.insideUnitCircle.normalized * Random.Range(2.5f, 4.5f);
-            MoveTo(Mother.pos + new Vector3(c.x, 0f, c.y), Def.runSpeed * 0.75f * Role.speedMul);
-            if (!string.IsNullOrEmpty(Role.anims.jumpPlace) && Random.value < 0.3f)
-                PerformOnce(Role.anims.jumpPlace);
-            return;
+            var buddy = IsYoung && Mother != null && !Mother.IsDead ? Mother : playmate;
+            if (buddy != null && !buddy.IsDead)
+            {
+                // orbita o parceiro em arcos curtos — e dá pulinhos
+                Vector2 c = Random.insideUnitCircle.normalized * Random.Range(2.5f, 4.5f);
+                MoveTo(buddy.pos + new Vector3(c.x, 0f, c.y), Def.runSpeed * 0.75f * Role.speedMul);
+                if (!string.IsNullOrEmpty(Role.anims.jumpPlace) && Random.value < 0.3f)
+                    PerformOnce(Role.anims.jumpPlace);
+                return;
+            }
         }
         Vector2 o = Random.insideUnitCircle * Def.memberSpacing * 1.6f;
         Vector3 baseP = IsLeader ? Group.Home : Group.Anchor + Group.SlotFor(slotIndex);
@@ -638,17 +685,13 @@ public class AnimalAgent : MonoBehaviour
     void PickCalmBehaviour()
     {
         var a = Role.anims;
-        float now = Time.time;
 
         bool sleepy = (Def.activity & WildlifeClock.Current) == 0;   // fora do período ativo
 
         // filhotes: brincar ou seguir a mãe
         if (IsYoung && Random.value < Def.playfulness * 0.65f)
         {
-            behaviour = B.Play;
-            behaviourUntil = now + Random.Range(5f, 10f);
-            CancelPerformanceSoft();
-            NudgeWander();
+            StartPlay(Mother);
             return;
         }
 
@@ -659,9 +702,15 @@ public class AnimalAgent : MonoBehaviour
         float wSleep = a.sleep.IsValid ? Def.restfulness * (sleepy ? 1.6f : 0.25f) : 0f;
         float wIdle = 0.55f + Def.alertness * 0.6f;
         float wWander = 0.7f;
-        float wExtra = (a.extras != null && a.extras.Length > 0) ? 0.08f : 0f;
+        float wExtra = (a.extras != null && a.extras.Length > 0) ? 0.12f : 0f;
+        // adultos sociais e brincalhões (lobos, raposas) também brincam entre si
+        float wPlay = (!IsYoung && Def.playfulness > 0.55f && Group.Members.Count > 1)
+            ? Def.playfulness * 0.25f : 0f;
 
-        float total = wGraze + wDig + wDrink + wRest + wSleep + wIdle + wWander + wExtra;
+        // o líder é o sentinela do bando: vigia mais, deita/dorme menos
+        if (IsLeader) { wIdle *= 1.6f; wRest *= 0.5f; wSleep *= 0.5f; }
+
+        float total = wGraze + wDig + wDrink + wRest + wSleep + wIdle + wWander + wExtra + wPlay;
         float r = Random.value * total;
 
         if ((r -= wGraze) < 0f) { StartGraze(); return; }
@@ -670,8 +719,31 @@ public class AnimalAgent : MonoBehaviour
         if ((r -= wRest) < 0f) { StartRest(); return; }
         if ((r -= wSleep) < 0f) { StartSleep(); return; }
         if ((r -= wIdle) < 0f) { StartIdle(); return; }
-        if ((r -= wExtra + 0f) < 0f && wExtra > 0f) { StartExtra(); return; }
+        if ((r -= wExtra) < 0f && wExtra > 0f) { StartExtra(); return; }
+        if ((r -= wPlay) < 0f && wPlay > 0f) { StartPlay(PickPlaymate()); return; }
         StartWander();
+    }
+
+    void StartPlay(AnimalAgent buddy)
+    {
+        behaviour = B.Play;
+        behaviourUntil = Time.time + Random.Range(5f, 10f);
+        CancelPerformanceSoft();
+        playmate = buddy;
+        NudgeWander();
+    }
+
+    AnimalAgent PickPlaymate()
+    {
+        AnimalAgent best = null;
+        float bestSqr = float.MaxValue;
+        foreach (var m in Group.Members)
+        {
+            if (m == this || m.IsDead) continue;
+            float sqr = (m.pos - pos).sqrMagnitude;
+            if (sqr < bestSqr) { bestSqr = sqr; best = m; }
+        }
+        return best;
     }
 
     void StartIdle()
@@ -811,7 +883,7 @@ public class AnimalAgent : MonoBehaviour
         if (hp <= 0f) { Kill(from); return; }
 
         if (Role.anims.hits != null && Role.anims.hits.Length > 0)
-            PerformOnce(Pick(Role.anims.hits));
+            PerformOnce(PickHit(from));
 
         // ferido: revida (javali/urso/alce) ou dispara em pânico
         threatPos = from;
@@ -823,6 +895,17 @@ public class AnimalAgent : MonoBehaviour
             Group.RaiseAlarm(from);
             EnterFlee(from);
         }
+    }
+
+    /// <summary>Reação de dano pela DIREÇÃO do golpe (Hit_F/B/M) quando os clipes existem.</summary>
+    string PickHit(Vector3 from)
+    {
+        var hits = Role.anims.hits;
+        Vector3 local = Quaternion.Euler(0f, -yaw, 0f) * (from - pos);
+        string want = local.z > Mathf.Abs(local.x) ? "Hit_F"
+                    : local.z < -Mathf.Abs(local.x) ? "Hit_B" : "Hit_M";
+        foreach (var h in hits) if (h == want) return h;
+        return Pick(hits);
     }
 
     /// <summary>Morte — vira uma Carcass de verdade (o mesmo sistema que o dragão come).</summary>
@@ -837,7 +920,7 @@ public class AnimalAgent : MonoBehaviour
         Group.OnMemberDied(this);
 
         if (Role.anims.deaths != null && Role.anims.deaths.Length > 0)
-            PlayState(Pick(Role.anims.deaths), 0.12f);
+            PlayState(Pick(Role.anims.deaths), 0.2f);
     }
 
     void DeadTick(float dt)
@@ -918,7 +1001,8 @@ public class AnimalAgent : MonoBehaviour
             {
                 float wantYaw = Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg;
                 wantYaw = SteerAround(wantYaw);
-                yaw = Mathf.MoveTowardsAngle(yaw, wantYaw, Def.turnSpeed * dt);
+                // giro com aceleração/desaceleração — nada de virada "de robô"
+                yaw = Mathf.SmoothDampAngle(yaw, wantYaw, ref yawVel, 0.22f, Def.turnSpeed, dt);
                 desired = Mathf.Min(moveSpeed, Mathf.Max(0.7f, dist * 1.1f));
                 // não sai correndo de costas: alinha primeiro
                 float misalign = Mathf.Abs(Mathf.DeltaAngle(yaw, wantYaw));
@@ -929,7 +1013,7 @@ public class AnimalAgent : MonoBehaviour
         // parado mas com algo para encarar: gira no lugar (Turn_L/R entram no blend)
         if (!hasMoveTarget && hasFaceTarget)
         {
-            yaw = Mathf.MoveTowardsAngle(yaw, faceYaw, Def.turnSpeed * 0.7f * dt);
+            yaw = Mathf.SmoothDampAngle(yaw, faceYaw, ref yawVel, 0.3f, Def.turnSpeed * 0.7f, dt);
             if (Mathf.Abs(Mathf.DeltaAngle(yaw, faceYaw)) < 3f) hasFaceTarget = false;
         }
         if (hasMoveTarget) hasFaceTarget = false;
@@ -1039,12 +1123,40 @@ public class AnimalAgent : MonoBehaviour
 
     // ============================================================= ANIMAÇÃO
     bool Performing => seqPhase != 0;
-    string currentGait;   // evita re-CrossFade para o mesmo estado a cada tick
+    string currentGait;    // evita re-CrossFade para o mesmo estado a cada tick
+    string currentState;   // último estado tocado (evita reiniciar o mesmo loop)
+    Posture posture = Posture.Stand;
 
-    void PlayState(string state, float fade = 0.25f)
+    /// <summary>Postura aproximada de um estado, deduzida do nome do clipe.</summary>
+    enum Posture { Stand, Low, Ground }
+
+    static Posture PostureOf(string state)
+    {
+        if (string.IsNullOrEmpty(state)) return Posture.Stand;
+        if (state.StartsWith("Lie") || state.StartsWith("Sit") || state.StartsWith("Sleep"))
+            return Posture.Ground;
+        if (state.StartsWith("Crouch") || state.StartsWith("Hide") || state.StartsWith("Digging"))
+            return Posture.Low;
+        return Posture.Stand;
+    }
+
+    /// <summary>
+    /// Fade proporcional à mudança de postura: em pé↔em pé é rápido; sair de
+    /// deitado para de pé precisa de tempo para o corpo inteiro se reorganizar.
+    /// </summary>
+    float FadeFor(string state)
+    {
+        int delta = Mathf.Abs((int)PostureOf(state) - (int)posture);
+        return delta == 0 ? 0.25f : delta == 1 ? 0.45f : 0.65f;
+    }
+
+    void PlayState(string state, float fade = -1f, float timeOffset = 0f)
     {
         if (string.IsNullOrEmpty(state) || anim == null) return;
-        anim.CrossFadeInFixedTime(state, fade, 0);
+        if (fade < 0f) fade = FadeFor(state);
+        anim.CrossFadeInFixedTime(state, fade, 0, timeOffset);
+        posture = PostureOf(state);
+        currentState = state;
         inLocomotion = state == "Locomotion";
         currentGait = inLocomotion ? state : null;
     }
@@ -1054,7 +1166,9 @@ public class AnimalAgent : MonoBehaviour
         if (Performing) return;
         string want = gaitOverride ?? "Locomotion";
         if (currentGait == want) return;
-        anim.CrossFadeInFixedTime(want, 0.3f, 0);
+        anim.CrossFadeInFixedTime(want, Mathf.Max(0.3f, FadeFor(want)), 0);
+        posture = PostureOf(want);
+        currentState = want;
         inLocomotion = gaitOverride == null;
         currentGait = want;
     }
@@ -1067,7 +1181,9 @@ public class AnimalAgent : MonoBehaviour
         if (!string.IsNullOrEmpty(s.start))
         {
             seqPhase = 1;
-            seqPhaseEnd = Time.time + Len(s.start);
+            // a troca para o loop começa ANTES do clipe acabar: o blend cobre a
+            // emenda em vez de misturar com a pose congelada do último frame
+            seqPhaseEnd = Time.time + Mathf.Max(0.15f, Len(s.start) - 0.25f);
             PlayState(s.start);
         }
         else
@@ -1075,7 +1191,8 @@ public class AnimalAgent : MonoBehaviour
             seqPhase = 2;
             string l = Pick(s.loops);
             seqPhaseEnd = Time.time + Mathf.Min(loopSeconds, Random.Range(4f, 8f));
-            PlayState(l);
+            // offset aleatório no loop: o rebanho não mastiga em uníssono
+            PlayState(l, -1f, Random.value * Len(l));
         }
     }
 
@@ -1084,7 +1201,7 @@ public class AnimalAgent : MonoBehaviour
         if (string.IsNullOrEmpty(clip)) return;
         seq = null;
         seqPhase = 3;
-        seqPhaseEnd = Time.time + Len(clip);
+        seqPhaseEnd = Time.time + Mathf.Max(0.15f, Len(clip) - 0.2f);
         PlayState(clip, 0.15f);
     }
 
@@ -1107,16 +1224,20 @@ public class AnimalAgent : MonoBehaviour
                     if (seq != null && !string.IsNullOrEmpty(seq.end))
                     {
                         seqPhase = 3;
-                        seqPhaseEnd = now + Len(seq.end);
+                        seqPhaseEnd = now + Mathf.Max(0.15f, Len(seq.end) - 0.25f);
                         PlayState(seq.end);
                     }
                     else FinishPerformance();
                 }
                 else
                 {
-                    // troca entre variações de loop (Lie_loop_1 ↔ Lie_loop_2)
-                    PlayState(Pick(seq.loops), 0.4f);
+                    // troca entre variações de loop (Lie_loop_1 ↔ Lie_loop_2) —
+                    // só se for OUTRA variação: re-CrossFade para o mesmo estado
+                    // reinicia o clipe do zero (pop visível no meio do loop)
+                    string next = Pick(seq.loops);
+                    if (next != currentState) PlayState(next, 0.4f);
                     seqPhaseEnd = now + Mathf.Min(seqLoopUntil - now, Random.Range(4f, 8f));
+                    if (seqPhaseEnd <= now) seqPhaseEnd = now + 3f;
                 }
                 break;
 
@@ -1139,7 +1260,7 @@ public class AnimalAgent : MonoBehaviour
         if (seqPhase == 2 && seq != null && !string.IsNullOrEmpty(seq.end))
         {
             seqPhase = 3;
-            seqPhaseEnd = Time.time + Len(seq.end) * 0.7f;
+            seqPhaseEnd = Time.time + Mathf.Max(0.15f, Len(seq.end) * 0.7f - 0.2f);
             PlayState(seq.end, 0.15f);
             return;
         }

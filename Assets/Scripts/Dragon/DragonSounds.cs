@@ -26,8 +26,13 @@ public class DragonSounds : MonoBehaviour
         public Vector2 pitchRange = new(0.92f, 1.08f);
     }
 
-    // "Wing Flap" já criado — só arrastar o áudio quando ele chegar
-    [SerializeField] SoundEntry[] sounds = { new() };
+    // "Wing Flap" (AnimationEvents dos FBX) e "Hurt" (DragonDamageFeedback)
+    // já criados — só arrastar o áudio quando ele chegar
+    [SerializeField] SoundEntry[] sounds =
+    {
+        new(),
+        new() { eventName = "Hurt", volume = 0.9f, pitchRange = new(0.9f, 1.1f) }
+    };
 
     AudioSource source;
     Dictionary<string, SoundEntry> lookup;

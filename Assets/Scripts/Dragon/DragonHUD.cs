@@ -20,6 +20,9 @@ public class DragonHUD : MonoBehaviour
     Coroutine pipFlash;
 
     RectTransform healthFill, energyFill, hungerFill, growthFill;
+    RectTransform ghostFill;            // "fantasma" do dano na barra de vida
+    float ghostValue = 1f;
+    Coroutine ghostDrain;
     Transform canvasRoot;
     Image hungerImg;
     Text statusText, infoText, hintText, attrText;
@@ -154,6 +157,17 @@ public class DragonHUD : MonoBehaviour
     // ------------------------------------------------------------ HANDLERS
     void OnStats(DragonVitals v)
     {
+        // fantasma: perdeu vida → o segmento pálido fica no trecho perdido e
+        // drena depois de uma pausa; o movimento chama o olho periférico
+        float h01 = Mathf.Clamp01(v.Health01);
+        if (h01 >= ghostValue)
+        {
+            ghostValue = h01;
+            SetFill(ghostFill, ghostValue);
+        }
+        else if (ghostDrain == null)
+            ghostDrain = StartCoroutine(DrainGhost());
+
         SetFill(healthFill, v.Health01);
         SetFill(energyFill, v.Energy01);
         SetFill(hungerFill, v.Hunger01);
@@ -181,6 +195,21 @@ public class DragonHUD : MonoBehaviour
     {
         statusText.text = $"Você cresceu: agora é {stage}!";
         statusText.color = new Color(0.5f, 1f, 0.5f);
+    }
+
+    System.Collections.IEnumerator DrainGhost()
+    {
+        yield return new WaitForSeconds(0.35f);
+        // alvo é a vida AO VIVO: mais dano durante o drain só estende o caminho
+        while (ghostValue > vitals.Health01 + 0.001f)
+        {
+            ghostValue = Mathf.MoveTowards(ghostValue, vitals.Health01, 0.4f * Time.deltaTime);
+            SetFill(ghostFill, ghostValue);
+            yield return null;
+        }
+        ghostValue = Mathf.Clamp01(vitals.Health01);
+        SetFill(ghostFill, ghostValue);
+        ghostDrain = null;
     }
 
     void OnDeath() => OnStats(vitals);
@@ -217,6 +246,7 @@ public class DragonHUD : MonoBehaviour
         scaler.referenceResolution = new Vector2(1920, 1080);
 
         healthFill = Bar(canvasGo.transform, 0, "Vida", new Color(0.85f, 0.22f, 0.2f));
+        ghostFill = MakeGhost(healthFill);
         energyFill = Bar(canvasGo.transform, 1, "Energia", new Color(0.95f, 0.78f, 0.2f));
         hungerFill = Bar(canvasGo.transform, 2, "Fome", HungerNormal);
         hungerImg = hungerFill.GetComponent<Image>();
@@ -271,6 +301,24 @@ public class DragonHUD : MonoBehaviour
         txtRt.offsetMax = Vector2.zero;
 
         return fillRt;
+    }
+
+    /// <summary>Segmento pálido atrás do preenchimento da vida — visível só no
+    /// trecho recém-perdido (fill vermelho cobre o resto).</summary>
+    static RectTransform MakeGhost(RectTransform fill)
+    {
+        var img = new GameObject("Ghost", typeof(Image)).GetComponent<Image>();
+        img.transform.SetParent(fill.parent, false);
+        img.transform.SetSiblingIndex(0);           // atrás do fill vermelho
+        img.raycastTarget = false;
+        img.color = new Color(0.95f, 0.82f, 0.72f, 0.85f);
+        var rt = img.rectTransform;
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.anchoredPosition = new Vector2(2f, 0f);
+        rt.sizeDelta = new Vector2(BarWidth - 4f, -4f);
+        return rt;
     }
 
     Text MakeText(Transform parent, string content, int size, FontStyle style)

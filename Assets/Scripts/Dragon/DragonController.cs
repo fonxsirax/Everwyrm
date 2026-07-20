@@ -133,6 +133,9 @@ public class DragonController : MonoBehaviour
     float actionLockUntil;
     Vector3 flightVel, pendingNormal;                // colisão em voo
     float pendingImpact, lastImpactTime = -99f, staggerUntil = -99f;
+    float flinchTime = -99f, flinchDir = 1f;         // "acusar o golpe" em voo
+    const float FlinchDuration = 0.45f;
+    const float FlinchAngle = 9f;                    // graus de rolagem no pico
     int meleeCombo;
     bool tailLeft, wingLeft;
     float nextIdleChange, nextHintCheck;
@@ -178,6 +181,8 @@ public class DragonController : MonoBehaviour
         if (flight == null) flight = gameObject.AddComponent<DragonFlight>(); // garante o módulo de voo
         if (GetComponent<DragonSounds>() == null)
             gameObject.AddComponent<DragonSounds>(); // receptor dos AnimationEvents "PlaySound" dos FBX
+        if (vitals != null && GetComponent<DragonDamageFeedback>() == null)
+            gameObject.AddComponent<DragonDamageFeedback>(); // shake/vinheta/som de dano
         anim.applyRootMotion = false;
         yaw = transform.eulerAngles.y;
 
@@ -690,7 +695,18 @@ public class DragonController : MonoBehaviour
 
     public void OnDamaged(float amount)
     {
-        if (dead || flying || amount < 2f) return;
+        if (dead || amount < 2f) return;
+        if (flying)
+        {
+            // acusar o golpe no ar: rolagem breve + tranco de sustentação, sem
+            // travar o voo (o Get Hit completo só existe no chão). Em estol ou
+            // desequilíbrio o dragão já está tombando — reagir de novo é espasmo.
+            if (stalling || IsStaggered) return;
+            flinchTime = Time.time;
+            flinchDir = UnityEngine.Random.value < 0.5f ? -1f : 1f;
+            flight?.Knock(-Mathf.Min(3f, amount * 0.12f));
+            return;
+        }
         anim.SetFloat(P_HitVar, UnityEngine.Random.Range(0, 4));
         anim.SetTrigger(P_Hit);
         Lock(0.8f);
@@ -733,7 +749,13 @@ public class DragonController : MonoBehaviour
 
         pitch = Mathf.LerpAngle(pitch, targetPitch, 4f * dt);
         roll = Mathf.LerpAngle(roll, targetRoll, 4f * dt);
-        transform.rotation = Quaternion.Euler(pitch, yaw, roll);
+
+        // flinch de dano em voo: meia-onda de rolagem (0 no início e no fim)
+        float flinch = 0f;
+        float ft = (Time.time - flinchTime) / FlinchDuration;
+        if (ft < 1f) flinch = flinchDir * FlinchAngle * Mathf.Sin(ft * Mathf.PI);
+
+        transform.rotation = Quaternion.Euler(pitch, yaw, roll + flinch);
     }
 
     void UpdateAnimator(float dt, float h)

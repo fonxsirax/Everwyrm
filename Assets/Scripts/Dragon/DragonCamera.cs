@@ -31,12 +31,22 @@ public class DragonCamera : MonoBehaviour
     [SerializeField] float baseFov = 60f;
     [SerializeField] float flightFov = 74f;
 
+    [Header("Shake de dano")]
+    [SerializeField] float maxShakeAngle = 2.2f;   // graus no trauma máximo
+    [SerializeField] float shakeDecay = 2.2f;      // trauma perdido por segundo
+    [SerializeField] float shakeFrequency = 14f;
+
     Camera cam;
     DragonController dragon;
     LayerMask collisionMask;
     float camYaw, camPitch = 15f;
     float lastMouseTime;
     Vector3 smoothPos;
+    float trauma;                                  // 0..1 — amplitude = trauma²
+
+    /// <summary>Micro-shake de impacto (DragonDamageFeedback). Amplitude cresce
+    /// com trauma², então golpes fracos são quase subliminares.</summary>
+    public void AddShake(float amount) => trauma = Mathf.Clamp01(trauma + amount);
 
     void Start()
     {
@@ -114,6 +124,18 @@ public class DragonCamera : MonoBehaviour
         smoothPos = Vector3.Lerp(smoothPos, desired, 1f - Mathf.Exp(-followLag * dt));
         transform.position = smoothPos;
         transform.rotation = Quaternion.LookRotation(pivot - smoothPos, Vector3.up);
+
+        // shake rotacional por ruído Perlin — sem deslocar a posição (realista)
+        if (trauma > 0f)
+        {
+            trauma = Mathf.Max(0f, trauma - shakeDecay * dt);
+            float amp = trauma * trauma * maxShakeAngle;
+            float t = Time.time * shakeFrequency;
+            transform.rotation *= Quaternion.Euler(
+                (Mathf.PerlinNoise(t, 0.3f) - 0.5f) * 2f * amp,
+                (Mathf.PerlinNoise(0.6f, t) - 0.5f) * 2f * amp,
+                (Mathf.PerlinNoise(t, t) - 0.5f) * amp * 0.6f);
+        }
 
         // FOV com sensação de velocidade
         float targetFov = dragon != null && dragon.IsFlying

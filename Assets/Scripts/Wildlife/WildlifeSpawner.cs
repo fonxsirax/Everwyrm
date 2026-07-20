@@ -52,12 +52,14 @@ public class WildlifeSpawner : MonoBehaviour
     public static bool DragonFlying =>
         Instance != null && Instance.dragonCtrl != null && Instance.dragonCtrl.IsFlying;
 
-    /// <summary>Contra-ataque da fauna (alce/urso/javali defendendo-se).</summary>
-    public static void DamageDragon(float damage)
+    /// <summary>Contra-ataque da fauna (alce/urso/javali defendendo-se).
+    /// `source` = posição do atacante — alimenta o feedback de dano.</summary>
+    public static void DamageDragon(float damage, Vector3? source = null)
     {
         if (Instance == null || Instance.dragonVitals == null) return;
-        Instance.dragonVitals.Damage(damage);
-        if (Instance.dragonCtrl != null) Instance.dragonCtrl.OnDamaged(damage);
+        // Damage já dispara DragonController.OnDamaged (reação) e o evento
+        // OnDamaged dos assinantes de feedback — nada mais a chamar aqui
+        Instance.dragonVitals.Damage(damage, source);
     }
 
     // ------------------------------------------------------------ BOOTSTRAP
