@@ -86,6 +86,9 @@ public class DragonAttributes : MonoBehaviour
     void Update()
     {
         if (Unspent <= 0) return;
+        // 1/2/3 só valem com a FICHA ABERTA (Tab): no jogo, 1-4 são os ataques
+        // equipados do DragonAbilities.
+        if (!DragonStatsMenu.IsOpen) return;
         if (Input.GetKeyDown(KeyCode.Alpha1)) SpendPoint(Attribute.Velocidade);
         else if (Input.GetKeyDown(KeyCode.Alpha2)) SpendPoint(Attribute.Poder);
         else if (Input.GetKeyDown(KeyCode.Alpha3)) SpendPoint(Attribute.Resistencia);

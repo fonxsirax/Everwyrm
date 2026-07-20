@@ -197,7 +197,7 @@ public class DragonHUD : MonoBehaviour
 
     void OnLevelUp(int level)
     {
-        statusText.text = $"Nível {level}! Escolha um atributo (1/2/3)";
+        statusText.text = $"Nível {level}! Abra a ficha (Tab) e escolha um atributo";
         statusText.color = new Color(0.5f, 1f, 0.5f);
     }
 

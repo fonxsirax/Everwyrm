@@ -209,11 +209,12 @@ public static class DragonSetup
         Cond(restIdle.AddTransition(restEnd), 0.2f, (AnimatorConditionMode.IfNot, "Rest"));
         ExitTime(restEnd.AddTransition(loco), 0.8f, 0.2f);
 
-        // ações no chão
+        // ações no chão — a saída volta para o Fly se "Flying" estiver ligado
+        // (habilidades 1-4 do DragonAbilities entram por CrossFade também em voo)
         Cond(loco.AddTransition(roar), 0.15f, (AnimatorConditionMode.If, "Roar"));
-        ExitTime(roar.AddTransition(loco), 0.9f, 0.25f);
+        ExitToFlyOrLoco(roar, fly, loco, 0.9f, 0.25f);
         Cond(loco.AddTransition(fire), 0.1f, (AnimatorConditionMode.If, "Fire"));
-        ExitTime(fire.AddTransition(loco), 0.9f, 0.25f);
+        ExitToFlyOrLoco(fire, fly, loco, 0.9f, 0.25f);
         Cond(loco.AddTransition(hit), 0.1f, (AnimatorConditionMode.If, "Hit"));
         ExitTime(hit.AddTransition(loco), 0.85f, 0.2f);
 
@@ -222,7 +223,7 @@ public static class DragonSetup
             var t = loco.AddTransition(attacks[i]);
             Cond(t, 0.1f, (AnimatorConditionMode.If, "Attack"));
             t.AddCondition(AnimatorConditionMode.Equals, i, "AttackType");
-            ExitTime(attacks[i].AddTransition(loco), 0.85f, 0.2f);
+            ExitToFlyOrLoco(attacks[i], fly, loco, 0.85f, 0.2f);
         }
 
         // esquivas
@@ -287,6 +288,8 @@ public static class DragonSetup
                 root.AddComponent<DragonFlight>();
             if (root.GetComponent<DragonSounds>() == null)
                 root.AddComponent<DragonSounds>();
+            if (root.GetComponent<DragonAbilities>() == null)
+                root.AddComponent<DragonAbilities>();
 
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             Debug.Log("Prefab configurado: CharacterController + DragonController + DragonVitals + DragonGrowth.");
@@ -443,5 +446,16 @@ public static class DragonSetup
         t.hasExitTime = true;
         t.exitTime = exitTime;
         t.duration = duration;
+    }
+
+    /// <summary>Saída dupla: em voo (Flying) volta ao Fly; senão, à Locomotion.
+    /// A transição condicionada vem primeiro — o Animator avalia em ordem.</summary>
+    static void ExitToFlyOrLoco(AnimatorState state, AnimatorState fly,
+                                AnimatorState loco, float exit, float duration)
+    {
+        var toFly = state.AddTransition(fly);
+        ExitTime(toFly, exit, duration);
+        toFly.AddCondition(AnimatorConditionMode.If, 0f, "Flying");
+        ExitTime(state.AddTransition(loco), exit, duration);
     }
 }

@@ -139,6 +139,7 @@ public class DragonController : MonoBehaviour
     string currentHint = "";
 
     public bool IsFlying => flying;
+    public bool ActionsLocked => Locked;                   // p/ DragonAbilities
     public bool IsStaggered => Time.time < staggerUntil;   // desequilíbrio pós-colisão
     public bool IsResting => resting;
     public bool IsDead => dead;
@@ -654,9 +655,17 @@ public class DragonController : MonoBehaviour
 
     void Land()
     {
+        // dano de queda ANTES de flying=false: o guard de OnDamaged suprime a
+        // reação "Get Hit" — a queda já foi contada por Stall Fall + Land,
+        // reagir de novo em pé parecia um espasmo
+        bool wasStalling = stalling;
+        if (wasStalling)
+        {
+            vitals?.Damage(8f);
+            Lock(1.2f);
+        }
         flying = false;
         gliding = false;
-        bool wasStalling = stalling;
         SetStall(false);
         planarSpeed = Mathf.Min(flySpeed, walkSpeed * S);
         momentum = 0f;
@@ -664,11 +673,6 @@ public class DragonController : MonoBehaviour
         vertInput = 0f;
         anim.SetBool(P_Flying, false);
         anim.SetBool(P_Glide, false);
-        if (wasStalling)
-        {
-            vitals?.Damage(8f);
-            Lock(1.2f);
-        }
     }
 
     void SetStall(bool value)
@@ -705,6 +709,13 @@ public class DragonController : MonoBehaviour
 
     bool Spend(float amount) => vitals == null || vitals.TrySpend(amount);
     void Lock(float seconds) => actionLockUntil = Time.time + seconds;
+
+    /// <summary>Escala corporal efetiva (crescimento × atributos) — combate usa
+    /// para dimensionar dano, alcance e origem dos projéteis.</summary>
+    public float BodyScale => S;
+
+    /// <summary>Trava ações/entradas por alguns segundos (habilidades 1-4).</summary>
+    public void LockActions(float seconds) => Lock(seconds);
 
     /// <summary>Golpe corpo a corpo atinge a fauna viva (caça de verdade — GDD).
     /// Presas abatidas viram carcaças que se comem com G, como sempre.</summary>
