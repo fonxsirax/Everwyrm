@@ -14,6 +14,8 @@ public class MinimapIconSet : ScriptableObject
     public Sprite foodSprite;     // comida (X)
     public Sprite treeSprite;     // árvore (ponto)
     public Sprite animalSprite;   // fauna viva (ponto)
+    public Sprite sunSprite;      // relógio: ícone de dia
+    public Sprite moonSprite;     // relógio: ícone de noite
 
     [Header("Cores (tintam o sprite)")]
     public Color dragonColor = Color.white;
@@ -21,6 +23,8 @@ public class MinimapIconSet : ScriptableObject
     public Color treeColor = new(0.35f, 0.75f, 0.3f, 0.8f);
     public Color animalColor = new(0.55f, 0.85f, 1f, 0.9f);    // presas
     public Color predatorColor = new(1f, 0.4f, 0.35f, 0.95f);  // predadores
+    public Color sunColor = new(1f, 0.85f, 0.35f);             // relógio: dia
+    public Color moonColor = new(0.75f, 0.82f, 1f);            // relógio: noite
 
     [Header("Tamanhos (px no minimapa)")]
     public float dragonSize = 24f;
