@@ -6,6 +6,8 @@ using UnityEngine.UI;
 /// Minimapa circular no canto inferior direito (oposto ao HUD de barras).
 ///  - O dragão é uma SETA VERMELHA sempre no CENTRO, girando com a direção dele.
 ///  - Comidas aparecem como X dentro do alcance (o raio do faro/Dominância).
+///  - Relógio acima do círculo: ícone sol/lua + hora do jogo "08:30", vindos
+///    do DayNightCycle (some se a cena não tiver o ciclo).
 ///  - Sprites fáceis de trocar: arraste arte real nos campos públicos
 ///    `dragonSprite` / `foodSprite`; enquanto forem nulos, uso sprites gerados.
 /// Mapa "norte pra cima": os marcadores se movem, a seta gira.
@@ -20,11 +22,13 @@ public class DragonMinimap : MonoBehaviour
 
     // Ícones vêm do asset Assets/Scriptables/Resources/MinimapIcons.asset
     // (MinimapIconSet) — configure sprites/cores/tamanhos lá, sem tocar na cena.
-    Sprite dragonSprite, foodSprite, animalSprite;
+    Sprite dragonSprite, foodSprite, animalSprite, sunSprite, moonSprite;
     Color dragonColor = Color.white;
     Color foodColor = new(1f, 0.7f, 0.25f);
     Color animalColor = new(0.55f, 0.85f, 1f, 0.9f);
     Color predatorColor = new(1f, 0.4f, 0.35f, 0.95f);
+    Color sunColor = new(1f, 0.85f, 0.35f);
+    Color moonColor = new(0.75f, 0.82f, 1f);
     float dragonSize = 24f, foodSize = 14f, animalSize = 8f;
 
     Transform dragon;
@@ -32,7 +36,10 @@ public class DragonMinimap : MonoBehaviour
     RectTransform center, foodLayer, animalLayer, arrow;
     readonly List<Image> foodMarkers = new();
     readonly List<Image> animalMarkers = new();
-    Sprite generatedArrow, generatedX, generatedDot;
+    Sprite generatedArrow, generatedX, generatedDot, generatedSun, generatedMoon;
+    Image clockIcon;
+    Text clockText;
+    GameObject clockRoot;
     float nextUpdate;
 
     public void Bind(DragonController d, DragonAttributes a)
@@ -53,6 +60,10 @@ public class DragonMinimap : MonoBehaviour
             dragonSize = icons.dragonSize;
             foodSize = icons.foodSize;
             animalSize = icons.animalSize;
+            sunSprite = icons.sunSprite;
+            moonSprite = icons.moonSprite;
+            sunColor = icons.sunColor;
+            moonColor = icons.moonColor;
         }
         Build();
     }
@@ -68,6 +79,8 @@ public class DragonMinimap : MonoBehaviour
 
         // seta central gira com o dragão (mapa fixo, norte pra cima)
         arrow.localEulerAngles = new Vector3(0f, 0f, -dragon.eulerAngles.y);
+
+        UpdateClock();
 
         // comidas dentro do alcance viram X
         int used = 0;
@@ -136,6 +149,60 @@ public class DragonMinimap : MonoBehaviour
         arrow = arrowImg.rectTransform;
         arrow.sizeDelta = new Vector2(dragonSize, dragonSize);
         arrow.anchoredPosition = Vector2.zero;                   // SEMPRE no centro
+
+        BuildClock(root);
+    }
+
+    // --------------------------------------------------------------- RELÓGIO
+    /// <summary>Faixa acima do círculo: ícone sol/lua + hora "08:30".</summary>
+    void BuildClock(RectTransform root)
+    {
+        clockRoot = new GameObject("Clock", typeof(RectTransform));
+        var row = (RectTransform)clockRoot.transform;
+        row.SetParent(root, false);
+        row.anchorMin = row.anchorMax = new Vector2(0.5f, 1f);   // topo do minimapa
+        row.pivot = new Vector2(0.5f, 0f);
+        row.anchoredPosition = new Vector2(0f, 4f);
+        row.sizeDelta = new Vector2(size, 26f);
+
+        clockIcon = new GameObject("Icon", typeof(Image)).GetComponent<Image>();
+        clockIcon.transform.SetParent(row, false);
+        clockIcon.raycastTarget = false;
+        var iconRt = clockIcon.rectTransform;
+        iconRt.anchorMin = iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+        iconRt.anchoredPosition = new Vector2(-36f, 0f);
+        iconRt.sizeDelta = new Vector2(22f, 22f);
+
+        clockText = new GameObject("Time", typeof(Text)).GetComponent<Text>();
+        clockText.transform.SetParent(row, false);
+        clockText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        clockText.fontSize = 20;
+        clockText.fontStyle = FontStyle.Bold;
+        clockText.color = Color.white;
+        clockText.alignment = TextAnchor.MiddleLeft;
+        clockText.raycastTarget = false;
+        clockText.gameObject.AddComponent<Shadow>().effectColor = new Color(0f, 0f, 0f, 0.8f);
+        var txtRt = clockText.rectTransform;
+        txtRt.anchorMin = txtRt.anchorMax = new Vector2(0.5f, 0.5f);
+        txtRt.anchoredPosition = new Vector2(12f, 0f);
+        txtRt.sizeDelta = new Vector2(80f, 26f);
+
+        clockRoot.SetActive(false);              // liga quando houver ciclo
+    }
+
+    void UpdateClock()
+    {
+        var cycle = DayNightCycle.Instance;
+        bool has = cycle != null;
+        if (clockRoot.activeSelf != has) clockRoot.SetActive(has);
+        if (!has) return;
+
+        clockText.text = cycle.ClockText;
+        bool night = cycle.IsNight;
+        clockIcon.sprite = night
+            ? (moonSprite != null ? moonSprite : (generatedMoon ??= MoonSprite()))
+            : (sunSprite != null ? sunSprite : (generatedSun ??= SunSprite()));
+        clockIcon.color = night ? moonColor : sunColor;
     }
 
     RectTransform MakeLayerRect(string name)
@@ -222,6 +289,50 @@ public class DragonMinimap : MonoBehaviour
             for (int x = 0; x < s; x++)
                 if (Vector2.Distance(new Vector2(x, y), new Vector2(s / 2f, s / 2f)) < r)
                     tex.SetPixel(x, y, Color.white);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f));
+    }
+
+    static Sprite SunSprite()
+    {
+        const int s = 32;
+        var tex = NewTex(s);
+        var c = new Vector2(s / 2f, s / 2f);
+        // disco central
+        for (int y = 0; y < s; y++)
+            for (int x = 0; x < s; x++)
+                if (Vector2.Distance(new Vector2(x, y), c) < 7f)
+                    tex.SetPixel(x, y, Color.white);
+        // 8 raios
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * Mathf.PI / 4f;
+            var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+            for (float r = 9f; r <= 14f; r += 0.5f)
+            {
+                var p = c + dir * r;
+                for (int dy = 0; dy <= 1; dy++)
+                    for (int dx = 0; dx <= 1; dx++)
+                        tex.SetPixel((int)p.x + dx, (int)p.y + dy, Color.white);
+            }
+        }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f));
+    }
+
+    static Sprite MoonSprite()
+    {
+        const int s = 32;
+        var tex = NewTex(s);
+        var c = new Vector2(s / 2f, s / 2f);
+        var bite = c + new Vector2(5f, 3f);     // círculo "mordido" → crescente
+        for (int y = 0; y < s; y++)
+            for (int x = 0; x < s; x++)
+            {
+                var p = new Vector2(x, y);
+                if (Vector2.Distance(p, c) < 11f && Vector2.Distance(p, bite) > 9.5f)
+                    tex.SetPixel(x, y, Color.white);
+            }
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f));
     }

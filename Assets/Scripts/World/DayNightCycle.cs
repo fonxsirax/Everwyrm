@@ -32,6 +32,10 @@ public class DayNightCycle : MonoBehaviour
     [Min(0.1f)] public float dayLengthMinutes = 30f;
     [Tooltip("Hora do dia em que a partida começa (0-24).")]
     [Range(0f, 24f)] public float startHour = 9f;
+    [Tooltip("TESTE: começa a partida já de NOITE (na hora abaixo). Desligado = começa em startHour, de dia, como hoje.")]
+    public bool startAtNight = false;
+    [Tooltip("Hora usada quando 'Start At Night' está ligado.")]
+    [Range(0f, 24f)] public float nightStartHour = 21f;
     [Tooltip("Multiplicador da velocidade do tempo (1 = normal, 0 = pausa o relógio). Útil para debug e eventos.")]
     [Min(0f)] public float timeScale = 1f;
     [Tooltip("Hora do nascer do sol. Com 6/18, dia e noite duram 15 min cada.")]
@@ -46,46 +50,73 @@ public class DayNightCycle : MonoBehaviour
     public AnimationCurve sunIntensity = new(
         new Keyframe(0f, 0.02f), new Keyframe(0.08f, 0.3f), new Keyframe(0.5f, 1f),
         new Keyframe(0.92f, 0.3f), new Keyframe(1f, 0.02f));
-    [Tooltip("Temperatura de cor do sol (Kelvin) ao longo do arco do dia — quente nas pontas, neutra ao meio-dia.")]
-    public AnimationCurve sunTemperature = new(
-        new Keyframe(0f, 2200f), new Keyframe(0.12f, 4300f), new Keyframe(0.5f, 6500f),
-        new Keyframe(0.88f, 4300f), new Keyframe(1f, 2200f));
+    [Tooltip("Temperatura de cor do sol (Kelvin) ao longo do arco do dia — quente nas pontas, levemente dourada ao meio-dia (5900K; 6500K = neutro).")]
+    public AnimationCurve sunTemperature = DefaultSunTemperature();
     [Tooltip("Altura máxima do sol no céu ao meio-dia (graus).")]
     [Range(20f, 90f)] public float maxSunElevation = 62f;
     [Tooltip("Gira o percurso leste→oeste no mundo (graus).")]
     [Range(-180f, 180f)] public float orbitYaw = 0f;
 
-    [Header("Lua")]
-    [Tooltip("Intensidade da lua no auge da noite (lux). Estilizado — a real é ~0.25.")]
-    public float moonMaxLux = 30f;
+    [Header("Lua (a LUZ — o visual do disco/fase/textura fica no NightSky)")]
+    [Tooltip("Intensidade da lua no auge da noite (lux). Estilizado — a real é ~0.25. 100 = noite AZUL-PROFUNDA legível; acima de ~200 o céu clareia como dia nublado.")]
+    public float moonMaxLux = 100f;
     public Color moonColor = new(0.72f, 0.78f, 1f);
-    [Tooltip("Diâmetro visual da lua no céu (graus). A real tem ~0.5.")]
-    [Range(0.5f, 8f)] public float moonAngularDiameter = 3f;
-    [Tooltip("Fase da lua (0 = nova, 0.5 = cheia).")]
-    [Range(0f, 1f)] public float moonPhase = 0.35f;
     [Tooltip("Sombras da lua à noite (só um direcional projeta sombra por vez; o sol está desligado à noite).")]
     public bool moonShadows = true;
+    [Tooltip("Peso da sombra da lua (1 = sombra 100% preta). Abaixo de 1 vira o 'piso' de visibilidade da noite: nada fica breu total.")]
+    [Range(0f, 1f)] public float moonShadowDimmer = 0.65f;
 
     [Header("Exposição (clarear/escurecer geral)")]
-    [Tooltip("Exposição fixa (EV) por HORA do dia. Dia ~14.6 (valor do preset), noite ~5.5. É esta curva que dá a sensação de escurecer.")]
-    public AnimationCurve exposureByHour = new(
-        new Keyframe(0f, 5.5f), new Keyframe(4.5f, 5.5f), new Keyframe(6f, 8f),
-        new Keyframe(8f, 13.4f), new Keyframe(12f, 14.6f), new Keyframe(16f, 13.4f),
-        new Keyframe(18f, 8f), new Keyframe(19.5f, 5.8f), new Keyframe(24f, 5.5f));
+    [Tooltip("Exposição AUTOMÁTICA: adapta como o olho — floresta fechada de noite clareia, meio-dia a céu aberto escurece (conserta 'estourado' de dia e 'breu' à noite). A curva abaixo vira o CENTRO da faixa permitida.")]
+    public bool autoExposure = true;
+    [Tooltip("Meia-largura da faixa da exposição automática (± EV em torno da curva).")]
+    [Range(0.25f, 3f)] public float autoExposureRange = 1.25f;
+    [Tooltip("EV alvo por HORA do dia. Dia ~14.6 (valor do preset), noite ~7.5. Com autoExposure ligado é o centro da faixa; desligado, é o valor fixo.")]
+    public AnimationCurve exposureByHour = DefaultExposureByHour();
+
+    [Tooltip("Multiplicador da luz indireta (ambiente do céu/probes/reflexos) por HORA. À noite fica em ~0.3: preenche as sombras com o ambiente da lua — muito baixo deixa o primeiro plano preto e a vegetação ao longe 'acesa' por contraste.")]
+    public AnimationCurve indirectByHour = DefaultIndirectByHour();
+
+    [Header("Sombras")]
+    [Tooltip("Distância máxima de sombra (m) por HORA. Dia = 300 (calibração ALP). Noite ESTENDIDA: além desse limite os objetos recebem a lua sem sombra e ficam 'pálidos de dia' (pedras do deserto, árvores longe).")]
+    public AnimationCurve shadowDistanceByHour = new(
+        new Keyframe(0f, 700f), new Keyframe(5f, 700f), new Keyframe(7f, 300f),
+        new Keyframe(17f, 300f), new Keyframe(19f, 700f), new Keyframe(24f, 700f));
+    [Tooltip("Transmissão da luz direcional através das folhas por HORA (0-1). Reduzida à noite: copas retroiluminadas pela lua deixam de 'brilhar' pálidas ao longe.")]
+    public AnimationCurve transmissionByHour = new(
+        new Keyframe(0f, 0.3f), new Keyframe(5f, 0.3f), new Keyframe(7f, 1f),
+        new Keyframe(17f, 1f), new Keyframe(19f, 0.3f), new Keyframe(24f, 0.3f));
+
+    [Header("Nuvens (CloudLayer nativo — fundação do clima futuro)")]
+    [Tooltip("Nuvens 2D iluminadas pela luz direcional REAL: douradas no amanhecer/pôr do sol, prateadas ao luar; encobrem estrelas naturalmente.")]
+    public bool clouds = true;
+    [Tooltip("Opacidade global — o knob que o clima futuro vai animar (0 = céu limpo).")]
+    [Range(0f, 1f)] public float cloudOpacity = 0.5f;
+    [Tooltip("Mapa de nuvens custom (canal R = padrão usado). Vazio = textura default do HDRP.")]
+    public Texture2D cloudMap;
+    [Tooltip("Espessura/auto-sombreamento das nuvens.")]
+    [Range(0f, 1f)] public float cloudThickness = 0.5f;
+    [Tooltip("Sombras das nuvens no chão (viram cookie da luz direcional).")]
+    public bool cloudShadows = true;
+    [Tooltip("Vento do céu (velocidade de scroll das nuvens, km/h).")]
+    public float cloudWindSpeed = 30f;
+    [Range(0f, 360f)] public float cloudWindOrientation = 40f;
 
     [Header("Névoa")]
     public bool fogEnabled = true;
-    [Tooltip("Distância média da névoa (m) por HORA — menor = mais densa (amanhecer/anoitecer).")]
-    public AnimationCurve fogDistanceByHour = new(
-        new Keyframe(0f, 800f), new Keyframe(6f, 420f), new Keyframe(10f, 1400f),
-        new Keyframe(15f, 1400f), new Keyframe(18f, 450f), new Keyframe(21f, 800f),
-        new Keyframe(24f, 800f));
+    [Tooltip("Distância média da névoa (m) por HORA — menor = mais densa. Noite densa de propósito: engole a vegetação distante iluminada sem sombra.")]
+    public AnimationCurve fogDistanceByHour = DefaultFogDistanceByHour();
     [Tooltip("Tinta da névoa ao longo das 24h (0 = meia-noite, 0.5 = meio-dia).")]
     public Gradient fogTintByHour = DefaultFogTint();
     [Tooltip("Altura máxima da camada de névoa (m).")]
     public float fogMaxHeight = 120f;
     [Tooltip("Névoa volumétrica (feixes de luz; custo alto de GPU).")]
     public bool volumetricFog = false;
+
+    /// <summary>Versão da calibração aplicada pelo EverwyrmAutoSetup — evita
+    /// re-rodar migrações a cada recompilação.</summary>
+    [HideInInspector] public int tuningVersion;
+    public const int CurrentTuningVersion = 5;
 
     // ---------------------------------------------------------------- estado
     double hours;                       // hora do dia [0, 24) — fonte de verdade
@@ -96,6 +127,23 @@ public class DayNightCycle : MonoBehaviour
     Volume volume;
     Exposure exposure;
     Fog fog;
+    IndirectLightingController indirect;
+    HDShadowSettings shadows;
+    PhysicallyBasedSky pbsSky;
+    VisualEnvironment env;
+    CloudLayer cloudLayer;
+
+    /// <summary>Overrides do céu no volume de runtime — o NightSky escreve o
+    /// campo estelar (spaceEmission*) aqui. Null antes do Start.</summary>
+    public PhysicallyBasedSky Sky => pbsSky;
+    /// <summary>Perfil do volume de runtime (p/ o NightSky adicionar overrides
+    /// próprios, ex.: HDRI de debug). Null antes do Start.</summary>
+    public VolumeProfile Profile => volume != null ? volume.profile : null;
+    /// <summary>VisualEnvironment do volume de runtime (troca de tipo de céu).</summary>
+    public VisualEnvironment Env => env;
+    /// <summary>Dados HD da lua (corpo celeste) — o NightSky configura textura
+    /// de superfície/earthshine/flare. Null antes do Start.</summary>
+    public HDAdditionalLightData MoonData => moonHd;
 
     // ------------------------------------------------------------ API PÚBLICA
     /// <summary>Hora do dia em horas [0, 24). Ex.: 18.75 = 18:45.</summary>
@@ -117,6 +165,19 @@ public class DayNightCycle : MonoBehaviour
             return Mathf.Clamp01(t / len);
         }
     }
+    /// <summary>Remapeia a hora real para o "relógio solar" das curvas — que
+    /// são desenhadas assumindo nascer=6h e pôr=18h. Se o designer mudar
+    /// sunriseHour/sunsetHour, as curvas ESTICAM coerentemente em vez de
+    /// quebrarem em silêncio. Público: o NightSky usa também.</summary>
+    public float SolarCurveHour(float hour)
+    {
+        if (hour >= sunriseHour && hour < sunsetHour)
+            return 6f + (hour - sunriseHour) / Mathf.Max(0.01f, sunsetHour - sunriseHour) * 12f;
+        float nightLen = Mathf.Max(0.01f, 24f - (sunsetHour - sunriseHour));
+        float t = hour >= sunsetHour ? hour - sunsetHour : hour + (24f - sunsetHour);
+        return Mathf.Repeat(18f + t / nightLen * 12f, 24f);
+    }
+
     /// <summary>Hora formatada "HH:MM" para UI.</summary>
     public string ClockText
     {
@@ -138,12 +199,20 @@ public class DayNightCycle : MonoBehaviour
         Apply();
     }
 
+    /// <summary>Restaura o relógio completo (hora + dia) — save/load e sync de
+    /// rede: o servidor manda (TimeOfDay, Day) e o cliente repõe aqui.</summary>
+    public void SetTime(float newHours, int day)
+    {
+        Day = Mathf.Max(1, day);
+        SetTime(newHours);
+    }
+
     // ---------------------------------------------------------------- ciclo
     void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
-        hours = Mathf.Repeat(startHour, 24f);
+        hours = Mathf.Repeat(startAtNight ? nightStartHour : startHour, 24f);
     }
 
     void Start()
@@ -217,21 +286,41 @@ public class DayNightCycle : MonoBehaviour
                 moon.color = moonColor;
                 moon.shadows = moonShadows ? LightShadows.Soft : LightShadows.None;
                 if (moonHd != null)
-                {
-                    moonHd.moonPhase = moonPhase;
-                    moonHd.angularDiameter = moonAngularDiameter;
-                }
+                    moonHd.shadowDimmer = moonShadowDimmer;   // piso de visibilidade
             }
         }
 
-        // ---- exposição e névoa por hora do dia
+        // ---- exposição, luz indireta e névoa por HORA SOLAR (curvas desenhadas
+        // com nascer=6/pôr=18 esticam junto com sunriseHour/sunsetHour)
+        float ch = SolarCurveHour(hour);
         if (exposure != null)
-            exposure.fixedExposure.value = exposureByHour.Evaluate(hour);
+        {
+            float ev = exposureByHour.Evaluate(ch);
+            exposure.fixedExposure.value = ev;
+            exposure.limitMin.value = ev - autoExposureRange;
+            exposure.limitMax.value = ev + autoExposureRange;
+        }
+        if (indirect != null)
+        {
+            // dim de lightmaps/probes/reflexos gerados de dia — sem isso a
+            // vegetação baked continua "clareada" no meio da noite
+            float k = Mathf.Clamp01(indirectByHour.Evaluate(ch));
+            indirect.indirectDiffuseLightingMultiplier.value = k;
+            indirect.reflectionLightingMultiplier.value = k;
+            indirect.reflectionProbeIntensityMultiplier.value = k;
+        }
         if (fog != null)
         {
-            fog.meanFreePath.value = Mathf.Max(1f, fogDistanceByHour.Evaluate(hour));
-            fog.tint.value = fogTintByHour.Evaluate(hour / 24f);
+            fog.meanFreePath.value = Mathf.Max(1f, fogDistanceByHour.Evaluate(ch));
+            fog.tint.value = fogTintByHour.Evaluate(ch / 24f);
         }
+        if (shadows != null)
+        {
+            shadows.maxShadowDistance.value = Mathf.Max(50f, shadowDistanceByHour.Evaluate(ch));
+            shadows.directionalTransmissionMultiplier.value = Mathf.Clamp01(transmissionByHour.Evaluate(ch));
+        }
+        if (cloudLayer != null)
+            cloudLayer.opacity.value = cloudOpacity;   // ao vivo — o clima futuro anima isto
     }
 
     /// <summary>Rotação de um direcional a partir de azimute/elevação (graus).
@@ -273,18 +362,35 @@ public class DayNightCycle : MonoBehaviour
     {
         var go = new GameObject("Lua (Day-Night)");
         go.transform.SetParent(transform, false);
+        // ORDEM IMPORTA: o HDLightRenderDatabase decide se a luz é "directional"
+        // NO REGISTRO do HDAdditionalLightData — e o AddHDLight sozinho seta o
+        // tipo DEPOIS de registrar. Criada assim, a lua ficava fora da lista de
+        // corpos celestes p/ sempre: iluminava, mas o DISCO nunca renderizava.
+        // Criar a Light já direcional ANTES do componente HD resolve.
+        moon = go.AddComponent<Light>();
+        moon.type = LightType.Directional;
         moonHd = go.AddHDLight(LightType.Directional);
-        moon = go.GetComponent<Light>();
         moon.color = moonColor;
         moon.intensity = moonMaxLux;
         moon.shadows = moonShadows ? LightShadows.Soft : LightShadows.None;
         moon.enabled = false;
         moonHd.interactsWithSky = true;
-        moonHd.angularDiameter = moonAngularDiameter;
-        // Manual: a fase vem do parâmetro moonPhase (o sol está desligado à
-        // noite, então ReflectSunLight não teria fonte).
+        // Manual: a fase vem do NightSky (o sol está desligado à noite, então
+        // ReflectSunLight não teria fonte). Disco/fase/textura: NightSky.
         moonHd.celestialBodyShadingSource = HDAdditionalLightData.CelestialBodyShadingSource.Manual;
-        moonHd.moonPhase = moonPhase;
+
+        // sombra da lua com a MESMA qualidade do sol da cena. O default do
+        // HDRP p/ luz criada em runtime (resolução baixa, bias genérico) fazia
+        // objetos pequenos (bushes) perderem a própria sombra à distância —
+        // "de longe brilha, de perto escurece".
+        moonHd.shadowResolution.useOverride = true;
+        moonHd.shadowResolution.@override = 2048;
+        if (sunHd != null)
+        {
+            moonHd.normalBias = sunHd.normalBias;
+            moonHd.slopeBias = sunHd.slopeBias;
+            moonHd.shadowNearPlane = sunHd.shadowNearPlane;
+        }
     }
 
     /// <summary>Volume global de runtime (padrão DragonDamageFeedback): troca o
@@ -300,19 +406,66 @@ public class DayNightCycle : MonoBehaviour
         volume.priority = 50f;
         var profile = volume.profile;   // instância própria de runtime
 
-        var env = profile.Add<VisualEnvironment>();
+        env = profile.Add<VisualEnvironment>();
         env.skyType.overrideState = true;
         env.skyType.value = (int)SkyType.PhysicallyBased;
         env.skyAmbientMode.overrideState = true;
         env.skyAmbientMode.value = SkyAmbientMode.Dynamic;
+        // explícito: nada de herdar default ambíguo do stack — o espaço
+        // (estrelas) exige World e o modo Advanced (EarthSimple ignora
+        // spaceEmissionTexture no renderer do PBS)
+        env.renderingSpace.overrideState = true;
+        env.renderingSpace.value = RenderingSpace.World;
 
-        profile.Add<PhysicallyBasedSky>();   // atmosfera terrestre padrão
+        pbsSky = profile.Add<PhysicallyBasedSky>();   // atmosfera terrestre padrão
+        pbsSky.type.overrideState = true;
+        pbsSky.type.value = PhysicallyBasedSkyModel.EarthAdvanced;
+
+        if (clouds)
+        {
+            env.cloudType.overrideState = true;
+            env.cloudType.value = (int)CloudType.CloudLayer;
+            // vento global do céu (o CloudLayer escuta por padrão)
+            env.windSpeed.overrideState = true;
+            env.windSpeed.value = cloudWindSpeed;
+            env.windOrientation.overrideState = true;
+            env.windOrientation.value = cloudWindOrientation;
+
+            cloudLayer = profile.Add<CloudLayer>();
+            cloudLayer.opacity.overrideState = true;
+            cloudLayer.opacity.value = cloudOpacity;
+            var la = cloudLayer.layerA;
+            if (cloudMap != null)
+            {
+                la.cloudMap.overrideState = true;
+                la.cloudMap.value = cloudMap;
+            }
+            la.thickness.overrideState = true;
+            la.thickness.value = cloudThickness;
+            la.castShadows.overrideState = true;
+            la.castShadows.value = cloudShadows;
+        }
 
         exposure = profile.Add<Exposure>();
         exposure.mode.overrideState = true;
-        exposure.mode.value = ExposureMode.Fixed;
+        exposure.mode.value = autoExposure ? ExposureMode.Automatic : ExposureMode.Fixed;
+        exposure.meteringMode.overrideState = true;
+        exposure.meteringMode.value = MeteringMode.CenterWeighted;
         exposure.fixedExposure.overrideState = true;
         exposure.fixedExposure.value = exposureByHour.Evaluate((float)hours);
+        exposure.limitMin.overrideState = true;
+        exposure.limitMax.overrideState = true;
+
+        indirect = profile.Add<IndirectLightingController>();
+        indirect.indirectDiffuseLightingMultiplier.overrideState = true;
+        indirect.reflectionLightingMultiplier.overrideState = true;
+        indirect.reflectionProbeIntensityMultiplier.overrideState = true;
+
+        // só a distância — os demais parâmetros de sombra (cascades etc.)
+        // continuam vindo do perfil ALP da cena
+        shadows = profile.Add<HDShadowSettings>();
+        shadows.maxShadowDistance.overrideState = true;
+        shadows.directionalTransmissionMultiplier.overrideState = true;
 
         if (fogEnabled)
         {
@@ -327,6 +480,26 @@ public class DayNightCycle : MonoBehaviour
             fog.enableVolumetricFog.value = volumetricFog;
         }
     }
+
+    /// <summary>Curvas padrão (públicas: o auto-setup usa para migrar cenas
+    /// salvas com calibrações antigas).</summary>
+    public static AnimationCurve DefaultExposureByHour() => new(
+        new Keyframe(0f, 6.3f), new Keyframe(4.5f, 6.3f), new Keyframe(6f, 8f),
+        new Keyframe(8f, 13.4f), new Keyframe(12f, 14.6f), new Keyframe(16f, 13.4f),
+        new Keyframe(18f, 8f), new Keyframe(19.5f, 6.6f), new Keyframe(24f, 6.3f));
+
+    public static AnimationCurve DefaultIndirectByHour() => new(
+        new Keyframe(0f, 0.3f), new Keyframe(5f, 0.3f), new Keyframe(7.5f, 1f),
+        new Keyframe(16.5f, 1f), new Keyframe(19.5f, 0.3f), new Keyframe(24f, 0.3f));
+
+    public static AnimationCurve DefaultSunTemperature() => new(
+        new Keyframe(0f, 2200f), new Keyframe(0.12f, 4300f), new Keyframe(0.5f, 5900f),
+        new Keyframe(0.88f, 4300f), new Keyframe(1f, 2200f));
+
+    public static AnimationCurve DefaultFogDistanceByHour() => new(
+        new Keyframe(0f, 320f), new Keyframe(6f, 350f), new Keyframe(10f, 1400f),
+        new Keyframe(15f, 1400f), new Keyframe(18f, 380f), new Keyframe(21f, 320f),
+        new Keyframe(24f, 320f));
 
     static Gradient DefaultFogTint()
     {

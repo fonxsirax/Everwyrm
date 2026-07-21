@@ -340,6 +340,7 @@ public class InfiniteTerrain : MonoBehaviour
     IEnumerator activeBuild;                    // tile em construção fatiada
     Vector2Int activeCoord;
     readonly System.Diagnostics.Stopwatch buildSw = new();
+    bool initialized;                           // Awake já derivou offsets/camadas?
 
     TerrainLayer[] layers;
     Material terrainMat;
@@ -354,10 +355,7 @@ public class InfiniteTerrain : MonoBehaviour
     void Awake()
     {
         Instance = this;
-        var rng = new System.Random(seed);
-        float Off() => (float)(rng.NextDouble() * 10000.0 - 5000.0);
-        oxT = Off(); ozT = Off(); oxM = Off(); ozM = Off();
-        oxH = Off(); ozH = Off(); oxD = Off(); ozD = Off();
+        InitNoiseOffsets();
 
         var shader = Shader.Find("HDRP/TerrainLit");
         terrainMat = shader != null ? new Material(shader) : null;
@@ -382,6 +380,17 @@ public class InfiniteTerrain : MonoBehaviour
 
         BuildScatterSetup();
         BuildStreamSetup();
+        initialized = true;
+    }
+
+    /// <summary>Deriva TODOS os offsets de noise da seed — o único "estado interno"
+    /// da geração. Re-executável (ApplyState troca a seed em runtime).</summary>
+    void InitNoiseOffsets()
+    {
+        var rng = new System.Random(seed);
+        float Off() => (float)(rng.NextDouble() * 10000.0 - 5000.0);
+        oxT = Off(); ozT = Off(); oxM = Off(); ozM = Off();
+        oxH = Off(); ozH = Off(); oxD = Off(); ozD = Off();
     }
 
     void Start()
@@ -393,8 +402,11 @@ public class InfiniteTerrain : MonoBehaviour
         }
         if (player == null) { enabled = false; return; }
 
-        // lago garantido perto do spawn — definir ANTES do primeiro tile
-        if (enableLakes && guaranteedStartLake)
+        // lago garantido perto do spawn — definir ANTES do primeiro tile.
+        // Só na PRIMEIRA criação do mundo: um estado carregado (ApplyState) já
+        // traz o centro salvo — recalcular aqui moveria o lago (e o terreno)
+        // se o jogador carregasse o save longe do spawn original.
+        if (enableLakes && guaranteedStartLake && !startLakeSet)
         {
             startLakeCenter = new Vector2(player.position.x + 70f, player.position.z);
             startLakeSet = true;
@@ -404,6 +416,59 @@ public class InfiniteTerrain : MonoBehaviour
         EnsureSnowfall();
         BuildTile(TileOf(player.position));     // tile inicial síncrono
         SnapPlayerToGround();
+    }
+
+    // ------------------------------------- ESTADO DO MUNDO (persistência/rede)
+    /// <summary>
+    /// Fotografa a identidade do mundo — o que um save grava e um servidor
+    /// autoritativo enviaria aos clientes. Tiles NÃO entram: são projeções
+    /// determinísticas deste estado + da configuração que viaja com a build.
+    /// </summary>
+    public WorldGenState CaptureState() => new()
+    {
+        seed = seed,
+        startLakeSet = startLakeSet,
+        startLakeCenter = startLakeCenter,
+    };
+
+    /// <summary>
+    /// Reconstrói o mundo a partir de uma identidade salva/recebida. Pode ser
+    /// chamado a qualquer momento: tiles existentes são descartados e renascem
+    /// do estado novo (mesma seed + mesmo lago inicial = mesmo mundo, bit a bit).
+    /// </summary>
+    public void ApplyState(WorldGenState state)
+    {
+        if (state == null) return;
+        seed = state.seed;
+        startLakeSet = state.startLakeSet;
+        startLakeCenter = state.startLakeCenter;
+
+        if (!initialized) return;   // Awake ainda vai rodar e ler os campos acima
+
+        InitNoiseOffsets();
+        BuildScatterSetup();        // re-executável: clusterOffsets dependem da seed
+        BuildStreamSetup();
+        ClearTiles();
+        if (player != null) BuildTile(TileOf(player.position));   // chão sob os pés
+    }
+
+    /// <summary>Descarta todos os tiles e a fila de construção — o streaming
+    /// normal do Update os reconstrói do estado atual.</summary>
+    void ClearTiles()
+    {
+        activeBuild = null;
+        buildQueue.Clear();
+        pending.Clear();
+        foreach (var kv in tiles)
+        {
+            var t = kv.Value;
+            if (t == null) continue;
+            var data = t.terrainData;
+            Destroy(t.gameObject);
+            Destroy(data);
+        }
+        tiles.Clear();
+        tileTrees.Clear();
     }
 
     void Update()
@@ -971,14 +1036,40 @@ public class InfiniteTerrain : MonoBehaviour
     }
 
     /// <summary>
-    /// Construção FATIADA de um tile: cada yield é um ponto de corte onde o pump
-    /// do Update pode parar ao estourar o orçamento de ms do frame. O splatmap e
-    /// o scatter leem o HEIGHTMAP JÁ CALCULADO (SampleHeight01/SlopeFromGrid) em
-    /// vez de rechamar HeightAt/SlopeAt — era o custo dominante do tile
-    /// (SlopeAt = 3×HeightAt ≈ 45 amostras de Perlin POR PIXEL).
+    /// Representação em memória de UM tile gerado — só dados (TerrainData é um
+    /// asset de dados, válido até em servidor headless), nada de objetos de cena.
+    /// É a fronteira entre GERAR o mundo e MOSTRAR o mundo: um servidor
+    /// autoritativo pararia aqui; o cliente segue para InstantiateTile.
+    /// </summary>
+    class TileData
+    {
+        public Vector2Int coord;
+        public TerrainData terrain;                     // heightmap + splatmap + trees
+        public readonly List<Vector2> landmarks = new(); // XZ dos marcos (minimapa)
+    }
+
+    /// <summary>
+    /// Construção FATIADA de um tile: gera os DADOS (GenerateTileSteps) e só
+    /// então instancia o visual (InstantiateTile). Cada yield é um ponto de
+    /// corte onde o pump do Update pode parar ao estourar o orçamento de ms.
     /// </summary>
     IEnumerator BuildTileSteps(Vector2Int coord)
     {
+        var data = new TileData { coord = coord };
+        var gen = GenerateTileSteps(data);
+        while (gen.MoveNext()) yield return null;
+        InstantiateTile(data);
+    }
+
+    /// <summary>
+    /// GERAÇÃO DE DADOS do tile — determinística por (estado do mundo, coord),
+    /// sem tocar na cena. O splatmap e o scatter leem o HEIGHTMAP JÁ CALCULADO
+    /// (SampleHeight01/SlopeFromGrid) em vez de rechamar HeightAt/SlopeAt — era
+    /// o custo dominante do tile (SlopeAt = 3×HeightAt ≈ 45 Perlin POR PIXEL).
+    /// </summary>
+    IEnumerator GenerateTileSteps(TileData data)
+    {
+        Vector2Int coord = data.coord;
         float ox = coord.x * tileSize, oz = coord.y * tileSize;
 
         // ---- alturas (bordas contínuas: noise em coordenadas de mundo)
@@ -1077,21 +1168,27 @@ public class InfiniteTerrain : MonoBehaviour
 
         // ---- vegetação/props: camadas de espalhamento (tree instances: o detail
         //      system do Unity não aceita prefabs com LODGroup e falhava em silêncio)
-        var treeXZ = new List<Vector2>();
         if (prototypes != null && prototypes.Length > 0)
         {
             td.treePrototypes = prototypes;
             td.RefreshPrototypes();
             yield return null;
-            var scatter = ScatterTileSteps(coord, td, ox, oz, heights, treeXZ);
+            var scatter = ScatterTileSteps(coord, td, ox, oz, heights, data.landmarks);
             while (scatter.MoveNext()) yield return null;
         }
-        tileTrees[coord] = treeXZ;
+        data.terrain = td;
+    }
 
-        var go = Terrain.CreateTerrainGameObject(td);
+    /// <summary>INSTANCIAÇÃO VISUAL do tile — a única parte que toca a cena.</summary>
+    void InstantiateTile(TileData data)
+    {
+        Vector2Int coord = data.coord;
+        tileTrees[coord] = data.landmarks;
+
+        var go = Terrain.CreateTerrainGameObject(data.terrain);
         go.name = $"Tile {coord.x},{coord.y}";
         go.transform.SetParent(transform, false);
-        go.transform.position = new Vector3(ox, 0f, oz);
+        go.transform.position = new Vector3(coord.x * tileSize, 0f, coord.y * tileSize);
 
         var terrain = go.GetComponent<Terrain>();
         if (terrainMat != null) terrain.materialTemplate = terrainMat;

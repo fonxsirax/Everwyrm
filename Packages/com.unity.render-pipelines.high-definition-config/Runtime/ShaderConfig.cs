@@ -39,7 +39,11 @@ namespace UnityEngine.Rendering.HighDefinition
         /// <summary>Uses pre-exposition to enhance color precision.</summary>
         PreExposition = 1,
         /// <summary>Precomputes atmospheric attenuation for the directional light on the CPU. This makes it independent from the fragment's position, which increases performance but reduces accuracy.</summary>
-        PrecomputedAtmosphericAttenuation = 1,
+        // Everwyrm: 0 (era 1). Com 1, o renderer do Physically Based Sky entra
+        // no modo "SupportSpace=false" e o spaceEmissionTexture (céu estrelado
+        // do NightSky) NUNCA é renderizado. 0 = caminho clássico completo do
+        // PBS (espaço + corpos celestes + tabelas de espalhamento).
+        PrecomputedAtmosphericAttenuation = 0,
 
         /// <summary>Maximum number of views for XR.</summary>
 #if ENABLE_VR
