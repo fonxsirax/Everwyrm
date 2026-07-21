@@ -202,9 +202,10 @@ public static class WinterSetup
     // Mesmo pipeline do DesertSetup.RebuildClean, sem troca de materiais:
     // raiz + LODGroup + só MeshRenderers válidos (regras de tree instance),
     // colliders descartados (não suportados em trees — spam de warning).
-    // IMPORTANTE: fadeMode/alturas são COPIADOS do LODGroup original — os
-    // shaders de billboard (Tree Cross) do pack são autorados p/ renderizar com
-    // CrossFade; reconstruir com fade None deixava o LOD de cruz magenta.
+    // IMPORTANTE: alturas são COPIADAS do LODGroup original, mas o fade é
+    // SEMPRE CrossFade animado — troca de LOD diluída em dither em vez de pop
+    // na frente do jogador (os shaders de billboard/Tree Cross do pack são
+    // autorados p/ CrossFade; fade None deixava o LOD de cruz magenta).
     const float SingleLodHeight = 0.18f;   // prefabs sem LODGroup (LOD único)
 
     static GameObject RebuildClean(GameObject src, string name)
@@ -214,13 +215,9 @@ public static class WinterSetup
 
         var lodRenderers = new List<MeshRenderer[]>();
         var lodParams = new List<(float height, float fadeWidth)>();
-        LODFadeMode fadeMode = LODFadeMode.None;
-        bool animateCross = false;
 
         if (inst.TryGetComponent<LODGroup>(out var srcLod))
         {
-            fadeMode = srcLod.fadeMode;
-            animateCross = srcLod.animateCrossFading;
             foreach (var lod in srcLod.GetLODs())
             {
                 var valid = new List<MeshRenderer>();
@@ -279,8 +276,8 @@ public static class WinterSetup
 
         var lodGroup = root.AddComponent<LODGroup>();
         lodGroup.SetLODs(lods.ToArray());
-        lodGroup.fadeMode = fadeMode;
-        lodGroup.animateCrossFading = animateCross;
+        lodGroup.fadeMode = LODFadeMode.CrossFade;
+        lodGroup.animateCrossFading = true;
         lodGroup.RecalculateBounds();
 
         var saved = PrefabUtility.SaveAsPrefabAsset(root, OutDir + "/" + name + ".prefab");

@@ -111,6 +111,18 @@ public class AnimalGroup
         stateUntil = Mathf.Max(stateUntil, Time.time + 4f);
     }
 
+    /// <summary>Convite a uivar em breve (anoitecer) — só afeta espécies com o clipe.</summary>
+    public void HowlSoon() =>
+        nextHowl = Mathf.Min(nextHowl, Time.time + Random.Range(2f, 12f));
+
+    /// <summary>O alvo saiu do mundo (grupo reciclado pelo pool) — esquece a caçada.</summary>
+    public void ForgetTarget(AnimalAgent a)
+    {
+        if (HuntTarget != a) return;
+        HuntTarget = null;
+        if (State == GroupState.Hunting) State = GroupState.Calm;
+    }
+
     // ----------------------------------------------------------------- TICK
     public void Tick(float dt)
     {

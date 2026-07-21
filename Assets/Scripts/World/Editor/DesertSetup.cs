@@ -171,6 +171,8 @@ public static class DesertSetup
 
         var lodGroup = root.AddComponent<LODGroup>();
         lodGroup.SetLODs(lods.ToArray());
+        lodGroup.fadeMode = LODFadeMode.CrossFade;      // troca de LOD em dither, sem pop
+        lodGroup.animateCrossFading = true;
         lodGroup.RecalculateBounds();
 
         var saved = PrefabUtility.SaveAsPrefabAsset(root, OutDir + "/" + name + ".prefab");

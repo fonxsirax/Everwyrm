@@ -192,6 +192,22 @@ public class DayNightCycle : MonoBehaviour
     public event Action<int> OnHourChanged;   // hora inteira virou (0-23)
     public event Action OnSunrise, OnSunset;  // futuros: fauna dormir, eventos...
 
+    /// <summary>Período de atividade da fauna derivado da hora — é o que o
+    /// WildlifeClock consome (animais dormem/caçam por horário de verdade).</summary>
+    public AnimalDefinition.ActivityPeriod FaunaPeriod
+    {
+        get
+        {
+            float h = TimeOfDay;
+            if (h >= sunriseHour - 2f && h < sunriseHour + 1f)
+                return AnimalDefinition.ActivityPeriod.Madrugada;
+            if (h >= sunsetHour - 1f && h < sunsetHour + 2f)
+                return AnimalDefinition.ActivityPeriod.Entardecer;
+            return IsNight ? AnimalDefinition.ActivityPeriod.Noite
+                           : AnimalDefinition.ActivityPeriod.Dia;
+        }
+    }
+
     /// <summary>Pula o relógio para uma hora (debug/eventos). Determinístico.</summary>
     public void SetTime(float newHours)
     {
@@ -213,6 +229,10 @@ public class DayNightCycle : MonoBehaviour
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         hours = Mathf.Repeat(startAtNight ? nightStartHour : startHour, 24f);
+        // pluga a fauna no relógio real: corujas caçam à noite, cervos pastam
+        // de dia (o WildlifeClock nasceu como ponte esperando este Provider)
+        WildlifeClock.Provider = () => Instance != null ? Instance.FaunaPeriod
+                                                        : AnimalDefinition.ActivityPeriod.Dia;
     }
 
     void Start()
@@ -228,7 +248,11 @@ public class DayNightCycle : MonoBehaviour
 
     void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+            WildlifeClock.Provider = null;   // fauna volta ao "Dia" neutro
+        }
         if (moon != null) Destroy(moon.gameObject);
         if (volume != null) Destroy(volume.gameObject);
     }
@@ -438,6 +462,11 @@ public class DayNightCycle : MonoBehaviour
             cloudLayer.opacity.overrideState = true;
             cloudLayer.opacity.value = cloudOpacity;
             var la = cloudLayer.layerA;
+            // sem isto as nuvens ficam ESTÁTICAS: o default (None) ignora o
+            // vento global; Procedural faz o mapa deslizar na direção/veloc.
+            // do vento configurado acima
+            la.distortionMode.overrideState = true;
+            la.distortionMode.value = CloudDistortionMode.Procedural;
             if (cloudMap != null)
             {
                 la.cloudMap.overrideState = true;

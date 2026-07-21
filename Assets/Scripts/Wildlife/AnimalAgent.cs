@@ -49,6 +49,10 @@ public class AnimalAgent : MonoBehaviour
     // ---- personalidade individual: nenhum animal é idêntico ao vizinho
     float braveryMul, curiosityMul, tempoMul;
 
+    // ---- pooling: escala original do prefab (Init multiplica, nunca acumula)
+    Vector3 baseScale;
+    bool baseScaleKnown;
+
     // ---- movimento
     Vector3 pos;
     float yaw, yawVel, speed, moveSpeed;
@@ -88,7 +92,21 @@ public class AnimalAgent : MonoBehaviour
         slotIndex = slot;
         hp = def.health * (IsYoung ? 0.45f : 1f);
 
-        transform.localScale *= scale;
+        // ---- reset completo: com o pool, este corpo pode já ter vivido outra vida
+        Corpse = null; Mother = null; playmate = null;
+        seq = null; seqPhase = 0;
+        gaitOverride = null; currentGait = null; currentState = null;
+        inLocomotion = false; posture = Posture.Stand;
+        hasMoveTarget = false; hasFaceTarget = false;
+        speed = 0f; yawVel = 0f;
+        lastHitAt = -99f; nextMelee = 0f; diedAt = 0f;
+        myHowlAt = -1f; respondedHowl = false;
+        stalkPauseUntil = 0f; nextStalkRoll = 0f;
+        groundNormal = Vector3.up;
+        clipLen.Clear();
+
+        if (!baseScaleKnown) { baseScale = transform.localScale; baseScaleKnown = true; }
+        transform.localScale = baseScale * scale;
         pos = transform.position;
         groundY = pos.y;
         yaw = prevYaw = transform.eulerAngles.y;
@@ -99,9 +117,11 @@ public class AnimalAgent : MonoBehaviour
         tempoMul = Random.Range(0.85f, 1.15f);
 
         anim = GetComponent<Animator>();
+        anim.enabled = true;                 // cadáver reciclado desligou o Animator
         anim.runtimeAnimatorController = role.controller;
         anim.applyRootMotion = false;
         anim.cullingMode = AnimatorCullingMode.CullUpdateTransforms;
+        anim.Rebind();                       // limpa a pose/estado da vida anterior
 
         if (role.controller != null)
             foreach (var c in role.controller.animationClips)
@@ -145,8 +165,24 @@ public class AnimalAgent : MonoBehaviour
     /// <summary>Remoção limpa pelo spawner (fora do raio). Corpo e carcaça juntos.</summary>
     public void Despawn()
     {
-        if (Corpse != null) Destroy(Corpse.gameObject);
-        Destroy(gameObject);
+        PrepareRelease();
+        WildlifePool.Release(gameObject);
+    }
+
+    /// <summary>
+    /// Ninguém pode continuar apontando para um corpo que voltou ao pool —
+    /// na próxima vida ele será OUTRO animal (talvez de outra espécie).
+    /// </summary>
+    void PrepareRelease()
+    {
+        if (Corpse != null) { Destroy(Corpse.gameObject); Corpse = null; }
+        if (Group != null)
+            foreach (var m in Group.Members)
+            {
+                if (m == this) continue;
+                if (m.Mother == this) m.Mother = null;
+                if (m.playmate == this) m.playmate = null;
+            }
     }
 
     // ================================================================ UPDATE
@@ -941,8 +977,8 @@ public class AnimalAgent : MonoBehaviour
             transform.position = pos;
             if (transform.position.y < groundY - 1.2f)
             {
-                if (Corpse != null) Destroy(Corpse.gameObject);
-                Destroy(gameObject);
+                PrepareRelease();
+                WildlifePool.Release(gameObject);
             }
         }
     }

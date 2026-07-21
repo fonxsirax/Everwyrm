@@ -107,6 +107,7 @@ static class EverwyrmAutoSetup
         }
         MigrateCycleTuning(cycle, cycle.GetComponent<NightSky>());
         EnsureMoonTexture(cycle.GetComponent<NightSky>());
+        EnsureStarShaderInBuild();
 
         // 5) Fauna configurada? (controllers + espécies do Forest Animals 2.0)
         if (AssetDatabase.IsValidFolder("Assets/Red_Deer/Wild_Animals"))
@@ -198,6 +199,32 @@ static class EverwyrmAutoSetup
         UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(cycle.gameObject.scene);
         if (applied > 0)
             Debug.Log($"[EverwyrmAutoSetup] Calibração do ciclo migrada p/ v{DayNightCycle.CurrentTuningVersion} ({applied} ajuste(s)) — salve a cena.");
+    }
+
+    // ------------------------------------------------- SHADER NA BUILD
+    /// <summary>O gerador de estrelas só é usado via Shader.Find em runtime —
+    /// nenhum material o referencia, então o build STRIPPARIA o shader e o céu
+    /// noturno shipparia PRETO. Garante ele nos Always Included Shaders.</summary>
+    static void EnsureStarShaderInBuild()
+    {
+        var shader = Shader.Find("Everwyrm/NightSkyStarGen");
+        if (shader == null) return;
+
+        var gs = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset");
+        if (gs == null || gs.Length == 0) return;
+        var so = new SerializedObject(gs[0]);
+        var arr = so.FindProperty("m_AlwaysIncludedShaders");
+        if (arr == null) return;
+
+        for (int i = 0; i < arr.arraySize; i++)
+            if (arr.GetArrayElementAtIndex(i).objectReferenceValue == shader)
+                return;                                   // já incluído
+
+        arr.arraySize++;
+        arr.GetArrayElementAtIndex(arr.arraySize - 1).objectReferenceValue = shader;
+        so.ApplyModifiedProperties();
+        AssetDatabase.SaveAssets();
+        Debug.Log("[EverwyrmAutoSetup] NightSkyStarGen adicionado aos Always Included Shaders — sem isso a BUILD shipparia sem estrelas.");
     }
 
     // ------------------------------------------------------ TEXTURA DA LUA

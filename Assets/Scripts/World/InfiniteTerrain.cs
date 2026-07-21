@@ -1251,6 +1251,10 @@ public class InfiniteTerrain : MonoBehaviour
         terrain.heightmapPixelError = 8f;
         terrain.treeBillboardDistance = 180f;
         terrain.treeDistance = 700f;
+        // packs autoram LOD0 valendo só à queima-roupa e a troca ficava na cara
+        // do jogador — empurra TODAS as transições de LOD da vegetação 50% p/
+        // longe (uniforme, sem reautorar os LODGroups dos packs)
+        terrain.treeLODBiasMultiplier = 1.5f;
 
         if (microSplatMaterial != null)
         {

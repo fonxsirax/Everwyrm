@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
+using Activity = AnimalDefinition.ActivityPeriod;
 using Biome = InfiniteTerrain.Biome;
 using RoleKind = AnimalDefinition.RoleKind;
 using Social = AnimalDefinition.SocialModel;
@@ -382,13 +383,14 @@ public static class WildlifeSetup
             B(Biome.Tundra, 0.25f, 0.55f), B(Biome.Deserto, 0.35f, 0.2f),
         };
         d.spawnWeight = 14f; d.maxActiveGroups = 6;
+        d.activity = Activity.Madrugada | Activity.Entardecer | Activity.Noite;
         d.walkSpeed = 0.7f; d.trotSpeed = 2.4f; d.runSpeed = 7f; d.turnSpeed = 320f;
         d.bravery = 0.05f; d.aggression = 0f; d.curiosity = 0.15f; d.alertness = 0.9f;
         d.grazing = 0.7f; d.restfulness = 0.35f; d.waterAffinity = 0.15f;
         d.unpredictability = 0f; d.playfulness = 0.8f;
         d.sightRange = 42f; d.fleeDistance = 30f; d.attackRange = 0f;
         d.ignoreBelowGrowth = 0f; d.panicAboveGrowth = 0.5f;
-        d.territorial = false; d.migrationChancePerMinute = 0.05f;
+        d.territorial = false; d.migrationChancePerMinute = 0.08f;
         d.migrationDistance = new Vector2(180f, 380f);
         d.health = 14f; d.nutrition = 12f; d.predator = false; d.preySpecies = null;
         EditorUtility.SetDirty(d);
@@ -412,6 +414,7 @@ public static class WildlifeSetup
             B(Biome.Tundra, 0.25f, 0.5f), B(Biome.Deserto, 0.35f, 0.25f),
         };
         d.spawnWeight = 6f; d.maxActiveGroups = 4;
+        d.activity = Activity.Entardecer | Activity.Noite | Activity.Madrugada;
         d.walkSpeed = 1f; d.trotSpeed = 3.2f; d.runSpeed = 8.2f; d.turnSpeed = 300f;
         d.bravery = 0.35f; d.aggression = 0.1f; d.curiosity = 0.95f; d.alertness = 0.75f;
         d.grazing = 0.3f; d.restfulness = 0.5f; d.waterAffinity = 0.25f;
@@ -419,7 +422,7 @@ public static class WildlifeSetup
         d.sightRange = 70f; d.fleeDistance = 24f; d.attackRange = 0f;
         d.meleeRange = 1.6f; d.attackDamage = 4f;
         d.ignoreBelowGrowth = 0f; d.panicAboveGrowth = 0.6f;
-        d.migrationChancePerMinute = 0.07f; d.migrationDistance = new Vector2(200f, 450f);
+        d.migrationChancePerMinute = 0.1f; d.migrationDistance = new Vector2(200f, 450f);
         d.health = 26f; d.nutrition = 20f;
         d.predator = true; d.preySpecies = new[] { "Lebre" }; d.huntChancePerMinute = 0.3f;
         EditorUtility.SetDirty(d);
@@ -441,13 +444,14 @@ public static class WildlifeSetup
         };
         d.biomes = new[] { B(Biome.Floresta, 0.25f, 1f), B(Biome.Campos, 0.2f, 0.75f) };
         d.spawnWeight = 10f; d.maxActiveGroups = 5;
+        d.activity = Activity.Madrugada | Activity.Dia | Activity.Entardecer;
         d.walkSpeed = 1.2f; d.trotSpeed = 3.8f; d.runSpeed = 8.6f; d.turnSpeed = 240f;
         d.bravery = 0.08f; d.aggression = 0.02f; d.curiosity = 0.2f; d.alertness = 0.85f;
         d.grazing = 0.85f; d.restfulness = 0.3f; d.waterAffinity = 0.35f;
         d.playfulness = 0.7f;
         d.sightRange = 75f; d.fleeDistance = 55f; d.attackRange = 0f;
         d.panicAboveGrowth = 0.45f;
-        d.migrationChancePerMinute = 0.09f; d.migrationDistance = new Vector2(250f, 550f);
+        d.migrationChancePerMinute = 0.14f; d.migrationDistance = new Vector2(250f, 550f);
         d.health = 55f; d.nutrition = 45f;
         EditorUtility.SetDirty(d);
 
@@ -461,6 +465,7 @@ public static class WildlifeSetup
         d.roles = new[] { Role("Deers/DeerStag", RoleKind.Lider, "Stag", 1, 1, 1f, 1f, 1.02f, 1.1f) };
         d.biomes = new[] { B(Biome.Floresta, 0.3f, 0.9f), B(Biome.Campos, 0.25f, 0.6f) };
         d.spawnWeight = 2.2f; d.maxActiveGroups = 3;
+        d.activity = Activity.Madrugada | Activity.Dia | Activity.Entardecer;
         d.walkSpeed = 1.25f; d.trotSpeed = 3.8f; d.runSpeed = 8.8f; d.turnSpeed = 230f;
         d.bravery = 0.5f; d.aggression = 0.35f; d.curiosity = 0.3f; d.alertness = 0.8f;
         d.grazing = 0.6f; d.restfulness = 0.3f; d.waterAffinity = 0.35f;
@@ -486,7 +491,8 @@ public static class WildlifeSetup
             Role("RedDeers/RedDeer_Calf", RoleKind.Filhote, "Filhote", 2, 4, 0.85f, 0.95f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Campos, 0.22f, 1f), B(Biome.Floresta, 0.28f, 0.5f) };
-        d.spawnWeight = 7f; d.maxActiveGroups = 2;
+        d.spawnWeight = 7f; d.maxActiveGroups = 3;
+        d.activity = Activity.Madrugada | Activity.Dia | Activity.Entardecer;
         d.walkSpeed = 1.3f; d.trotSpeed = 4f; d.runSpeed = 9f; d.turnSpeed = 220f;
         d.bravery = 0.15f; d.aggression = 0.05f; d.curiosity = 0.2f; d.alertness = 0.8f;
         d.grazing = 0.85f; d.restfulness = 0.3f; d.waterAffinity = 0.4f; d.playfulness = 0.7f;
@@ -508,14 +514,15 @@ public static class WildlifeSetup
             B(Biome.Tundra, 0.25f, 1f), B(Biome.Floresta, 0.28f, 0.55f),
             B(Biome.Montanha, 0.3f, 0.3f),
         };
-        d.spawnWeight = 2.6f; d.maxActiveGroups = 2;
+        d.spawnWeight = 2.6f; d.maxActiveGroups = 3;
+        d.activity = Activity.Madrugada | Activity.Dia | Activity.Entardecer;
         d.walkSpeed = 1.5f; d.trotSpeed = 3.6f; d.runSpeed = 7.8f; d.turnSpeed = 170f;
         d.bravery = 0.95f; d.aggression = 0.55f; d.curiosity = 0.15f; d.alertness = 0.35f;
         d.grazing = 0.7f; d.restfulness = 0.4f; d.waterAffinity = 0.85f;
         d.sightRange = 55f; d.fleeDistance = 18f;
         d.attackRange = 15f; d.meleeRange = 3.4f; d.attackDamage = 30f;
         d.ignoreBelowGrowth = 0.45f; d.panicAboveGrowth = 0.9f;
-        d.migrationChancePerMinute = 0.03f; d.migrationDistance = new Vector2(250f, 500f);
+        d.migrationChancePerMinute = 0.06f; d.migrationDistance = new Vector2(250f, 500f);
         d.health = 220f; d.nutrition = 110f;
         EditorUtility.SetDirty(d);
 
@@ -533,14 +540,15 @@ public static class WildlifeSetup
             Role("Moose/MooseCalf", RoleKind.Filhote, "Cria", 1, 1, 1f, 0.9f, 0.9f, 1f),
         };
         d.biomes = new[] { B(Biome.Tundra, 0.25f, 1f), B(Biome.Floresta, 0.3f, 0.5f) };
-        d.spawnWeight = 1.2f; d.maxActiveGroups = 1;
+        d.spawnWeight = 1.2f; d.maxActiveGroups = 2;
+        d.activity = Activity.Madrugada | Activity.Dia | Activity.Entardecer;
         d.walkSpeed = 1.5f; d.trotSpeed = 3.6f; d.runSpeed = 7.8f; d.turnSpeed = 175f;
         d.bravery = 0.8f; d.aggression = 0.75f; d.curiosity = 0.1f; d.alertness = 0.6f;
         d.grazing = 0.7f; d.restfulness = 0.35f; d.waterAffinity = 0.8f; d.playfulness = 0.75f;
         d.sightRange = 55f; d.fleeDistance = 22f;
         d.attackRange = 16f; d.meleeRange = 3.2f; d.attackDamage = 26f;
         d.ignoreBelowGrowth = 0.3f; d.panicAboveGrowth = 0.85f;
-        d.migrationChancePerMinute = 0.03f;
+        d.migrationChancePerMinute = 0.06f;
         d.health = 190f; d.nutrition = 95f;
         EditorUtility.SetDirty(d);
 
@@ -560,6 +568,7 @@ public static class WildlifeSetup
         };
         d.biomes = new[] { B(Biome.Floresta, 0.25f, 1f), B(Biome.Campos, 0.25f, 0.6f) };
         d.spawnWeight = 6.5f; d.maxActiveGroups = 5;
+        d.activity = Activity.Entardecer | Activity.Noite;
         d.walkSpeed = 1.1f; d.trotSpeed = 3.3f; d.runSpeed = 8f; d.turnSpeed = 260f;
         d.bravery = 0.5f; d.aggression = 0.45f; d.curiosity = 0.3f; d.alertness = 0.6f;
         d.grazing = 0.8f; d.restfulness = 0.35f; d.waterAffinity = 0.3f;
@@ -567,7 +576,7 @@ public static class WildlifeSetup
         d.sightRange = 55f; d.fleeDistance = 28f;
         d.attackRange = 11f; d.meleeRange = 2.2f; d.attackDamage = 16f;
         d.ignoreBelowGrowth = 0.1f; d.panicAboveGrowth = 0.7f;
-        d.migrationChancePerMinute = 0.06f; d.migrationDistance = new Vector2(200f, 450f);
+        d.migrationChancePerMinute = 0.1f; d.migrationDistance = new Vector2(200f, 450f);
         d.health = 80f; d.nutrition = 55f;
         EditorUtility.SetDirty(d);
 
@@ -585,6 +594,7 @@ public static class WildlifeSetup
             B(Biome.Tundra, 0.3f, 0.35f),
         };
         d.spawnWeight = 1.8f; d.maxActiveGroups = 2;
+        d.activity = Activity.Dia | Activity.Entardecer;
         d.walkSpeed = 1.25f; d.trotSpeed = 3.4f; d.runSpeed = 8.4f; d.turnSpeed = 200f;
         d.bravery = 0.95f; d.aggression = 0.6f; d.curiosity = 0.75f; d.alertness = 0.5f;
         d.grazing = 0.6f; d.restfulness = 0.5f; d.waterAffinity = 0.6f;
@@ -611,6 +621,7 @@ public static class WildlifeSetup
         };
         d.biomes = new[] { B(Biome.Floresta, 0.3f, 1f), B(Biome.Montanha, 0.3f, 0.5f) };
         d.spawnWeight = 0.9f; d.maxActiveGroups = 1;
+        d.activity = Activity.Dia | Activity.Entardecer;
         d.walkSpeed = 1.25f; d.trotSpeed = 3.4f; d.runSpeed = 8.2f; d.turnSpeed = 200f;
         d.bravery = 0.95f; d.aggression = 0.9f; d.curiosity = 0.5f; d.alertness = 0.7f;
         d.grazing = 0.6f; d.restfulness = 0.45f; d.waterAffinity = 0.6f; d.playfulness = 0.95f;
@@ -642,6 +653,7 @@ public static class WildlifeSetup
             B(Biome.Montanha, 0.3f, 0.5f),
         };
         d.spawnWeight = 4.2f; d.maxActiveGroups = 3;
+        d.activity = Activity.Entardecer | Activity.Noite | Activity.Madrugada;
         d.walkSpeed = 1.2f; d.trotSpeed = 3.7f; d.runSpeed = 9f; d.turnSpeed = 280f;
         d.bravery = 0.75f; d.aggression = 0.5f; d.curiosity = 0.5f; d.alertness = 0.8f;
         d.grazing = 0.1f; d.restfulness = 0.45f; d.waterAffinity = 0.3f; d.playfulness = 0.9f;
@@ -672,14 +684,15 @@ public static class WildlifeSetup
             Role("Hares/HareYoung", RoleKind.Filhote, "Filhote", 0, 2, 0.6f, 0.95f, 0.88f, 1f),
         };
         d.biomes = new[] { B(Biome.Deserto, 0.3f, 1f) };
-        d.spawnWeight = 8f; d.maxActiveGroups = 3;
+        d.spawnWeight = 8f; d.maxActiveGroups = 4;
+        d.activity = Activity.Madrugada | Activity.Entardecer | Activity.Noite;
         d.walkSpeed = 0.7f; d.trotSpeed = 2.4f; d.runSpeed = 7f; d.turnSpeed = 320f;
         d.bravery = 0.05f; d.aggression = 0f; d.curiosity = 0.15f; d.alertness = 0.9f;
         d.grazing = 0.5f; d.restfulness = 0.3f; d.waterAffinity = 0.5f;
         d.playfulness = 0.8f;
         d.sightRange = 42f; d.fleeDistance = 30f; d.attackRange = 0f;
         d.panicAboveGrowth = 0.5f;
-        d.migrationChancePerMinute = 0.08f; d.migrationDistance = new Vector2(200f, 420f);
+        d.migrationChancePerMinute = 0.1f; d.migrationDistance = new Vector2(200f, 420f);
         d.health = 14f; d.nutrition = 12f;
         EditorUtility.SetDirty(d);
 
@@ -697,14 +710,15 @@ public static class WildlifeSetup
             Role("Foxes/FoxCub", RoleKind.Filhote, "Filhote", 0, 2, 0.3f, 0.9f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Deserto, 0.3f, 1f) };
-        d.spawnWeight = 5f; d.maxActiveGroups = 2;
+        d.spawnWeight = 5f; d.maxActiveGroups = 3;
+        d.activity = Activity.Entardecer | Activity.Noite | Activity.Madrugada;
         d.walkSpeed = 1f; d.trotSpeed = 3.2f; d.runSpeed = 8.2f; d.turnSpeed = 300f;
         d.bravery = 0.4f; d.aggression = 0.1f; d.curiosity = 0.95f; d.alertness = 0.8f;
         d.grazing = 0.2f; d.restfulness = 0.45f; d.waterAffinity = 0.55f;
         d.unpredictability = 0.15f; d.playfulness = 0.9f;
         d.sightRange = 70f; d.fleeDistance = 24f; d.meleeRange = 1.6f; d.attackDamage = 4f;
         d.panicAboveGrowth = 0.6f;
-        d.migrationChancePerMinute = 0.08f; d.migrationDistance = new Vector2(220f, 480f);
+        d.migrationChancePerMinute = 0.1f; d.migrationDistance = new Vector2(220f, 480f);
         d.health = 26f; d.nutrition = 20f;
         d.predator = true; d.preySpecies = new[] { "Lebre" }; d.huntChancePerMinute = 0.35f;
         EditorUtility.SetDirty(d);
@@ -724,7 +738,8 @@ public static class WildlifeSetup
             Role("Boars/BoarYoung", RoleKind.Filhote, "Filhote", 0, 2, 0.5f, 0.9f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Deserto, 0.35f, 0.8f) };
-        d.spawnWeight = 3f; d.maxActiveGroups = 2;
+        d.spawnWeight = 3f; d.maxActiveGroups = 3;
+        d.activity = Activity.Entardecer | Activity.Noite;
         d.walkSpeed = 1.1f; d.trotSpeed = 3.3f; d.runSpeed = 8f; d.turnSpeed = 260f;
         d.bravery = 0.55f; d.aggression = 0.5f; d.curiosity = 0.3f; d.alertness = 0.6f;
         d.grazing = 0.85f; d.restfulness = 0.3f; d.waterAffinity = 0.65f;
@@ -732,7 +747,7 @@ public static class WildlifeSetup
         d.sightRange = 55f; d.fleeDistance = 28f;
         d.attackRange = 11f; d.meleeRange = 2.2f; d.attackDamage = 16f;
         d.ignoreBelowGrowth = 0.1f; d.panicAboveGrowth = 0.7f;
-        d.migrationChancePerMinute = 0.05f; d.migrationDistance = new Vector2(180f, 400f);
+        d.migrationChancePerMinute = 0.08f; d.migrationDistance = new Vector2(180f, 400f);
         d.health = 80f; d.nutrition = 55f;
         EditorUtility.SetDirty(d);
 
@@ -751,7 +766,8 @@ public static class WildlifeSetup
             Role("Wolfes/WolfCub", RoleKind.Filhote, "Filhote", 0, 1, 0.35f, 0.9f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Deserto, 0.35f, 0.7f) };
-        d.spawnWeight = 2f; d.maxActiveGroups = 1;
+        d.spawnWeight = 2f; d.maxActiveGroups = 2;
+        d.activity = Activity.Entardecer | Activity.Noite | Activity.Madrugada;
         d.walkSpeed = 1.2f; d.trotSpeed = 3.7f; d.runSpeed = 9f; d.turnSpeed = 280f;
         d.bravery = 0.75f; d.aggression = 0.5f; d.curiosity = 0.5f; d.alertness = 0.8f;
         d.grazing = 0.1f; d.restfulness = 0.4f; d.waterAffinity = 0.55f; d.playfulness = 0.9f;

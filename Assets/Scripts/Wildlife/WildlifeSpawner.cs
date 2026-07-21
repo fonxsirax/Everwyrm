@@ -19,15 +19,28 @@ public class WildlifeSpawner : MonoBehaviour
     public static WildlifeSpawner Instance { get; private set; }
 
     [Header("Anel de População")]
-    [SerializeField] float spawnRadiusMin = 130f;
-    [SerializeField] float spawnRadiusMax = 380f;
-    [SerializeField] float despawnRadius = 470f;
-    [SerializeField] float minPlayerDistance = 90f;   // nada de pop na cara do jogador
+    [SerializeField] float spawnRadiusMin = 70f;
+    [SerializeField] float spawnRadiusMax = 320f;
+    [SerializeField] float despawnRadius = 400f;
+    [SerializeField] float minPlayerDistance = 50f;    // nada de pop na cara do jogador
+    [SerializeField] float noPopInFrontDistance = 140f; // dentro do cone da câmera, só além disto
 
     [Header("Orçamento")]
-    [SerializeField] int maxAnimals = 190;
-    [SerializeField] float populateInterval = 2.5f;
-    [SerializeField] int attemptsPerCycle = 7;
+    [SerializeField] int maxAnimals = 240;
+    [SerializeField] float populateInterval = 1.5f;
+    [SerializeField] int attemptsPerCycle = 10;
+
+    [Header("Voo & Encontros")]
+    [SerializeField] float flightBiasSpeed = 8f;        // acima disto (m/s), spawna à FRENTE
+    [SerializeField, Range(0f, 1f)] float flightBiasFraction = 0.65f;
+    [SerializeField] float flightConeHalfAngle = 55f;   // meio-ângulo do cone frontal
+    [SerializeField] Vector2 flightSpawnRange = new(160f, 380f);
+    [SerializeField] float encounterRadius = 120f;      // grupo a menos disto = "encontro"
+    [SerializeField] float encounterTimeout = 45f;      // seca de encontros → força anel próximo
+    [SerializeField] Vector2 pressureSpawnRange = new(70f, 140f);
+
+    [Header("Ciclo Dia/Noite")]
+    [SerializeField] float shiftChangeDuration = 120f;  // janela da "troca de turno"
 
     AnimalDefinition[] defs;
     readonly List<AnimalGroup> groups = new();
@@ -38,6 +51,14 @@ public class WildlifeSpawner : MonoBehaviour
     DragonVitals dragonVitals;
     bool dragonWasFlying;
     float nextPopulate;
+
+    // ---- encontros & direção de deslocamento
+    Vector3 lastPlayerPos, playerVel;
+    float lastEncounterAt;
+
+    // ---- troca de turno (dia/noite)
+    AnimalDefinition.ActivityPeriod lastPeriod;
+    float shiftUntil;
 
     // ------------------------------------------------------- INFO DO DRAGÃO
     /// <summary>O dragão como "ameaça ambulante" para a fauna (null = sem jogador).</summary>
@@ -76,6 +97,7 @@ public class WildlifeSpawner : MonoBehaviour
     {
         Instance = this;
         defs = Resources.LoadAll<AnimalDefinition>("Wildlife");
+        WildlifePool.Ensure(gameObject);
 
         var p = GameObject.FindGameObjectWithTag("Player");
         if (p != null)
@@ -89,9 +111,14 @@ public class WildlifeSpawner : MonoBehaviour
 
     void Start()
     {
+        // Start (não Awake): o DayNightCycle já plugou o Provider do relógio
+        lastPeriod = WildlifeClock.Current;
+        lastEncounterAt = Time.time;
+        if (player != null) lastPlayerPos = player.position;
+
         // leva inicial: o mundo já nasce habitado (anel mais próximo)
-        for (int i = 0; i < 30; i++)
-            TrySpawnGroup(110f, spawnRadiusMax);
+        for (int i = 0; i < 40; i++)
+            TrySpawnGroup(spawnRadiusMin, spawnRadiusMax);
     }
 
     void Update()
@@ -100,6 +127,12 @@ public class WildlifeSpawner : MonoBehaviour
         float dt = Time.deltaTime;
         float now = Time.time;
 
+        // ---- direção/velocidade de deslocamento (alimenta o spawn à frente no voo)
+        Vector3 pv = (player.position - lastPlayerPos) / Mathf.Max(dt, 1e-4f);
+        lastPlayerPos = player.position;
+        if (pv.sqrMagnitude < 60f * 60f)   // teleporte/carregamento não conta
+            playerVel = Vector3.Lerp(playerVel, pv, 1f - Mathf.Exp(-3f * dt));
+
         // ---- grupos pensam (migração, caça, uivos, alarme)
         for (int i = groups.Count - 1; i >= 0; i--)
         {
@@ -107,14 +140,12 @@ public class WildlifeSpawner : MonoBehaviour
             g.Tick(dt);
             if (g.IsEmpty) { groups.RemoveAt(i); continue; }
 
-            // grupo ficou para trás → recicla (cadáveres com carcaça cheia ficam)
             Vector3 c = g.Centroid();
-            if (Horizontal(c, player.position) > despawnRadius)
-            {
-                for (int m = g.Members.Count - 1; m >= 0; m--)
-                    g.Members[m].Despawn();
-                groups.RemoveAt(i);
-            }
+            float dc = Horizontal(c, player.position);
+            if (dc < encounterRadius) lastEncounterAt = now;   // há fauna por perto
+
+            // grupo ficou para trás → recicla
+            if (dc > despawnRadius) DespawnGroup(i);
         }
 
         // ---- barulho de pouso: o dragão aterrissar perto acorda a vizinhança
@@ -125,15 +156,81 @@ public class WildlifeSpawner : MonoBehaviour
                     a.Startle(player.position);
         dragonWasFlying = flying;
 
+        // ---- troca de turno: o período virou (amanheceu/anoiteceu)?
+        var period = WildlifeClock.Current;
+        if (period != lastPeriod)
+        {
+            lastPeriod = period;
+            shiftUntil = now + shiftChangeDuration;
+            // anoiteceu: as alcateias anunciam o turno — coro de uivos
+            if (period == AnimalDefinition.ActivityPeriod.Noite)
+                foreach (var g in groups) g.HowlSoon();
+        }
+
         // ---- reposição contínua
         if (now >= nextPopulate)
         {
             nextPopulate = now + populateInterval;
+
+            // durante a troca de turno, recicla (gradualmente, longe e fora da
+            // câmera) quem não pertence ao novo período — cervos saem, lobos entram
+            if (now < shiftUntil) RecycleOneOffPeriodGroup(period);
+
             int alive = AnimalAgent.All.Count;
             if (alive < maxAnimals)
+            {
+                // seca de encontros? força o anel próximo até a fauna reaparecer
+                bool pressure = now - lastEncounterAt > encounterTimeout;
                 for (int i = 0; i < attemptsPerCycle; i++)
-                    TrySpawnGroup(spawnRadiusMin, spawnRadiusMax);
+                {
+                    if (pressure)
+                        TrySpawnGroup(pressureSpawnRange.x, pressureSpawnRange.y,
+                                      allowFlightBias: false);
+                    else
+                        TrySpawnGroup(spawnRadiusMin, spawnRadiusMax);
+                }
+            }
         }
+    }
+
+    /// <summary>Devolve o grupo `index` inteiro ao pool e o esquece em todo lugar.</summary>
+    void DespawnGroup(int index)
+    {
+        var g = groups[index];
+        foreach (var other in groups)
+            if (other != g && other.HuntTarget != null && other.HuntTarget.Group == g)
+                other.ForgetTarget(other.HuntTarget);
+        for (int m = g.Members.Count - 1; m >= 0; m--)
+            g.Members[m].Despawn();
+        groups.RemoveAt(index);
+    }
+
+    /// <summary>
+    /// Troca de turno: remove UM grupo fora do período por ciclo — só longe
+    /// (>250 m) e fora do cone da câmera, para ninguém ver o mundo "piscar".
+    /// </summary>
+    void RecycleOneOffPeriodGroup(AnimalDefinition.ActivityPeriod period)
+    {
+        for (int i = groups.Count - 1; i >= 0; i--)
+        {
+            var g = groups[i];
+            if ((g.Def.activity & period) != 0) continue;   // ainda em turno
+            Vector3 c = g.Centroid();
+            if (Horizontal(c, player.position) < 250f || InCameraView(c)) continue;
+            DespawnGroup(i);
+            return;
+        }
+    }
+
+    /// <summary>Ponto dentro do cone de visão da câmera principal (aproximação barata).</summary>
+    static bool InCameraView(Vector3 worldPos)
+    {
+        var cam = Camera.main;
+        if (cam == null) return false;
+        Vector3 to = worldPos - cam.transform.position;
+        to.y *= 0.5f;   // tolerância vertical (relevo não conta tanto)
+        // ~meia FOV horizontal + margem: 60° verticais ≈ 45° de meio-cone em 16:9
+        return Vector3.Angle(cam.transform.forward, to) < cam.fieldOfView * 0.75f;
     }
 
     static float Horizontal(Vector3 a, Vector3 b)
@@ -143,14 +240,38 @@ public class WildlifeSpawner : MonoBehaviour
     }
 
     // ================================================================ SPAWN
-    void TrySpawnGroup(float radiusMin, float radiusMax)
+    void TrySpawnGroup(float radiusMin, float radiusMax, bool allowFlightBias = true)
     {
         if (player == null) return;
 
-        // ponto candidato no anel
-        Vector2 dir = Random.insideUnitCircle.normalized;
-        float dist = Random.Range(Mathf.Max(radiusMin, minPlayerDistance), radiusMax);
+        // ponto candidato: em deslocamento rápido (voo!), a maioria das
+        // tentativas nasce num cone à FRENTE — o jogador sobrevoa fauna,
+        // não o vazio que ela deixou para trás
+        Vector2 dir;
+        float dist;
+        Vector3 vel = playerVel; vel.y = 0f;
+        if (allowFlightBias && vel.magnitude > flightBiasSpeed &&
+            Random.value < flightBiasFraction)
+        {
+            Vector3 d3 = Quaternion.Euler(0f, Random.Range(-flightConeHalfAngle,
+                                                            flightConeHalfAngle), 0f) *
+                         vel.normalized;
+            dir = new Vector2(d3.x, d3.z);
+            dist = Random.Range(flightSpawnRange.x, flightSpawnRange.y);
+        }
+        else
+        {
+            dir = Random.insideUnitCircle.normalized;
+            dist = Random.Range(Mathf.Max(radiusMin, minPlayerDistance), radiusMax);
+        }
         Vector3 origin = player.position + new Vector3(dir.x, 0f, dir.y) * dist;
+
+        // pop-in visível? (perto E dentro do cone da câmera) → tenta o lado oposto
+        if (dist < noPopInFrontDistance && InCameraView(origin))
+        {
+            origin = player.position - new Vector3(dir.x, 0f, dir.y) * dist;
+            if (InCameraView(origin)) return;   // câmera cobrindo os dois lados
+        }
 
         var world = InfiniteTerrain.Instance;
         float waterFrac = 0f;
@@ -176,7 +297,9 @@ public class WildlifeSpawner : MonoBehaviour
             if (CountGroupsOf(d) >= d.maxActiveGroups) continue;
 
             float w = d.spawnWeight * d.BiomeAffinityAt(origin.x, origin.z);
-            if ((d.activity & period) == 0) w *= 0.3f;   // fora do horário: raro, não impossível
+            // horário importa DE VERDADE: quem está no turno domina o elenco,
+            // quem está fora vira exceção (raro, não impossível)
+            w *= (d.activity & period) != 0 ? 1.5f : 0.15f;
             // beira de água grande: todo mundo aparece mais; quem AMA água
             // (alce bebendo no rio) aparece MUITO mais
             if (waterFrac > 0f)
@@ -319,9 +442,10 @@ public class WildlifeSpawner : MonoBehaviour
             if (world.HasLakes && p.y < world.WaterLevel + 0.4f) return null;
         }
 
-        // variação visual: prefab de cor sorteado (c1..cN) + escala própria
+        // variação visual: prefab de cor sorteado (c1..cN) + escala própria.
+        // O pool recicla o corpo — o Init() abaixo dá a ele uma vida nova.
         var prefab = role.prefabs[Random.Range(0, role.prefabs.Length)];
-        var go = Instantiate(prefab, p, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f));
+        var go = WildlifePool.Get(prefab, p, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f));
         go.name = $"{def.speciesName} ({role.name})";
         go.transform.SetParent(transform, true);
 

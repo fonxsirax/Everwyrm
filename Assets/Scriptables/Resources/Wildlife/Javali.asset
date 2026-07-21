@@ -286,8 +286,8 @@ MonoBehaviour:
     minWeight: 0.25
     affinity: 0.6
   spawnWeight: 6.5
-  maxActiveGroups: 3
-  activity: 15
+  maxActiveGroups: 5
+  activity: 12
   walkSpeed: 1.1
   trotSpeed: 3.3
   runSpeed: 8
@@ -310,7 +310,7 @@ MonoBehaviour:
   panicAboveGrowth: 0.7
   territorial: 0
   territoryRadius: 90
-  migrationChancePerMinute: 0.06
+  migrationChancePerMinute: 0.1
   migrationDistance: {x: 200, y: 450}
   health: 80
   nutrition: 55
