@@ -186,6 +186,53 @@ public class InfiniteTerrain : MonoBehaviour
     /// <summary>Altura da lâmina d'água (m de mundo).</summary>
     public float WaterLevel => waterLevel;
 
+    float maxTreeHeightCache = -1f;
+
+    /// <summary>
+    /// Altura (m) da MAIOR árvore que a floresta pode gerar — o prefab mais alto
+    /// das camadas de árvore da Floresta na sua escala máxima. Referência viva
+    /// para regras que dependem do porte da mata (ex.: altura segura de queda no
+    /// DragonController): trocar a vegetação recalibra tudo sozinho.
+    /// </summary>
+    public float MaxForestTreeHeight
+    {
+        get
+        {
+            if (maxTreeHeightCache >= 0f) return maxTreeHeightCache;
+            if (activeLayers == null) return 0f;      // Awake ainda não montou as camadas
+
+            float max = 0f;
+            foreach (var l in activeLayers)
+            {
+                // só ÁRVORES da floresta: `landmark` marca as camadas de porte
+                // (arbustos, moitas e grama não entram)
+                if (l == null || l.biome != Biome.Floresta || !l.landmark || l.prefabs == null)
+                    continue;
+                foreach (var p in l.prefabs)
+                    if (p != null && p.prefab != null)
+                        max = Mathf.Max(max, PrefabHeight(p.prefab) * Mathf.Max(0.01f, l.scaleRange.y));
+            }
+            return maxTreeHeightCache = max;
+        }
+    }
+
+    /// <summary>Altura do prefab em unidades locais (topo das malhas sobre a raiz).</summary>
+    static float PrefabHeight(GameObject prefab)
+    {
+        float top = 0f;
+        var toRoot = prefab.transform.worldToLocalMatrix;
+        foreach (var mf in prefab.GetComponentsInChildren<MeshFilter>())
+        {
+            if (mf.sharedMesh == null) continue;
+            var b = mf.sharedMesh.bounds;
+            var m = toRoot * mf.transform.localToWorldMatrix;
+            Vector3 c = m.MultiplyPoint3x4(b.center);
+            Vector3 e = m.MultiplyVector(b.extents);
+            top = Mathf.Max(top, c.y + Mathf.Abs(e.y));
+        }
+        return top;
+    }
+
     [Header("Cores dos biomas (fallback)")]
     [SerializeField] Color grassColor = new(0.42f, 0.55f, 0.25f);
     [SerializeField] Color forestColor = new(0.22f, 0.38f, 0.16f);
@@ -556,6 +603,7 @@ public class InfiniteTerrain : MonoBehaviour
     {
         activeLayers = scatterLayers != null && scatterLayers.Count > 0
             ? scatterLayers : DefaultLayers();
+        maxTreeHeightCache = -1f;   // vegetação mudou: recalcular a altura da mata
 
         // remove prefabs incompatíveis/vazios/peso 0 e monta o array único de prototypes.
         // UM prototype inválido quebra a renderização de TODOS os trees do tile,

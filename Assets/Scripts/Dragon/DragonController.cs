@@ -15,11 +15,15 @@ using UnityEngine.SceneManagement;
 ///         Space sobe — soltar perto do fim da batida dá impulso extra (timing!)
 ///         Ctrl/C mergulha
 ///         Alt esquiva aérea · Sem bater asas ~1s = planar
-///         Colisão tem consequência: raspão desvia e freia; batida forte
-///         (rápida e de frente) derruba a sustentação — desequilíbrio + dano!
+///         Colisão tem consequência FÍSICA (sem dano): raspão desvia e freia;
+///         batida forte derruba a sustentação — desequilíbrio até recuperar.
+///         Voando rente ao chão sem pedir altura, pousa sozinho (nada de raspar).
 ///         Peso importa: gordo sobe mal e afunda planando; grande plana melhor
 ///         Energia zerada = estol e queda!
-///  Água : entra andando em lago fundo ou pousando na água (queda amortecida).
+///         DANO só de QUEDA: acima de ~70% da maior árvore da floresta.
+///  Água : voo rasante sobre lago/rio faz spray e ondulações e NÃO derruba —
+///         só encostar na lâmina vira nado (queda amortecida, sem dano).
+///         Entra andando em lago fundo ou pousando na água.
 ///         W/S nada · A/D vira · Space decola da água. Gordo nada mais devagar.
 ///  Morto: Enter renasce.
 /// </summary>
@@ -60,14 +64,30 @@ public class DragonController : MonoBehaviour
     [SerializeField] float landApproachProbe = 16f;  // segurando S: busca chão até aqui
     [SerializeField] float landDescendRate = 16f;    // descida na aproximação (longe do chão)
     [SerializeField] float landFlareRate = 3f;       // descida perto do chão ("flare" suave)
+    [Tooltip("Voando rente ao chão SEM intenção de subir: pousa em vez de raspar (m)")]
+    [SerializeField] float autoLandHeight = 1.6f;
+    [Tooltip("Inclinação máxima que aceita pouso automático (1 = plano, 0.7 ≈ 45°)")]
+    [SerializeField] float autoLandMaxSlope = 0.7f;
     [SerializeField] LayerMask groundMask = 0;
+
+    [Header("Queda (dano só de altura REAL)")]
+    [Tooltip("Altura segura = esta fração da MAIOR árvore da floresta — a " +
+             "vegetação define o limite, então trocar as árvores recalibra sozinho")]
+    [SerializeField] float safeFallTreeFraction = 0.7f;
+    [Tooltip("Altura segura (m) se o mundo procedural não estiver disponível")]
+    [SerializeField] float safeFallFallback = 18f;
+    [Tooltip("Dano ao despencar do DOBRO da altura segura (cresce linear a partir dela)")]
+    [SerializeField] float fallDamageAtDouble = 35f;
+
+    [Header("Água (visual — não interrompe o voo)")]
+    [Tooltip("Barriga a esta distância da lâmina: spray/ondulações acompanhando o voo (m)")]
+    [SerializeField] float waterSkimHeight = 1.8f;
 
     [Header("Colisão em voo")]
     [SerializeField] float impactLight = 0.2f;       // fração da vel. máx.: abaixo é raspão
     [SerializeField] float impactHeavy = 0.5f;       // fração da vel. máx.: desequilíbrio
     [SerializeField] float impactSpeedLoss = 0.6f;   // perda de velocidade × impacto
     [SerializeField] float impactKnockDown = 6f;     // tranco p/ baixo no impacto máx. (m/s)
-    [SerializeField] float impactMaxDamage = 18f;    // dano da colisão forte no impacto máx.
     [SerializeField] float staggerTime = 1.2f;       // duração do desequilíbrio (s)
     [SerializeField] float impactCooldown = 0.4f;    // intervalo mínimo entre reações
     [SerializeField] float impactEnergyCost = 6f;    // energia da colisão leve × impacto
@@ -131,8 +151,10 @@ public class DragonController : MonoBehaviour
     float turnSmoothed, vertInput;
     float lastFlapTime, takeoffTime = -99f;
     float actionLockUntil;
-    Vector3 flightVel, pendingNormal;                // colisão em voo
+    Vector3 flightVel, pendingNormal, pendingPoint;  // colisão em voo
+    Collider pendingCollider;
     float pendingImpact, lastImpactTime = -99f, staggerUntil = -99f;
+    float fallFromY = float.NaN;                     // Y do início da queda DESCONTROLADA
     float flinchTime = -99f, flinchDir = 1f;         // "acusar o golpe" em voo
     const float FlinchDuration = 0.45f;
     const float FlinchAngle = 9f;                    // graus de rolagem no pico
@@ -258,8 +280,31 @@ public class DragonController : MonoBehaviour
 
         yaw += h * turnSpeedGround * dt;
 
-        if (grounded) verticalVel = -4f;
-        else verticalVel -= gravity * dt;
+        if (grounded)
+        {
+            // pisou o chão: cobra a altura se veio de uma queda de verdade
+            // (despencar de um penhasco andando conta igual a cair voando)
+            float severity = ResolveFall();
+            if (severity > 0f)
+            {
+                Lock(1.2f);
+                ImpactEffects.Emit(new ImpactEvent
+                {
+                    kind = ImpactKind.HardLanding,
+                    position = transform.position,
+                    normal = Vector3.up,
+                    velocity = Vector3.down * Mathf.Abs(verticalVel),
+                    strength01 = severity,
+                    scale = VfxScale,
+                });
+            }
+            verticalVel = -4f;
+        }
+        else
+        {
+            verticalVel -= gravity * dt;
+            TrackFall(verticalVel < -2f);   // do ápice em diante: é queda
+        }
 
         if (!Locked && Input.GetKeyDown(KeyCode.Space))
         {
@@ -361,20 +406,46 @@ public class DragonController : MonoBehaviour
         flightVel = fwd * flySpeed + Vector3.up * vy;   // OnControllerColliderHit mede o impacto daqui
         cc.Move(flightVel * dt);
 
-        // desceu até a lâmina d'água sobre lago: mergulha e vira nado
-        // (vale até no estol — a água amortece a queda, sem dano)
-        if (vy < 0f && DeepWaterAt(transform.position, out float surface) &&
-            transform.position.y <= surface + 0.3f)
+        // rastreia queda descontrolada (estol/desequilíbrio) p/ o dano de altura
+        TrackFall(stalling || IsStaggered);
+
+        bool overDeepWater = DeepWaterAt(transform.position, out float surface);
+
+        // ÁGUA: só o CONTATO real com a lâmina interrompe o voo — proximidade
+        // nunca força pouso. Encostou, vira nado (a água amortece, sem dano).
+        if (overDeepWater && vy < 0f && transform.position.y <= surface + 0.3f)
         {
             EnterSwim();
             return;
         }
+
+        // barriga rente à lâmina: spray e ondulações — puramente visual
+        if (overDeepWater) UpdateWaterSkim(surface);
 
         // carência maior pós-decolagem e pouso só em DESCIDA REAL (vy < -1.5):
         // o afundamento suave do planeio rápido (~-0.9) não força pouso.
         // Com intenção de pouso (S + chão perto), o flare gentil também conta.
         if (Time.time - takeoffTime < 1.5f) return;
         if (cc.isGrounded) { Land(); return; }
+
+        // ---- POUSO AUTOMÁTICO: voando rente ao chão sem intenção de subir, o
+        //      dragão pousa de verdade em vez de "raspar" o terreno voando.
+        //      Nunca contraria o jogador: segurar Space, qualquer subida real ou
+        //      a fase de decolagem cancelam. Só em chão pousável e fora da água
+        //      (sobre lago o voo rasante é livre — é o skim visual acima).
+        bool wantsAltitude = held || vy > 0.5f || (flight != null && flight.InTakeoffClimb);
+        if (!wantsAltitude && !overDeepWater)
+        {
+            Vector3 near = transform.position + cc.center;
+            if (Physics.SphereCast(near, cc.radius * 0.9f, Vector3.down, out var touch,
+                    autoLandHeight * s + cc.height * 0.5f,
+                    groundMask, QueryTriggerInteraction.Ignore) &&
+                touch.normal.y > autoLandMaxSlope && IsRealGround(touch.point))
+            {
+                Land();
+                return;
+            }
+        }
 
         if ((stalling || flySpeed <= landMaxSpeed * s) &&
             (vy < -1.5f || (landingSink > 0f && vy < -0.5f)))
@@ -402,17 +473,24 @@ public class DragonController : MonoBehaviour
         {
             pendingImpact = impact;
             pendingNormal = hit.normal;
+            pendingPoint = hit.point;
+            pendingCollider = hit.collider;
         }
     }
 
     /// <summary>Consequência proporcional: raspão passa batido, colisão leve
     /// freia e desvia, colisão forte derruba a sustentação (desequilíbrio) —
-    /// o jogador precisa recuperar velocidade pra voltar a voar.</summary>
+    /// o jogador precisa recuperar velocidade pra voltar a voar. Bater em
+    /// obstáculo NÃO tira vida: atrapalha o voo (e o que machuca é o chão,
+    /// se a queda vier de alto o bastante).</summary>
     void ProcessFlightImpact(float s)
     {
         float impact = pendingImpact;
         Vector3 n = pendingNormal;
+        Vector3 point = pendingPoint;
+        var surface = pendingCollider;
         pendingImpact = 0f;
+        pendingCollider = null;
 
         if (impact <= 0f || IsStaggered) return;
         if (Time.time - lastImpactTime < impactCooldown) return;
@@ -435,22 +513,99 @@ public class DragonController : MonoBehaviour
         flySpeed *= 1f - impact01 * impactSpeedLoss;
         flight?.Knock(-impactKnockDown * impact01);
 
+        // folhas, galhos, lascas — o VFX do obstáculo (ver ImpactEffects)
+        ImpactEffects.Emit(new ImpactEvent
+        {
+            kind = ImpactKind.ObstacleStrike,
+            position = point,
+            normal = n,
+            velocity = flightVel,
+            strength01 = impact01,
+            scale = VfxScale,
+            surface = surface,
+        });
+
         if (impact01 >= impactHeavy)
         {
-            // desequilíbrio: perde sustentação, cai e fica sem controle um instante
+            // desequilíbrio: perde sustentação, cai e fica sem controle um instante.
+            // Sem dano: a árvore atrapalha o voo, quem machuca é o chão lá embaixo.
             staggerUntil = Time.time + staggerTime;
             SetStall(true);
             flySpeed = Mathf.Min(flySpeed, minFlySpeed * s);
-            vitals?.Damage(impactMaxDamage * impact01);
             Lock(staggerTime);
-            Debug.LogWarning($"Colisão FORTE em voo: impacto {impact:0.0} m/s ({impact01:P0}) — desequilíbrio!");
         }
-        else
+        else Spend(impactEnergyCost * impact01);
+    }
+
+    /// <summary>O que a sondagem achou é CHÃO mesmo, e não o topo de uma árvore
+    /// ou de um rochedo? (evita "pousar" na copa da mata voando baixo)</summary>
+    bool IsRealGround(Vector3 point)
+    {
+        var world = InfiniteTerrain.Instance;
+        return world == null || point.y <= world.HeightAt(point.x, point.z) + 1f;
+    }
+
+    // --------------------------------------------------- QUEDA E ÁGUA (VFX)
+    /// <summary>Altura de queda que o dragão aguenta sem se machucar: ~70% da
+    /// MAIOR árvore da floresta. Mexer na vegetação recalibra o limite sozinho.</summary>
+    public float SafeFallHeight
+    {
+        get
         {
-            Spend(impactEnergyCost * impact01);
-            Debug.Log($"Colisão leve em voo: impacto {impact:0.0} m/s ({impact01:P0})");
+            float tree = InfiniteTerrain.Instance != null
+                ? InfiniteTerrain.Instance.MaxForestTreeHeight : 0f;
+            if (tree <= 0.5f) tree = safeFallFallback;   // mundo fixo/sem vegetação
+            return tree * safeFallTreeFraction;
         }
     }
+
+    /// <summary>Marca (e mantém) o Y onde uma queda DESCONTROLADA começou.
+    /// Descida controlada não conta: planar até o chão nunca machuca.</summary>
+    void TrackFall(bool uncontrolled)
+    {
+        if (uncontrolled) { if (float.IsNaN(fallFromY)) fallFromY = transform.position.y; }
+        else fallFromY = float.NaN;
+    }
+
+    /// <summary>Fecha a queda ao tocar o chão e aplica o dano da altura.
+    /// Retorna 0..1 = severidade (0 = pouso limpo) para o VFX/anim.</summary>
+    float ResolveFall()
+    {
+        if (float.IsNaN(fallFromY)) return 0f;      // não havia queda em curso
+        float drop = fallFromY - transform.position.y;
+        fallFromY = float.NaN;
+
+        float safe = SafeFallHeight;
+        if (drop <= safe) return 0f;
+
+        float excess = (drop - safe) / safe;             // 1 = caiu do dobro do seguro
+        vitals?.Damage(fallDamageAtDouble * excess);
+        return Mathf.Clamp01(excess);
+    }
+
+    /// <summary>Barriga rente ao lago/rio: spray e ondulações acompanhando o voo.
+    /// Só visual — a água nunca força pouso nem tira o dragão do ar.</summary>
+    void UpdateWaterSkim(float surfaceY)
+    {
+        float belly = transform.position.y + cc.center.y - cc.height * 0.5f;
+        float gap = belly - surfaceY;
+        float reach = waterSkimHeight * Mathf.Max(0.2f, transform.lossyScale.y);
+        if (gap < 0f || gap > reach) return;
+
+        float closeness = 1f - gap / reach;
+        ImpactEffects.Skim(new ImpactEvent
+        {
+            kind = ImpactKind.WaterSkim,
+            position = new Vector3(transform.position.x, surfaceY, transform.position.z),
+            normal = Vector3.up,
+            velocity = flightVel,
+            strength01 = closeness * Mathf.Max(0.35f, Speed01),
+            scale = VfxScale,
+        });
+    }
+
+    /// <summary>Tamanho do dragão — dimensiona os efeitos (filhote ≠ adulto).</summary>
+    float VfxScale => Mathf.Max(0.2f, transform.lossyScale.y);
 
     // ---------------------------------------------------------------- AÇÕES
     void HandleActions()
@@ -624,10 +779,25 @@ public class DragonController : MonoBehaviour
     void EnterSwim()
     {
         if (swimming) return;
+
+        // splash de entrada: mais forte quanto mais rápido o corpo bateu na lâmina
+        float surfaceY = InfiniteTerrain.Instance != null
+            ? InfiniteTerrain.Instance.WaterLevel : transform.position.y;
+        ImpactEffects.Emit(new ImpactEvent
+        {
+            kind = ImpactKind.WaterEntry,
+            position = new Vector3(transform.position.x, surfaceY, transform.position.z),
+            normal = Vector3.up,
+            velocity = flying ? flightVel : Vector3.down * Mathf.Abs(verticalVel),
+            strength01 = Mathf.Clamp01(Mathf.Abs(flying ? flightVel.y : verticalVel) / 14f),
+            scale = VfxScale,
+        });
+
         swimming = true;
         flying = false;
         gliding = false;
         SetStall(false);
+        fallFromY = float.NaN;      // água amortece: queda não machuca
         momentum = 0f;
         verticalVel = 0f;
         vertInput = 0f;
@@ -660,20 +830,40 @@ public class DragonController : MonoBehaviour
 
     void Land()
     {
-        // dano de queda ANTES de flying=false: o guard de OnDamaged suprime a
-        // reação "Get Hit" — a queda já foi contada por Stall Fall + Land,
-        // reagir de novo em pé parecia um espasmo
+        // Dano SÓ por altura de queda (ResolveFall), e ANTES de flying=false: o
+        // guard de OnDamaged suprime a reação "Get Hit" — a queda já foi contada
+        // por Stall Fall + Land, reagir de novo em pé parecia um espasmo.
         bool wasStalling = stalling;
-        if (wasStalling)
+        float severity = ResolveFall();
+        if (wasStalling) Lock(1.2f);
+
+        ImpactEffects.Emit(new ImpactEvent
         {
-            vitals?.Damage(8f);
-            Lock(1.2f);
-        }
+            kind = severity > 0f ? ImpactKind.HardLanding : ImpactKind.Landing,
+            position = transform.position,
+            normal = Vector3.up,
+            velocity = flightVel,
+            strength01 = severity > 0f ? severity
+                       : Mathf.Clamp01(flySpeed / Mathf.Max(1f, maxFlySpeed * S)),
+            scale = VfxScale,
+        });
+
         flying = false;
         gliding = false;
         SetStall(false);
-        planarSpeed = Mathf.Min(flySpeed, walkSpeed * S);
-        momentum = 0f;
+
+        // toca o chão CORRENDO: um pouso rápido vira corrida e desacelera sozinho
+        // (cortar direto para caminhada dava um solavanco). Queda feia estanca.
+        if (wasStalling || severity > 0f)
+        {
+            planarSpeed = Mathf.Min(flySpeed, walkSpeed * S);
+            momentum = 0f;
+        }
+        else
+        {
+            planarSpeed = Mathf.Min(flySpeed, EffRunSpeed);
+            momentum = Mathf.Clamp01(planarSpeed / Mathf.Max(0.01f, EffRunSpeed));
+        }
         verticalVel = -4f;
         vertInput = 0f;
         anim.SetBool(P_Flying, false);
