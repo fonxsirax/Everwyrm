@@ -65,6 +65,12 @@ public class InfiniteTerrain : MonoBehaviour
     [Tooltip("Escava um lago garantido a ~70 m do spawn do jogador (bom p/ testar).")]
     [SerializeField] bool guaranteedStartLake = true;
     [SerializeField] float startLakeRadius = 50f;
+    [Tooltip("Limpidez da água: distância de absorção da luz (m). Maior = mais límpida, fundo de areia visível (oásis); default HDRP era 5 (poço escuro).")]
+    [SerializeField] float waterClarity = 12f;
+    [Tooltip("Cor do corpo d'água nas partes fundas (espalhamento).")]
+    [SerializeField] Color waterScatteringColor = new(0.04f, 0.24f, 0.28f);
+    [Tooltip("Distorção máxima da refração (m) — o 'tremido' do fundo sob as ondulações.")]
+    [SerializeField] float waterRefractionDistance = 2.5f;
 
     Vector2 startLakeCenter;
     bool startLakeSet;
@@ -1237,6 +1243,13 @@ public class InfiniteTerrain : MonoBehaviour
         lakeSurface = go.AddComponent<UnityEngine.Rendering.HighDefinition.WaterSurface>();
         lakeSurface.surfaceType = UnityEngine.Rendering.HighDefinition.WaterSurfaceType.Pool;
         lakeSurface.geometryType = UnityEngine.Rendering.HighDefinition.WaterGeometryType.Quad;
+
+        // água LÍMPIDA de oásis/lago raso: olhando de cima o Fresnel manda ver
+        // ATRAVÉS — com o default (absorção 5 m) o fundo vira poço preto e mata
+        // a leitura; límpida, mostra o leito de areia e o céu espelha no rasante
+        lakeSurface.absorptionDistance = waterClarity;
+        lakeSurface.scatteringColor = waterScatteringColor;
+        lakeSurface.maxRefractionDistance = waterRefractionDistance;
 
         // volume subaquático: nevoeiro/efeito quando a câmera mergulha.
         // Escala do transform: x/z = 1800 (quad), y = 1 — então a caixa precisa

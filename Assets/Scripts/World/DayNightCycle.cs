@@ -302,12 +302,15 @@ public class DayNightCycle : MonoBehaviour
         }
         if (indirect != null)
         {
-            // dim de lightmaps/probes/reflexos gerados de dia — sem isso a
-            // vegetação baked continua "clareada" no meio da noite
-            float k = Mathf.Clamp01(indirectByHour.Evaluate(ch));
-            indirect.indirectDiffuseLightingMultiplier.value = k;
-            indirect.reflectionLightingMultiplier.value = k;
-            indirect.reflectionProbeIntensityMultiplier.value = k;
+            // dim de lightmaps/probes DIFUSOS gerados de dia — sem isso a
+            // vegetação baked continua "clareada" no meio da noite.
+            indirect.indirectDiffuseLightingMultiplier.value =
+                Mathf.Clamp01(indirectByHour.Evaluate(ch));
+            // REFLEXOS ficam SEMPRE cheios (e vencem o 0.7 do perfil ALP):
+            // é o céu vivo na água — estrelas/lua/nuvens/pôr do sol. Diminuir
+            // isto à noite desconectava a água do céu.
+            indirect.reflectionLightingMultiplier.value = 1f;
+            indirect.reflectionProbeIntensityMultiplier.value = 1f;
         }
         if (fog != null)
         {
@@ -466,6 +469,11 @@ public class DayNightCycle : MonoBehaviour
         shadows = profile.Add<HDShadowSettings>();
         shadows.maxShadowDistance.overrideState = true;
         shadows.directionalTransmissionMultiplier.overrideState = true;
+
+        // SSR garantido ligado (a água usa p/ refletir a CENA; o céu é fallback)
+        var ssr = profile.Add<ScreenSpaceReflection>();
+        ssr.enabled.overrideState = true;
+        ssr.enabled.value = true;
 
         if (fogEnabled)
         {
