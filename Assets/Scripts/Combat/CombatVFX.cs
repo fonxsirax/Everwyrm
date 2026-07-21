@@ -20,11 +20,17 @@ public static class CombatVFX
     {
         if (mats.TryGetValue(c, out var m) && m != null) return m;
 
-        var shader = Shader.Find("HDRP/Unlit");
-        if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
-        if (shader == null) shader = Shader.Find("Sprites/Default");
-
-        m = new Material(shader);
+        // brilho macio transparente de Resources/ImpactVFX (mesma receita dos
+        // materiais de impacto); sem ele, o quadradinho de cor sólida de antes
+        var baseMat = Resources.Load<Material>("ImpactVFX/GlowSoft");
+        if (baseMat != null) m = new Material(baseMat);
+        else
+        {
+            var shader = Shader.Find("HDRP/Unlit");
+            if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null) shader = Shader.Find("Sprites/Default");
+            m = new Material(shader);
+        }
         if (m.HasProperty("_UnlitColor")) m.SetColor("_UnlitColor", c);
         if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
         if (m.HasProperty("_Color")) m.color = c;

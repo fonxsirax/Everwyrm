@@ -8,9 +8,10 @@ using UnityEngine;
 /// raspar rocha, spray e splash na água.
 ///
 /// TEXTURAS: os materiais vêm de Resources/ImpactVFX (gerados por
-/// Tools > Everwyrm > VFX de Impacto — puffs do Winter pack + folha/lasca/anel
-/// gerados). Sem eles, cai no quadradinho de cor sólida de antes — funciona,
-/// só fica mais cru. Prefab na tabela do ImpactEffects continua mandando.
+/// Tools > Everwyrm > VFX de Impacto — poeira do fog Inguz, gotas/splash/cacos
+/// e folhas sombreadas gerados com ruído; visual realista p/ HDRP). Sem eles,
+/// cai no quadradinho de cor sólida — funciona, só fica mais cru. Prefab na
+/// tabela do ImpactEffects continua mandando.
 /// </summary>
 public static class ImpactVFX
 {
@@ -19,8 +20,8 @@ public static class ImpactVFX
     const string MatPuffDense = "PuffDense";  // nuvem densa (pó de pedra)
     const string MatDroplet = "Droplet";      // gotícula (spray, splash)
     const string MatLeaf = "Leaf";            // atlas 2×2 procedural (fallback)
-    const string MatLeafA = "LeafA";          // folha CartoonFX carvalho (grayscale)
-    const string MatLeafB = "LeafB";          // folha CartoonFX lisa (grayscale)
+    const string MatLeafA = "LeafA";          // folha carvalho sombreada (grayscale)
+    const string MatLeafB = "LeafB";          // folha lisa sombreada (grayscale)
     const string MatChip = "Chip";            // lasca/torrão irregular
     const string MatRipple = "Ripple";        // anel de ondulação
     const string MatSplash = "SplashStreak";  // jatos de splash 2×2 (CFXR)
@@ -185,7 +186,7 @@ public static class ImpactVFX
         root.transform.position = position;
 
         var ps = NewSystem(root.transform, MatPuffSoft, tint);
-        Sheet(ps, 2, 2);                          // nuvens CFXR: 4 formas
+        Sheet(ps, 2, 2);                          // poeira 2×2: 4 variações do fog
         var main = ps.main;
         main.startLifetime = new ParticleSystem.MinMaxCurve(0.6f, 1.3f);
         main.startSpeed = new ParticleSystem.MinMaxCurve(1.2f * scale,
@@ -220,7 +221,7 @@ public static class ImpactVFX
         root.transform.position = position + Vector3.up * 0.15f * scale;
 
         var ps = NewSystem(root.transform, MatChip, tint * 0.8f);
-        Sheet(ps, 3, 3);                          // cacos CFXR: 9 formas
+        Sheet(ps, 3, 3);                          // cacos 3×3: 9 formas
         var main = ps.main;
         main.startLifetime = new ParticleSystem.MinMaxCurve(0.6f, 1.2f);
         main.startSpeed = new ParticleSystem.MinMaxCurve(2.5f * scale, 6f * scale);
@@ -405,7 +406,7 @@ public static class ImpactVFX
         var root = new GameObject("Splash");
         root.transform.position = position;
 
-        // coroa: jatos esticados do CFXR (2×2); sem o material, gotas simples
+        // coroa: leque de filetes d'água (2×2); sem o material, gotas simples
         bool hasStreak = Resources.Load<Material>("ImpactVFX/" + MatSplash) != null;
         var ps = NewSystem(root.transform, hasStreak ? MatSplash : MatDroplet,
                            SprayColor, 1.6f);
@@ -468,7 +469,7 @@ public static class ImpactVFX
 
         // ---- spray: gotas arrancadas da superfície, jogadas para trás e para cima
         var spray = NewSystem(root.transform, MatDroplet, SprayColor, 1.6f);
-        Sheet(spray, 1, 3);                       // gota CFXR: 3 fases de borrão
+        Sheet(spray, 1, 3);                       // gota 1×3: 3 fases de borrão
         var main = spray.main;
         main.startLifetime = new ParticleSystem.MinMaxCurve(0.25f, 0.55f);
         main.startSpeed = new ParticleSystem.MinMaxCurve(1.2f * scale, 3.2f * scale);
