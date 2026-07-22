@@ -191,6 +191,18 @@ static class EverwyrmAutoSetup
                 nightSky.spaceMultiplierByHour = NightSky.DefaultSpaceMultiplier();
                 applied++;
             }
+            // v6: lua ÉPICA — 7°→16° (visual; a sombra fica capada em 4° pelo
+            // desacoplamento no NightSky) e halo proporcional 3°→5°.
+            if (Mathf.Abs(nightSky.moonAngularDiameter - 7f) < 0.01f)
+            {
+                nightSky.moonAngularDiameter = 16f;
+                applied++;
+            }
+            if (Mathf.Abs(nightSky.moonFlareSize - 3f) < 0.01f)
+            {
+                nightSky.moonFlareSize = 5f;
+                applied++;
+            }
             EditorUtility.SetDirty(nightSky);
         }
 

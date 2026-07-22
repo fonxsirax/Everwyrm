@@ -1,266 +1,388 @@
-# EVERWYRM — Game Design Document (GDD v1.0)
+# EVERWYRM — Game Design Document (GDD v2.0)
+
+> v2.0 — pivô de "vida de um dragão" (estilo The Isle) para **linhagem de dragões** com base
+> persistente, genética e progressão permanente. A v1.0 está no histórico do git.
+> Itens marcados **[ABERTO]** ainda não foram decididos; **[IMPL]** já existe no código.
 
 ## High Concept
 
-**Viva toda a vida de um dragão.**
+**Administre uma linhagem de dragões através das gerações.**
 
-Everwyrm é um Sandbox Survival single-player onde o jogador nasce como um pequeno dragão e evolui até se tornar uma criatura colossal capaz de dominar ecossistemas inteiros.
+Everwyrm é um Sandbox Survival onde o jogador não controla um único dragão, mas uma
+**dinastia**. Dragões nascem de ovos na base do jogador, crescem, atingem o auge colossal,
+envelhecem e morrem — mas a linhagem continua: filhotes herdam golpes, natureza e
+potencial genético dos pais. O progresso real vive na **base** e na **genética acumulada**,
+não no indivíduo.
 
-O jogo não busca quantidade de conteúdo, mas profundidade. Cada sistema influencia vários outros, criando histórias únicas sem depender de roteiros.
-
-A experiência é inspirada em The Isle, Path of Titans, Rain World e na exploração infinita de Minecraft, porém com foco total na fantasia de ser um dragão.
+A morte deixa de ser perda total (o problema de retenção do gênero The Isle / Path of
+Titans) e vira parte do ciclo. Comps comerciais: V Rising (base + criatura poderosa),
+Palworld/ARK (breeding com herança de stats), WolfQuest (vida animal com família),
+Niche (genética como jogo).
 
 ## Pilares do Projeto
 
-### 1. Crescimento Visível
+1. **Legado permanente** — todo minuto jogado deixa algo que sobrevive à morte do dragão:
+   base melhor, genes melhores, golpes aprendidos, pergaminhos, território conhecido.
+2. **Crescimento visível** — o dragão muda de tamanho, forma e capacidade ao longo da vida;
+   a linhagem muda de qualidade ao longo das gerações.
+3. **Gameplay emergente** — sem missões roteirizadas; histórias nascem de fome, território,
+   clima, IA, eventos e genética ("o filhote albino da minha terceira geração...").
+4. **Mundo que recompensa exploração** — biomas, cavernas, bosses e eventos puxam o jogador
+   pra longe da base; a base puxa de volta.
+5. **Simplicidade elegante e modular** — poucos sistemas, muitos cruzamentos. Tudo
+   data-driven (espécie/ataque/evento novo = asset novo, zero código) e serializável.
 
-Tudo gira em torno da sensação de evolução. O jogador deve olhar para seu dragão após algumas horas e perceber imediatamente:
+## Os Dois Loops
 
-- ficou maior
-- voa melhor
-- caça criaturas maiores
-- seu fogo é mais poderoso
-- outras criaturas reagem de maneira diferente
-
-### 2. Gameplay Emergente
-
-Não existem missões tradicionais. As histórias surgem naturalmente da interação entre: fome, território, clima, IA, eventos e exploração.
-
-Exemplo: Você pousa para caçar um cervo. Um dragão adulto aparece tentando roubá-lo. Durante a luta começa uma tempestade. O cervo foge. Ambos ficam sem alimento. Dias depois vocês se reencontram perto de um lago. Nenhuma dessas situações foi roteirizada.
-
-### 3. Mundo que Recompensa Exploração
-
-O horizonte sempre deve parecer interessante. Mesmo após dezenas de horas o jogador deve pensar: "Só vou ver o que existe depois daquela montanha."
-
-### 4. Simplicidade Elegante
-
-Todo sistema deve ser reutilizado. Poucos sistemas. Muitas interações.
-
-## Gameplay Loop
-
-Sessão média: 20 minutos até 1 hora
-
+### Loop de sessão (20 min – 1 h)
 ```
-Explorar → Sentir fome → Encontrar alimento → Decidir se vale a pena caçar
-→ Caçar → Comer → Crescer → Encontrar evento → Sobreviver
-→ Explorar região mais difícil → Encontrar presas maiores → Repetir
+Sair da base → explorar/caçar → comer (nutrição molda atributos) → evento/descoberta
+→ arriscar mais longe (boss? caverna? clã?) → voltar com recursos/pergaminho → construir/incubar
 ```
 
-## Estrutura Geral
+### Meta-loop de geração (dezenas de horas)
+```
+Ovo → filhote → adulto → colossal (auge) → cio/reprodução → velhice → morte
+   ↘ novos ovos herdam genética → escolher o sucessor → linhagem melhora →
+     desafios maiores ficam viáveis → repetir
+```
 
-### Estados principais do jogador
+## O Jogo Essencial (MVP — a espinha)
 
-- Explorando
-- Voando
-- Caçando
-- Descansando
-- Alimentando-se
-- Defendendo território
-- Reproduzindo
+Teste de uma frase: **"Everwyrm é um jogo bonito onde você vive a vida de um dragão — e
+quando ele morre, a vida continua pela linhagem."** Tudo que não serve a essa frase é
+camada (Geladeira), não espinha. A primeira metade da frase já está ~85% construída; o
+MVP é construir a segunda.
 
-Esses estados são suficientes para praticamente todo o jogo.
+Seis peças, nada mais:
+
+1. **Viver** — caçar, comer, crescer, voar. **[IMPL]**
+2. **Envelhecer** — idade com o jogo aberto, velhice enfraquece, morte natural
+   (extensão do DragonGrowth).
+3. **Uma base** — fixa, pequena, pré-criada no spawn. **Uma única construção: o ninho**
+   (revogar + 10 galhos). Sem tiers, sem paredes, sem expansão.
+4. **Gerar** — fêmea no cio → evento de parceiro (simples, quase-cutscene: dragão
+   aparece, cortejo curto, ovo no ninho — sem combate/rival) → 1 ovo → incuba.
+5. **Herdar** — filhote nasce com natureza + IVs sobre os **3 atributos atuais** + golpes
+   dos pais. (Vitalidade/Instinto ficam na Geladeira; vida longa/curta pode vir da
+   natureza — ex.: Sereno vive mais.)
+6. **Continuar** — o dragão morre, a UI de linhagem mostra os vivos/ovos, o jogador
+   assume o herdeiro. Save modular cobrindo só a tabela deste GDD.
+
+**Critério de pronto**: em uma sessão, o jogador vê um ovo virar um herdeiro visivelmente
+melhor (ou pior!) que o pai, e sente que perder o velho não foi perder o jogo.
+
+**Contrato de escopo** (as duas regras do projeto):
+
+- Toda ideia nova entra na **Geladeira** por padrão, nunca no escopo. Promover algo exige
+  a espinha jogável primeiro.
+- Pergunta aberta que não bloqueia a espinha recebe uma **resposta-padrão** (a mais
+  barata) e só é revisitada se doer no playtest. Ver seção "Decisões-padrão".
+
+O MVP corresponde às fases **F0–F2** do roadmap. Nada do corte acima toca no visual: o
+apelo gráfico vive no mundo, no dragão e nos VFX — já construídos.
 
 ## Mundo
 
-### Geração Procedural
+**[IMPL]** Mundo praticamente infinito por streaming de tiles determinísticos (seed),
+5 biomas contínuos: **Campos, Floresta Antiga, Montanhas Rochosas, Tundra, Deserto
+Rochoso** (com oásis raros). Lagos, riachos na floresta, ciclo dia/noite real (dia de 30
+min, lua com fases, céu estelar por seed), neve ambiente, correntes de ar nas montanhas.
 
-O mapa é praticamente infinito. Ao invés de geração procedural completa, o jogo utiliza blocos de biomas cuidadosamente construídos, conectados proceduralmente.
+- Pântano e Vulcões (v1.0): **[ABERTO]** — rebaixados de "bioma" para possíveis
+  landmarks/eventos (ex.: campo vulcânico como arena de boss), salvo decisão em contrário.
+- **Cavernas** *(novo)*: pontos de entrada no mundo levam a interiores explóriáveis no
+  estilo Stardew Valley (progressão por profundidade, recursos raros, perigo crescente).
+  **[ABERTO]**: instanciadas (cena separada — barato) vs. escavadas no mundo (caro).
+- **Alterações permanentes** do mundo (claims de base, futuras cicatrizes) são salvas como
+  decisões de runtime no estado do mundo — mesmo padrão do lago inicial **[IMPL]**.
 
-Cada região possui: relevo, vegetação, fauna, clima, sons, eventos próprios e dragões predominantes.
+## Bases
 
-Isso reduz drasticamente o custo de produção e garante qualidade visual.
+A base é o coração da progressão permanente.
 
-### Biomas
-
-| Bioma | Características |
-|---|---|
-| Floresta Antiga | alimento abundante, pequenos mamíferos, árvores gigantes, excelente para filhotes |
-| Montanhas Rochosas | poucas presas, correntes de vento fortes, cavernas, dragões territoriais |
-| Pântano | pouca visibilidade, criaturas agressivas, muita água, eventos raros |
-| Campos | grandes herbívoros, fácil localizar alimento, poucos esconderijos |
-| Vulcões | temperatura extrema, alimento escasso, grandes predadores, excelente para adultos |
-| Tundra | pouca comida, neve, resistência importante, migrações frequentes |
+- O jogador começa com **1 base pequena já criada** (spawn). Meta futura: até 4 bases pelo
+  mapa (reduzem deslocamento, criam objetivos de longo prazo). **[ABERTO]** como se
+  desbloqueiam as demais.
+- **Claim ("revogar terra")**: a base ocupa um espaço de terra revogado — a vegetação da
+  área some e o terreno é reservado ao jogador. Tamanhos: **Pequena / Média / Grande**.
+  **[ABERTO]** como o tamanho cresce.
+  - *Nota técnica*: mesmo padrão do lago garantido do spawn — lista de claims (centro,
+    raio, tier) no estado do mundo; aplaina o heightmap e mascara o scatter de vegetação.
+- **Construção sem inventário**: o dragão não tem inventário (conceito não existe no
+  jogo). Para construir, o jogador **revoga a estrutura** (ninho, parede, etc.), ela
+  aparece incompleta/fantasma, e ele traz os itens necessários **um a um** (ex.: ninho =
+  10 galhos). Capacidade de carga pode escalar com o tamanho do dragão (filhote carrega 1
+  galho; colossal derruba a árvore). **[ABERTO]** — todo o sistema de
+  construção/recursos/possível inventário será revisitado.
+- Funções da base: nascimento e incubação de ovos · **troca de dragões (via UI)** ·
+  armazenamento de recursos · expansão da progressão · ponto seguro da linhagem.
+- Dragões não-controlados **não aparecem na base** (economia de meshes). Colocar um dragão
+  visível como "enfeite" é opcional. A troca é por interface.
 
 ## Ciclo de Vida
 
-### Ovo
-Tutorial. O jogador apenas observa sons externos. Pode escolher quando nascer.
+Vida-alvo inicial: **~30 horas de relógio com o jogo aberto** (ajustável; era 170h na
+proposta original — número final é tuning). Regras do relógio:
 
-### Filhote
-Fase mais difícil. Pouca força, pouco fogo, voo limitado. Grande parte das criaturas representa ameaça. Objetivo: sobreviver.
+- A idade avança **enquanto o jogo está rodando**, para todos os dragões da linhagem —
+  **nunca offline**.
+- **Fome/energia só drenam no dragão controlado.** Dragões guardados envelhecem, mas não
+  passam fome.
 
-### Adulto
-A fantasia principal do jogo. O jogador já domina voo, caça grandes animais, disputa território, pode reproduzir.
+| Fase | Descrição |
+|---|---|
+| **Ovo** | Incuba na base. **[ABERTO]** tempo/aceleração de incubação. |
+| **Filhote** | Jogável. Modelo: linha *Little Dragons* (Malbers) — compra futura; fallback: Unka em escala reduzida **[IMPL]**. Frágil, voo limitado; fase de aprender o mundo. |
+| **Adulto** | O corpo do jogo atual **[IMPL]**: caça, voo pleno, combate, cio. |
+| **Colossal** | O **auge tardio**: mesma mesh em escala muito maior, maior poder destrutivo da vida do dragão. Ignora alguns colliders (vegetação). Conteúdo endgame é calibrado pra ele. |
+| **Velhice** | Continua imenso, mas **todos os atributos declinam** — voa mais baixo, corre pior, regenera menos. A ficha/UI mostra a fase e a expectativa de vida (morte natural nunca é surpresa). |
+| **Morte** | Natural (velhice) ou vida chegando a 0. O jogador troca para outro dragão/ovo na base. |
 
-### Colossal
-Pouquíssimos inimigos naturais. A maior ameaça passa a ser manter um território enorme e sustentar seu peso.
+Aparência acompanha a idade (escala + blend shapes **[IMPL]**; meshes por fase quando os
+assets existirem).
 
-## Peso
+## Genética e Linhagem
 
-O peso cresce principalmente através da alimentação. Afeta: força, empurrões, dano por impacto, intimidação, consumo de alimento e velocidade de crescimento.
+Cada dragão é um **registro** (DragonRecord) com:
 
-Dragões extremamente pesados precisam comer muito mais.
+- **Natureza** — personalidade que enviesa atributos (ex.: Dócil +Vitalidade/−Poder,
+  Agressivo +Poder/−Instinto...). Lista proposta na seção de Atributos.
+- **IVs (Individual Values)** — potencial genético por atributo, **oculto na UI**: o
+  jogador não vê números, mas percebe pela ficha que "os atributos deste dragão não estão
+  bons". Um dragão pode nascer melhor ou pior que outro.
+- **Golpes herdados** — ataques (assets) que os pais conheciam podem vir de nascença.
+- **Herança de stats** — "como os jogos fazem normalmente" (ARK/Pokémon): cada IV do
+  filhote sorteia entre o do pai e o da mãe; natureza sorteada com viés às dos pais.
+- **Mutação** — proposta: chance rara de IV fora da faixa dos pais ou golpe inesperado,
+  para a linhagem não estagnar matematicamente. **[ABERTO]** confirmação e taxas.
 
-## Atributos Evolutivos
+### Reprodução
 
-Cada nível concede um ponto. Apenas três atributos.
+1. Fêmea adulta entra em **cio** (um ou mais períodos antes da velhice).
+2. Acasalamento: com **evento aleatório** (dragão parceiro aparece no mundo) → ovo surge
+   automaticamente na base; ou **entre dois dragões do jogador** (fêmea no cio).
+3. Outras formas de adquirir ovos podem existir (ovo selvagem em evento, recompensa de
+   boss...). **[ABERTO]**.
+4. **[ABERTO]** cap de dragões vivos por base/linhagem.
 
-### Velocidade
-Melhora: corrida, aceleração, mergulho, voo, perseguição. Ideal para caçadores.
+### Fim de linhagem
 
-### Poder
-Melhora: dano físico, fogo, alcance do fogo, tamanho das chamas.
+Sem game over dedicado por enquanto: o jogo suporta **múltiplos saves e voltar a um ponto
+salvo**. Se a linhagem acabar, o jogador recarrega. (Rede de segurança adicional — ovo
+selvagem garantido — fica como opção futura.)
 
-Também aumenta a **Dominância Territorial** — a presença do dragão no mundo. Quanto maior, mais distante ele percebe: alimento, eventos, outros dragões, grandes presas, tesouros. Não é visão mágica, é um instinto apurado. Funciona como um "radar natural".
+## Atributos (proposta v2)
 
-### Resistência
-Melhora: HP, energia, voo contínuo, recuperação, resistência à fome. Ideal para longas explorações.
+Valor final de cada atributo:
 
-## Sistema de Sobrevivência
+```
+Atributo = Base da fase de vida
+         × CurvaDeIdade (sobe até o Colossal, declina na velhice)
+         × Natureza (±10% em 2 atributos)
+         × (1 + IV)                  ← genético, oculto
+         + Treino (pontos por nível) ← escolha do jogador [IMPL]
+         + Nutrição (bônus por alimentação, com teto)
+```
 
-Existem apenas três necessidades.
+Cinco atributos (era 3 — Dominância sai de Poder e vira Instinto; Vitalidade é nova):
 
-### Fome
-Diminui constantemente. Em níveis críticos: menos stamina, recuperação lenta, menor crescimento. Sem comida: morre.
+| Atributo | Governa |
+|---|---|
+| **Velocidade** | Corrida, aceleração, voo, mergulho, nado |
+| **Poder** | Dano físico, dano/tamanho/alcance da chama |
+| **Resistência** | Vida, energia, teto de voo, resistência à fome, decolagem |
+| **Vitalidade** *(novo)* | **Tempo de vida** (dragões com Vitalidade alta vivem mais dias), velocidade de crescimento, regeneração, início mais tardio da velhice |
+| **Instinto** *(novo)* | Faro/Dominância Territorial (detecção de comida, fauna, eventos, tesouros no minimapa) **[IMPL como Poder]**, eficiência de tocaia/caça |
 
-### Energia
-Consumida por: voo, corrida, combate, fogo. Recuperada descansando.
+Naturezas propostas (**[ABERTO]** aprovar/expandir): Dócil (+Vit −Pod) · Agressivo
+(+Pod −Inst) · Arisco (+Vel −Vit) · Estoico (+Res −Vel) · Astuto (+Inst −Res) ·
+Voraz (+Res −Inst) · Imponente (+Pod −Vel) · Sereno (+Vit −Pod). Neutras possíveis.
 
-### Vida
-Recuperada lentamente, ou rapidamente após boa alimentação e descanso.
+Treino: 1 ponto por nível, nível deriva do crescimento (sem XP tradicional) **[IMPL]**.
+Velhice reduz **todos** os atributos via CurvaDeIdade.
 
-## Sistema de Alimentação
+## Alimentação 2.0
 
-Cada presa possui: quantidade de carne, dificuldade e risco.
+Substitui o modelo v1 ("carne genérica enche a fome"):
 
-O jogador decide constantemente: vale a pena gastar energia para caçar? Ou procurar outra presa?
+- **Cada tipo de animal vira um tipo de alimento** ao morrer, e **cada alimento concede
+  bônus de atributo** ao dragão (o componente "Nutrição" da fórmula acima). Exemplo de
+  mapa inicial (tuning): lebre→Velocidade · javali/alce→Resistência · urso→Poder ·
+  cervo→Vitalidade · lobo→Instinto. Com teto por atributo, para dieta dirigida sem grind
+  infinito.
+- **Fome cheia = não come.** Comer só é possível com espaço na barra; a barra cheia
+  implica dragão mais pesado.
+- **Peso/digestão serão rebalanceados** — o modelo atual de condição corporal
+  (magro/saudável/gordo afetando corrida, subida, planeio, custo de energia **[IMPL]**)
+  continua como fundação, mas os números e o acoplamento com a digestão mudam. **[ABERTO]**.
+- Consequência de design: o FoodSpawner de carcaças grátis **[IMPL]** morre; toda comida
+  vem de caça real, carcaças de predadores (roubáveis **[IMPL]**) e eventos.
 
-### Cadeia Alimentar
+## Combate, Skills e Pergaminhos
 
-Filhote → coelhos → raposas → javalis → cervos → bisões → mamutes → dragões
+- **[IMPL]** 4 slots de habilidade (teclas 1–4), ataques como assets data-driven
+  (projétil/área/melee, queimadura, área de fogo), desbloqueio por nível, dano/chama
+  escalam com Poder e tamanho do corpo.
+- **Pergaminhos** *(novo)*: bosses derrotados liberam pergaminhos que ensinam **novas
+  skills** — e skills aprendidas **podem ser herdadas** pelos filhotes. É a ponte
+  boss → genética: o desafio de hoje vira o enxoval da próxima geração.
+  **[ABERTO]**: pergaminho ensina um indivíduo (e a herança propaga) ou desbloqueia
+  para a linhagem toda.
+- Golpes usáveis em voo têm flag própria **[IMPL]** — ver Controles.
 
-## Sistema de Caça
+## Conteúdo de Desafio (o "pra quê" do poder)
 
-A caça possui três etapas:
+A genética e o auge colossal precisam de conteúdo à altura. Referência de motivação de
+bosses: **Don't Starve** (cada boss guarda uma recompensa que destrava um sistema).
 
-1. **Localizar** — encontrar rastros ou observar movimentação.
-2. **Aproximar** — utilizar altura, vegetação, rochas, vento.
-3. **Executar** — cada presa reage de forma diferente: algumas fogem, outras lutam, outras protegem o grupo.
-
-Como o sistema é único, qualquer criatura nova automaticamente cria novas experiências.
+1. **Bosses únicos** — criaturas nomeadas em locais/eventos específicos; drop:
+   pergaminhos de skill (herdáveis) + recursos raros. Conteúdo que só o Colossal resolve,
+   ou que ele resolve muito mais fácil.
+2. **Cavernas** — exploração vertical estilo Stardew: andares, recursos de construção
+   raros, criaturas próprias, chefes de profundidade. **[ABERTO]** formato.
+3. **Clãs de humanos hostis** — tentam matar o dragão; assentamentos/acampamentos como
+   ameaça e fonte de saque. **[ABERTO]** — nota: reverte a decisão v1 de "mundo sem
+   civilização"; exige assets/IA humanoides (custo alto) e definição de tom.
+4. **Megafauna / presas lendárias** — versões raras e gigantes da fauna (o pipeline de
+   variação de escala/vida já suporta **[IMPL]**).
+5. **Defesa (futuro)** — eventos que ameaçam a base dão função defensiva às construções.
+   **[ABERTO]**.
 
 ## Fauna (Ecossistema Vivo)
 
-A fauna existe para o mundo, não para o jogador. Rebanhos pastam, migram, caçam e descansam mesmo quando ninguém está olhando — o jogador apenas testemunha.
+**[IMPL]** — IA universal parametrizada (asset novo = espécie nova): lebre, raposa, cervo
+(rebanho/stag/real), alce (+com cria), javali, urso (+ursa com filhotes), lobo (alcateia
+que caça de verdade), populações próprias do deserto concentradas nos oásis. Organização
+social coesa (líder, filhotes com mãe, migrações, fuga coletiva), períodos de atividade
+reais (dia/noite), reação ao tamanho do dragão, tocaia, uivos em coro, carcaças reais.
 
-Um único sistema de IA parametrizável controla todas as espécies (mesma filosofia da IA dos dragões). Cada espécie é apenas um conjunto de dados: biomas, raridade, organização social, personalidade, migração e cadeia alimentar. Espécie nova = novo asset de dados, zero código.
+A cadeia alimentar v1 (bisões→mamutes) foi substituída pela fauna real; mamute/bisão
+podem voltar como megafauna de evento. **[ABERTO]**.
 
-### Organização Social
+## Voo
 
-- **Solitário** — quase sempre sozinho (urso, alce).
-- **Rebanho** — grupos grandes e frouxos (cervos, lebres).
-- **Alcateia** — grupos organizados com líder (lobos).
-- **Híbrido** — sozinho ou em pequenos grupos, decidido proceduralmente (javali, raposa).
-
-Grupos são coesos de verdade: âncora compartilhada, fuga coletiva, migrações espontâneas cruzando o mundo. Filhotes nunca existem sem os adultos e ficam colados na mãe.
-
-### Espécies
-
-| Espécie | Social | Personalidade |
-|---|---|---|
-| Lebre | Rebanho frouxo, muito comum | Pânico fácil; dispara e se esconde no mato; filhotes junto dos adultos |
-| Raposa | Híbrido (maioria solitária) | Curiosa — chega perto para observar antes de fugir; caça lebres em tocaia |
-| Cervo | Rebanho 5–9 | Extremamente tímido, vigília constante, pasta andando; Stag ocasional liderando |
-| Cervo solitário | Solitário raro | Stag territorial; pode investir contra dragões jovens |
-| Cervo-Real | Rebanho 6–12 nos Campos | Migra longe com frequência — as grandes travessias de vale |
-| Alce | Solitário | Corajoso e imponente; ignora dragões pequenos; vive na beira dos lagos; perigoso se provocado |
-| Alce com cria | Par raro | A mãe é mais agressiva que o macho |
-| Javali | Híbrido 2–6 | Fuça o chão em bando; imprevisível — ora foge, ora ataca |
-| Urso | Solitário territorial | Investiga barulhos, levanta em duas patas para intimidar, decide entre ignorar e atacar |
-| Ursa com filhotes | Raríssima | Protege as crias com agressividade máxima |
-| Lobo | Alcateia 3–6 | Patrulha territórios enormes, uiva em coro, caça cervos e lebres de verdade |
-
-### Interações Emergentes
-
-- Lobos abatem presas que viram carcaças reais — o jogador pode assustá-los e roubar a caça.
-- O tamanho do dragão muda tudo: filhotes são ignorados (ou caçados); um Colossal causa pânico geral.
-- Pousar perto faz barulho: uns fogem, curiosos investigam.
-- A Dominância Territorial (faro) revela a fauna próxima — presas e predadores.
-
-## Sistema de Crescimento
-
-O crescimento depende de: tempo vivido e alimentação. Não existe XP tradicional. Comer bem acelera o crescimento; passar fome desacelera. Isso conecta sobrevivência diretamente à progressão.
-
-## Sistema de Voo
-
-O voo é baseado em energia. O jogador pode: planar, bater asas, mergulhar e utilizar correntes de vento.
-
-Dragões maiores gastam mais energia, mas planam melhor.
-
-## Sistema de Fogo
-
-O fogo evolui naturalmente:
-
-1. **Faíscas** — quase inúteis; assustam pequenas criaturas.
-2. **Pequenas Chamas** — permitem caçar animais pequenos.
-3. **Jato de Fogo** — principal arma.
-4. **Explosão** — grande dano em área; consome muita energia.
-5. **Tempestade de Fogo** — apenas Colossais; incendeia grandes áreas. Mais útil para controle territorial do que dano direto.
-
-O fogo também influencia: incêndios, fuga das presas, comportamento da fauna e eventos.
-
-## Sistema Territorial
-
-Todo dragão possui um território. Quanto maior seu Poder, maior sua área de influência. Dentro dela: detecta eventos, percebe invasores, encontra alimento mais facilmente.
-
-Outros dragões podem desafiar sua dominância. Isso gera encontros naturalmente, sem precisar de missões.
-
-## IA dos Dragões
-
-Cada dragão recebe parâmetros aleatórios: peso, idade, fome, coragem, agressividade, território, interesse em reprodução.
-
-Esses poucos parâmetros geram diversos comportamentos:
-
-- Filhote faminto → arrisca lutas.
-- Adulto alimentado → ignora o jogador.
-- Dragão territorial → ataca imediatamente.
-- Fêmea no cio → procura parceiro.
-
-## Reprodução
-
-A reprodução é um marco da vida do dragão, oferecendo um objetivo de longo prazo e um legado, sem transformar o jogo em um simulador de criação de filhotes.
-
-1. **Encontrar Parceiro** — durante períodos específicos, dragões adultos entram no cio. O jogador percebe por comportamentos e vocalizações da IA. Nem todo encontro resulta em acasalamento: agressividade, território e fome influenciam.
-2. **Construção do Ninho** — o jogador apenas seleciona uma área adequada (caverna, penhasco ou clareira protegida); o ninho é criado automaticamente.
-3. **Postura dos Ovos** — 1 a 3 ovos, reforçando seu valor.
-4. **Proteção** — eventos podem ameaçar o ninho: predadores oportunistas, outros dragões, incêndios, tempestades. O jogador pode proteger ou continuar explorando, assumindo o risco.
-5. **Nascimento** — filhotes permanecem próximos ao ninho, alimentam-se sozinhos e fogem de perigos. Se sobreviverem, integram a população dinâmica do mundo como dragões de IA.
-
-Cria sensação de legado, aumenta a população de dragões e gera histórias emergentes ("encontrei um dragão enorme que era descendente de um antigo ninho meu").
+**[IMPL]** — voo como habilidade: ciclo de batidas com bônus de timing, planeio sustentado
+por velocidade, mergulho, estol por exaustão, colisão física sem dano (o chão machuca,
+via queda), pouso automático rente ao chão, updrafts nas montanhas, **teto de voo por
+Resistência** (ar rarefeito, sem parede invisível), natação e voo rasante com spray.
+Números centralizados em FlightProfile (asset) — pronto para variações por idade/fase.
 
 ## Eventos Dinâmicos
 
-Eventos aparecem conforme o jogador explora. Todos utilizam os mesmos sistemas do jogo: migração de herbívoros, outro dragão caçando, disputa territorial, tesouro escondido, incêndio, tempestade, criatura albina, caverna desconhecida, dragão colossal dormindo, ninho abandonado, fêmea no cio, grande predador, presa lendária.
+Eventos aleatórios spawnam no mundo usando **prefabs pré-prontos** + os sistemas
+existentes (IA, clima, fogo, território). São **efêmeros por design — nunca salvos**.
 
-Como compartilham IA, clima, território e fauna, têm baixo custo de desenvolvimento e podem se combinar, produzindo situações imprevisíveis.
+Lista base (v1 + novos): migração de herbívoros · outro dragão caçando · **parceiro em
+cio (evento de acasalamento)** · disputa territorial · tesouro escondido · incêndio ·
+tempestade · criatura albina · caverna desconhecida · **boss único** · ninho/ovo
+abandonado · grande predador · presa lendária · **acampamento de clã humano [ABERTO]**.
 
-## Progressão do Jogador
+**[ABERTO]** — a lista final de eventos-prefab e o "diretor" de spawn (frequência, anel
+ao redor do jogador, pressão por seca de eventos — o padrão já existe no spawner de
+fauna **[IMPL]**).
 
-A progressão não é medida apenas por números, mas pela transformação da experiência:
+## Controles & UI
 
-- **Filhote**: esconder-se, fugir e sobreviver.
-- **Adulto**: dominar a caça, explorar e disputar território.
-- **Colossal**: moldar o ecossistema, intimidando criaturas e alterando a dinâmica das regiões.
+- **Interação por mouse** *(novo)*: a maioria das interações é clicar — o cursor em hover
+  vira um **sprite da ação** (comer, falar, interagir). Substitui o modelo "olhar +
+  tecla" (G de comer sai).
+- **Mira em voo** *(novo)*: voando, uma mira/retículo aparece para disparar os golpes
+  usáveis no ar; slots de golpes não-usáveis em voo ficam `interactable = false` no HUD.
+- Chão: WASD + golpes nas teclas 1–4 **[IMPL]**; esquema final converge para
+  mouse-driven. **[ABERTO]** gamepad.
+- UI: barras de vida/energia/fome/crescimento, pips de batida de asa, minimapa com faro +
+  relógio **[IMPL]** · **ficha do dragão** com fase de vida, idade, expectativa,
+  atributos (IVs ocultos — mas dá pra "sentir" que estão ruins) · **UI de linhagem/base**
+  *(novo)*: lista de dragões vivos, ovos incubando, troca de dragão ativo.
 
-O objetivo final não é "zerar" o jogo, mas completar o ciclo de vida de um dragão e construir sua própria história.
+## Save System
 
-## Escopo Indie
+Princípio: **modular e explícito**. Cada sistema declara o que salva (módulo versionado
+com chave própria); o GDD mantém a tabela do contrato:
 
-- Apenas 3 atributos evolutivos.
-- Apenas 4 fases de vida.
-- Um único sistema de IA baseado em parâmetros reutilizáveis.
-- Conjunto limitado de biomas modulares reutilizados proceduralmente.
-- Eventos construídos pela combinação dos sistemas existentes, sem conteúdo roteirizado.
-- Sem árvores de habilidades complexas, crafting, economia ou gerenciamento de dezenas de NPCs.
+| Estado | Salvo? | Notas |
+|---|---|---|
+| Seed + identidade do mundo (lago inicial...) | ✅ | **[IMPL]** WorldGenState |
+| Claims de base (posição, raio, tier) | ✅ | novo — extensão do WorldGenState |
+| Construções da base (tipo, posição, completa/incompleta, itens entregues) | ✅ | novo |
+| Recursos armazenados na base | ✅ | novo |
+| DragonRecords (genética, natureza, IVs, idade, fome, vida, golpes, base) | ✅ | novo — o coração do save |
+| Ovos (pais, genética rolada, progresso de incubação) | ✅ | novo |
+| Relógio do mundo (hora, dia) | ✅ | DayNightCycle já expõe SetTime **[IMPL]** |
+| Pergaminhos/skills desbloqueadas | ✅ | novo |
+| Outras alterações permanentes com posição no mapa | ✅ | conforme surgirem |
+| Fauna (posições, grupos, carcaças) | ❌ | efêmera por design **[IMPL]** |
+| Eventos ativos no mapa | ❌ | efêmeros — respawnam pelo diretor |
+| VFX, clima do momento, projéteis | ❌ | efêmeros |
 
-Esforço concentrado em poucas mecânicas altamente conectadas: um jogo profundo, rejogável e alcançável para uma equipe indie.
+- **Múltiplos saves + retorno a ponto salvo**: o jogador pode manter vários saves e
+  voltar a um checkpoint (é também a resposta atual para fim de linhagem).
+  **[ABERTO]** granularidade (slots manuais? autosave por dia de jogo?).
+- Objetivo: voltar dias depois e encontrar a linhagem exatamente onde parou — o mundo
+  *parece* persistente, mas só a camada permanente é serializada (save pequeno).
+
+## Multiplayer (fase futura — essencial, não-MVP)
+
+Jogadores compartilham o **mesmo save de base/linhagem**; ao entrar, cada um escolhe um
+dos dragões vivos do clã. Administração de uma família de dragões em co-op.
+
+- **Não sai no MVP**, mas é feature essencial: **toda a arquitetura nova nasce
+  multiplayer-ready** — DragonRecord/save como dados autoritativos, mundo determinístico
+  por seed (já é a filosofia do WorldGenState **[IMPL]**), mutações de estado como
+  comandos sobre registros.
+- **[ABERTO]** tecnologia (Photon vs. cliente-servidor próprio).
+
+## Escopo & Roadmap
+
+Corte pragmático por fases (cada fase é jogável):
+
+- **F0 — Fundação da linhagem**: separar DragonRecord (dados) do avatar (possession,
+  padrão já usado pela fauna); save core modular; relógio de idade; morte→troca via UI.
+- **F1 — Base**: claim com aplainamento/limpeza de vegetação; ninho revogado + entrega de
+  galhos; incubação de ovo; remoção do FoodSpawner (alimentação 2.0 mínima).
+- **F2 — Gerações**: cio, acasalamento (evento + interno), herança (natureza/IVs/golpes),
+  velhice + morte natural, 5 atributos, nutrição por tipo de alimento.
+- **F3 — Conteúdo de desafio**: diretor de eventos, primeiro boss + pergaminho, caverna
+  piloto, megafauna. Filhote com mesh própria (Little Dragons).
+- **F4 — Multiplayer**: netcode sobre a arquitetura de registros.
+- Áudio segue política atual: ganchos prontos **[IMPL]**, clips por último.
+
+Fora do escopo (sem mudança de decisão): árvore de habilidades complexa, economia/NPCs
+comerciais, construção livre estilo Valheim.
+
+## Decisões-padrão (valem até doer no playtest)
+
+Defaults cravados pelo contrato de escopo — nenhuma pergunta fica "aberta" se não
+bloqueia a espinha:
+
+| Tema | Default |
+|---|---|
+| Cap de dragões vivos | 6 por linhagem (UI e performance confortáveis) |
+| Tempo de incubação | ~1 dia de jogo (30 min reais); ajustável |
+| Mutação genética | Sim, rara (~5% por IV fora da faixa dos pais); golpes mutantes só via Geladeira |
+| Naturezas | As 8 propostas na seção Atributos; só stats no MVP (comportamento é Geladeira) |
+| Pergaminho | Por indivíduo, herdável (tesouro genético) — quando bosses entrarem |
+| Cavernas | Instanciadas (cena separada com andares) — quando entrarem |
+| Rollback/saves | Slots manuais + autosave por dia de jogo |
+| Pântano/Vulcões | Landmarks/arenas de evento, não biomas |
+| Vida do dragão | 30 h de relógio com jogo aberto (slider de tuning) |
+| Evento de parceiro | Quase-cutscene (sem rival/combate) |
+| Multiplayer (tech) | Decidir só na F4; até lá, arquitetura de registros/comandos |
+| Controles | Esquema atual no MVP; mouse-driven + mira em voo entram como camada de UI |
+
+## Geladeira
+
+Ideias aprovadas em espírito, fora do escopo até a espinha ser jogável:
+
+- Multiplayer (save de clã compartilhado) — essencial, fase F4.
+- Clãs de humanos hostis (decidir lore/civilização quando promover).
+- Cavernas estilo Stardew; bosses únicos + pergaminhos; megafauna/presas lendárias.
+- Bases 2–4, tamanhos de base (P/M/G), construção modular, recursos além do galho.
+- Alimentação 2.0 (bônus de atributo por tipo de alimento) e rebalance peso/digestão.
+- Atributos Vitalidade e Instinto (5-atributos).
+- Controles mouse-driven completos + mira em voo; gamepad.
+- Meshes por idade (Little Dragons para o filhote — comprar só quando promover).
+- Rede de segurança de linhagem (ovo selvagem garantido).
+- Eventos dramáticos de acasalamento (rival, disputa).
+- Defesa de base (eventos que ameaçam construções).

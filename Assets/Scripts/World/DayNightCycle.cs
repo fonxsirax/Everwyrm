@@ -116,7 +116,7 @@ public class DayNightCycle : MonoBehaviour
     /// <summary>Versão da calibração aplicada pelo EverwyrmAutoSetup — evita
     /// re-rodar migrações a cada recompilação.</summary>
     [HideInInspector] public int tuningVersion;
-    public const int CurrentTuningVersion = 5;
+    public const int CurrentTuningVersion = 6;
 
     // ---------------------------------------------------------------- estado
     double hours;                       // hora do dia [0, 24) — fonte de verdade

@@ -12,6 +12,8 @@ using UnityEngine;
 ///    afunda (sustentação pela velocidade). Mergulhar troca altitude por speed.
 ///  - Peso importa: gordo/grande sobe menos por batida e afunda mais.
 ///  - Correntes de ar (AirflowField, ex.: updrafts de montanha) devolvem altitude.
+///  - TETO DE VOO (Resistência): perto do teto o ar rarefeito rende cada vez
+///    menos sustentação; acima dele nada segura o dragão. Sem parede invisível.
 ///
 /// Todos os números vêm do FlightProfile (ScriptableObject) — modular para
 /// espécies, upgrades de asa e clima no futuro.
@@ -36,6 +38,10 @@ public class DragonFlight : MonoBehaviour
     public bool IsGliding => Time.time - lastFlapTime > profile.glideAnimDelay;
     public float VerticalSpeed => vy;
     public Vector3 CurrentWind { get; private set; }
+    /// <summary>0 = ar pleno · 1 = no teto (sem sustentação). HUD pode avisar.</summary>
+    public float ThinAir01 { get; private set; }
+    /// <summary>Teto de voo atual (m, altura do mundo) — vem da Resistência.</summary>
+    public float Ceiling => attrs != null ? attrs.MaxAltitude : float.PositiveInfinity;
 
     /// <summary>Observer: (restantes, total) — HUD desenha os "pips" de asa.</summary>
     public event Action<int, int> OnFlapsChanged;
@@ -90,6 +96,14 @@ public class DragonFlight : MonoBehaviour
         var p = profile;
         CurrentWind = AirflowField.Sample(worldPos);
 
+        // ---- AR RAREFEITO: a sustentação esvai na faixa abaixo do teto de voo
+        //      (Resistência) e zera nele — batidas, decolagem e updrafts rendem
+        //      cada vez menos até nada. Acima do teto só resta afundar.
+        float ceiling = Ceiling;
+        ThinAir01 = float.IsPositiveInfinity(ceiling) ? 0f
+                  : Mathf.Clamp01(1f - (ceiling - worldPos.y) / Mathf.Max(1f, p.ceilingSoftBand));
+        float airLift = 1f - ThinAir01;
+
         // ---- FASE DE DECOLAGEM (híbrido): segurar Space = subida contínua.
         //      Soltar (ou o tempo acabar) entrega o voo ao ciclo de batidas.
         if (Time.time < takeoffClimbUntil)
@@ -98,7 +112,7 @@ public class DragonFlight : MonoBehaviour
             {
                 vitals?.Drain(p.takeoffClimbEnergyPerSec * CostMul);
                 lastFlapTime = Time.time;   // sem anim de glide, ciclo renova depois
-                vy = Mathf.MoveTowards(vy, p.takeoffClimbRate * ClimbMul * sizeScale,
+                vy = Mathf.MoveTowards(vy, p.takeoffClimbRate * ClimbMul * sizeScale * airLift,
                                        p.verticalResponse * 2f * dt);
                 return vy;
             }
@@ -117,7 +131,7 @@ public class DragonFlight : MonoBehaviour
                 {
                     float q = Mathf.Pow(Mathf.Clamp01(t / p.flapAnimDuration),
                                         p.flapBonusPower);
-                    vy = Mathf.Min(vy + p.flapBonusLift * q * ClimbMul * sizeScale,
+                    vy = Mathf.Min(vy + p.flapBonusLift * q * ClimbMul * sizeScale * airLift,
                                    Mathf.Max(vy, p.maxRiseSpeed * sizeScale));
                     forwardSpeed += p.flapBonusForward * q * sizeScale;
                     OnFlapBonus?.Invoke(q);
@@ -141,7 +155,7 @@ public class DragonFlight : MonoBehaviour
             (vitals == null || vitals.TrySpend(p.energyPerFlap * CostMul)))
         {
             // teto de subida — mas nunca REDUZ um vy já alto (ex.: decolagem)
-            vy = Mathf.Min(vy + p.flapLift * ClimbMul * sizeScale,
+            vy = Mathf.Min(vy + p.flapLift * ClimbMul * sizeScale * airLift,
                            Mathf.Max(vy, p.maxRiseSpeed * sizeScale));
             forwardSpeed += p.flapForwardBoost * sizeScale;
             flapsLeft--;
@@ -161,7 +175,8 @@ public class DragonFlight : MonoBehaviour
             sink = Mathf.Lerp(p.sinkAtSpeed, p.sinkAtStall, slowness) * SinkMul;
         }
 
-        float targetVy = -sink + CurrentWind.y * p.windInfluence;
+        // updraft também perde força no ar rarefeito: nem térmica fura o teto
+        float targetVy = -sink + CurrentWind.y * p.windInfluence * airLift;
 
         // pouso controlado (S): garante descida mínima rumo ao solo, com
         // resposta TRIPLICADA — o mergulho de pouso engata rápido e decidido.

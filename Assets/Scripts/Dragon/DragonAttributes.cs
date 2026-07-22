@@ -11,8 +11,10 @@ using UnityEngine;
 ///  2 PODER       — dano físico, tamanho/dano da chama e DOMINÂNCIA TERRITORIAL:
 ///                  o raio do "faro" em que o dragão detecta alimento (e, no futuro,
 ///                  eventos, perigos e outros dragões no minimapa).
-///  3 RESISTÊNCIA — vida, energia total (duração do voo), aceleração e
-///                  resistência à fome.
+///  3 RESISTÊNCIA — vida, energia total (duração do voo), aceleração,
+///                  resistência à fome e TETO DE VOO: a altura máxima em que
+///                  o ar ainda sustenta o dragão (começa na metade do teto
+///                  cheio e chega nele com 10 pontos).
 ///
 /// Observer: OnChanged / OnLevelUp para HUD e outros sistemas.
 /// </summary>
@@ -36,6 +38,11 @@ public class DragonAttributes : MonoBehaviour
     [SerializeField] float hungerResistPerPoint = 0.04f; // fome cai mais devagar
     [SerializeField] float takeoffClimbPerPoint = 0.12f; // duração da subida de decolagem
 
+    [Header("Teto de voo (Resistência)")]
+    [SerializeField] float ceilingBase = 150f;      // teto com 0 pontos (m) — metade do cheio
+    [SerializeField] float ceilingPerPoint = 15f;   // +15 m por ponto
+    [SerializeField] int ceilingMaxPoints = 10;     // pontos até o teto cheio (300 m)
+
     DragonGrowth growth;
 
     int velocidade, poder, resistencia;
@@ -50,14 +57,17 @@ public class DragonAttributes : MonoBehaviour
     public float SpeedMul => 1f + Velocidade * speedPerPoint;
     public float AccelMul => 1f + Velocidade * accelSpeedPerPoint
                                 + Resistencia * accelResistPerPoint;
-    public float DamageMul => 1f + Poder * damagePerPoint;          // (futuro combate)
-    public float FlameSizeMul => 1f + Poder * flamePerPoint;        // (futuro fogo)
+    public float DamageMul => 1f + Poder * damagePerPoint;          // DragonAbilities
+    public float FlameSizeMul => 1f + Poder * flamePerPoint;        // DragonAbilities (ataques isFire)
     public float DominanceRadius => dominanceBase + Poder * dominancePerPoint;
     public float MaxHealthMul => 1f + Resistencia * healthPerPoint;
     public float MaxEnergyMul => 1f + Resistencia * energyPerPoint;
     public float HungerDecayMul => Mathf.Max(0.4f, 1f - Resistencia * hungerResistPerPoint);
     /// <summary>Resistência estica a fase de subida contínua da decolagem (DragonFlight).</summary>
     public float TakeoffClimbMul => 1f + Resistencia * takeoffClimbPerPoint;
+    /// <summary>Teto de voo (altura Y do mundo, em m). Acima dele o ar rarefeito
+    /// não sustenta (DragonFlight). Satura em `ceilingMaxPoints` de Resistência.</summary>
+    public float MaxAltitude => ceilingBase + Mathf.Min(Resistencia, ceilingMaxPoints) * ceilingPerPoint;
 
     // ---- Observer
     public event Action<DragonAttributes> OnChanged;
@@ -118,6 +128,7 @@ public class DragonAttributes : MonoBehaviour
     public float EnergyPerPoint => energyPerPoint;
     public float HungerResistPerPoint => hungerResistPerPoint;
     public float TakeoffClimbPerPoint => takeoffClimbPerPoint;
+    public float CeilingPerPoint => ceilingPerPoint;
 
     void OnGrowth(DragonGrowth g)
     {

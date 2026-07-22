@@ -64,4 +64,8 @@ public class FlightProfile : ScriptableObject
     [Header("Vento")]
     [Tooltip("Quanto correntes de ar (updrafts/térmicas) afetam o dragão")]
     public float windInfluence = 1f;
+
+    [Header("Teto de voo (ar rarefeito)")]
+    [Tooltip("Faixa abaixo do teto (m) em que a sustentação vai sumindo — teto suave, sem parede")]
+    public float ceilingSoftBand = 40f;
 }

@@ -47,8 +47,8 @@ public class NightSky : MonoBehaviour
     [Range(0f, 90f)] public float poleTilt = 35f;
 
     [Header("Lua (visual — a luz fica no DayNightCycle)")]
-    [Tooltip("Diâmetro do disco no céu (graus). A lua real tem ~0.5; 7 = lua de fantasia marcante.")]
-    [Range(0.5f, 10f)] public float moonAngularDiameter = 7f;
+    [Tooltip("Diâmetro do disco no céu (graus). A lua real tem ~0.5; 7 = fantasia marcante; 16 = lua ÉPICA dominando o céu (estilo Majora's Mask). A sombra usa no máx. 4° p/ não derreter.")]
+    [Range(0.5f, 25f)] public float moonAngularDiameter = 16f;
     [Tooltip("Fase automática: ciclo lunar de 29.5 dias IN-GAME (determinístico, começa gibosa crescente). Desligado usa a fase manual.")]
     public bool autoLunarCycle = true;
     [Tooltip("Fase manual (0 = nova, 0.5 = cheia) quando o ciclo automático está desligado.")]
@@ -59,8 +59,8 @@ public class NightSky : MonoBehaviour
     [Range(0f, 1f)] public float earthshine = 1f;
     [Tooltip("Brilho da SUPERFÍCIE do disco. O HDRP ilumina o disco com um 'sol virtual' de 130k lux — cru, estoura branco na exposição noturna. 0.012 = disco protagonista (~50× o céu ao luar), detalhes legíveis.")]
     [Range(0.0005f, 0.05f)] public float moonDiscBrightness = 0.012f;
-    [Tooltip("Tamanho do halo/glow em volta da lua (graus).")]
-    [Range(0f, 8f)] public float moonFlareSize = 3f;
+    [Tooltip("Tamanho do halo/glow em volta da lua (graus além do disco).")]
+    [Range(0f, 12f)] public float moonFlareSize = 5f;
     [Range(1f, 10f)] public float moonFlareFalloff = 4f;
     [Tooltip("Intensidade do halo — usa o mesmo sol virtual de 130k lux, precisa ser minúscula. Deve ficar ABAIXO do brilho do disco (glow, não anel).")]
     [Range(0f, 0.02f)] public float moonFlareIntensity = 0.0008f;
@@ -258,10 +258,12 @@ public class NightSky : MonoBehaviour
         md.earthshine = earthshine;
         // o tint escala o "sol virtual" interno de 130k lux p/ a exposição noturna
         md.surfaceTint = Color.white * moonDiscBrightness;
-        // ATENÇÃO: com diameterMultiplerMode=false o renderer lê diameterOverride
-        // e IGNORA angularDiameter — os dois recebem o valor por segurança.
-        md.angularDiameter = moonAngularDiameter;
+        // DESACOPLADO de propósito: o DISCO lê diameterOverride (modo default),
+        // e a SOMBRA/specular leem angularDiameter — com lua gigante, o visual
+        // cresce à vontade mas a penumbra fica capada em 4° (sombras não viram
+        // mancha) — verificado no fonte do HDRP (HDGpuLightsBuilder).
         md.diameterOverride = moonAngularDiameter;
+        md.angularDiameter = Mathf.Min(moonAngularDiameter, 4f);
         md.moonPhase = MoonPhase;
         md.flareSize = moonFlareSize;
         md.flareFalloff = moonFlareFalloff;

@@ -106,6 +106,7 @@ public class DragonStatsMenu : MonoBehaviour
             $"Vida máx: {vitals.MaxHealthEff:0}\n" +
             $"Energia máx: {vitals.MaxEnergyEff:0}\n" +
             (flight != null ? $"Decolagem (subida): {flight.TakeoffClimbTime:0.0} s\n" : "") +
+            $"Teto de voo: {a.MaxAltitude:0} m\n" +
             $"Fome: -{vitals.HungerDecayEff * 60f:0.0}/min\n" +
             $"Faro (dominância): {a.DominanceRadius:0} m\n" +
             $"Dano: x{a.DamageMul:0.00}   Chama: x{a.FlameSizeMul:0.00}";
@@ -116,7 +117,8 @@ public class DragonStatsMenu : MonoBehaviour
         0 => $"+{attrs.SpeedPerPoint:P0} vel. máxima · +{attrs.AccelSpeedPerPoint:P0} aceleração",
         1 => $"+{attrs.DamagePerPoint:P0} dano · +{attrs.FlamePerPoint:P0} chama · +{attrs.DominancePerPoint:0} m de faro",
         _ => $"+{attrs.HealthPerPoint:P0} vida · +{attrs.EnergyPerPoint:P0} energia · " +
-             $"-{attrs.HungerResistPerPoint:P0} fome · +{attrs.TakeoffClimbPerPoint:P0} decolagem",
+             $"-{attrs.HungerResistPerPoint:P0} fome · +{attrs.TakeoffClimbPerPoint:P0} decolagem · " +
+             $"+{attrs.CeilingPerPoint:0} m de teto",
     };
 
     static string ConditionLabel(float c) =>
@@ -175,7 +177,7 @@ public class DragonStatsMenu : MonoBehaviour
 
             var desc = MakeText(card.transform, DescriptionFor(i), 13, FontStyle.Normal, TextAnchor.UpperLeft);
             desc.color = new Color(0.75f, 0.73f, 0.68f);
-            Top(desc.rectTransform, -245f, y - 26f, 230f, 40f);
+            Top(desc.rectTransform, -245f, y - 26f, 230f, 56f);
 
             var btnGo = new GameObject("Plus", typeof(Image), typeof(Button));
             btnGo.transform.SetParent(card.transform, false);
