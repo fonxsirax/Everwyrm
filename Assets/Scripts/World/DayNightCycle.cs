@@ -56,6 +56,10 @@ public class DayNightCycle : MonoBehaviour
     [Range(20f, 90f)] public float maxSunElevation = 62f;
     [Tooltip("Gira o percurso leste→oeste no mundo (graus).")]
     [Range(-180f, 180f)] public float orbitYaw = 0f;
+    [Tooltip("Crepúsculo (horas): após o pôr (e antes do nascer) o sol segue ACESO " +
+             "abaixo do horizonte, sem sombras, com a luz caindo a zero — o PBS pinta " +
+             "o céu laranja→roxo pela física em vez de apagar seco às 18:00.")]
+    [Range(0f, 2f)] public float twilightHours = 0.75f;
 
     [Header("Lua (a LUZ — o visual do disco/fase/textura fica no NightSky)")]
     [Tooltip("Intensidade da lua no auge da noite (lux). Estilizado — a real é ~0.25. 100 = noite AZUL-PROFUNDA legível; acima de ~200 o céu clareia como dia nublado.")]
@@ -65,17 +69,42 @@ public class DayNightCycle : MonoBehaviour
     public bool moonShadows = true;
     [Tooltip("Peso da sombra da lua (1 = sombra 100% preta). Abaixo de 1 vira o 'piso' de visibilidade da noite: nada fica breu total.")]
     [Range(0f, 1f)] public float moonShadowDimmer = 0.65f;
+    [Tooltip("Piso da luz na lua NOVA (fração de Moon Max Lux). A FASE escala a luz " +
+             "da noite: cheia = 100%, nova = este piso — noite de lua cheia é " +
+             "visivelmente mais clara (o resto da noite é constante).")]
+    [Range(0f, 1f)] public float moonNewPhaseFactor = 0.5f;
+    /// <summary>Iluminação da fase lunar [0..1] (1 = cheia) — o NightSky escreve
+    /// a cada frame; sem NightSky fica 1 (neutro). NonSerialized: é estado de
+    /// runtime, não calibração — não deve sujar o diff da cena.</summary>
+    [NonSerialized] public float moonIllumination = 1f;
 
     [Header("Exposição (clarear/escurecer geral)")]
     [Tooltip("Exposição AUTOMÁTICA: adapta como o olho — floresta fechada de noite clareia, meio-dia a céu aberto escurece (conserta 'estourado' de dia e 'breu' à noite). A curva abaixo vira o CENTRO da faixa permitida.")]
     public bool autoExposure = true;
     [Tooltip("Meia-largura da faixa da exposição automática (± EV em torno da curva).")]
     [Range(0.25f, 3f)] public float autoExposureRange = 1.25f;
-    [Tooltip("EV alvo por HORA do dia. Dia ~14.6 (valor do preset), noite ~7.5. Com autoExposure ligado é o centro da faixa; desligado, é o valor fixo.")]
+    [Tooltip("EV alvo por HORA do dia. Dia = PLATÔ 13.4 (8h-16h): o arco de brilho fica por conta do lux do sol — EV subindo até o meio-dia CANCELAVA o pico solar. Amanhecer/entardecer em EV 7 (mais claro): sem isso o céu brilhante afundava o primeiro plano em preto (bug das 06:01). Noite flat 6.5 (config das 20h vale a noite toda). Com autoExposure ligado é o centro da faixa; desligado, é o valor fixo.")]
     public AnimationCurve exposureByHour = DefaultExposureByHour();
 
     [Tooltip("Multiplicador da luz indireta (ambiente do céu/probes/reflexos) por HORA. À noite fica em ~0.3: preenche as sombras com o ambiente da lua — muito baixo deixa o primeiro plano preto e a vegetação ao longe 'acesa' por contraste.")]
     public AnimationCurve indirectByHour = DefaultIndirectByHour();
+
+    [Header("Luz por bioma frio (Tundra/Montanha)")]
+    [Tooltip("0 = desligado. Em bioma frio o sol enfraquece e esfria (K sobe) e a " +
+             "indireta aumenta (bounce da neve): sombras azuladas em vez de pretas, " +
+             "contraste menor, e o dragão recebe ambiente frio — 'sol de deserto " +
+             "sobre neve' era a crítica. Transição suavizada ao cruzar biomas.")]
+    [Range(0f, 1f)] public float coldLightStrength = 0.65f;
+    [Tooltip("Perda de intensidade do sol no frio (0.22 = -22% em tundra plena).")]
+    [Range(0f, 0.5f)] public float coldSunDim = 0.22f;
+    [Tooltip("Aumento da temperatura de cor do sol no frio (K) — luz mais azul/difusa.")]
+    public float coldSunKelvin = 1600f;
+    [Tooltip("Multiplicador extra da luz indireta no frio — o manto de neve devolve " +
+             "muita luz difusa (bounce) que preenche as sombras.")]
+    [Range(1f, 2f)] public float coldIndirectBoost = 1.5f;
+
+    float coldK;            // fator frio suavizado [0..1] (peso do bioma × strength)
+    float coldNextSample;
 
     [Header("Sombras")]
     [Tooltip("Distância máxima de sombra (m) por HORA. Dia = 300 (calibração ALP). Noite ESTENDIDA: além desse limite os objetos recebem a lua sem sombra e ficam 'pálidos de dia' (pedras do deserto, árvores longe).")]
@@ -116,7 +145,7 @@ public class DayNightCycle : MonoBehaviour
     /// <summary>Versão da calibração aplicada pelo EverwyrmAutoSetup — evita
     /// re-rodar migrações a cada recompilação.</summary>
     [HideInInspector] public int tuningVersion;
-    public const int CurrentTuningVersion = 7;
+    public const int CurrentTuningVersion = 10;
 
     // ---------------------------------------------------------------- estado
     double hours;                       // hora do dia [0, 24) — fonte de verdade
@@ -275,38 +304,85 @@ public class DayNightCycle : MonoBehaviour
     }
 
     // ---------------------------------------------------------------- APPLY
+    /// <summary>Peso frio do bioma sob o jogador, amostrado 2x/s e suavizado
+    /// (sem pops ao cruzar a borda da tundra).</summary>
+    void UpdateColdFactor()
+    {
+        var it = InfiniteTerrain.Instance;
+        float target = 0f;
+        if (coldLightStrength > 0f && it != null && it.player != null)
+        {
+            float wx = it.player.position.x, wz = it.player.position.z;
+            if (Time.time >= coldNextSample)
+            {
+                coldNextSample = Time.time + 0.5f;
+                float cold = it.BiomeWeightOf(InfiniteTerrain.Biome.Tundra, wx, wz)
+                           + it.BiomeWeightOf(InfiniteTerrain.Biome.Montanha, wx, wz) * 0.7f;
+                coldTarget = Mathf.Clamp01(cold) * coldLightStrength;
+            }
+            target = coldTarget;
+        }
+        coldK = Mathf.MoveTowards(coldK, target, Time.deltaTime * 0.4f);
+    }
+    float coldTarget;
+
     void Apply()
     {
         if (sun == null) return;
         bool night = IsNight;
         float hour = (float)hours;
+        UpdateColdFactor();
 
-        // ---- sol: arco leste→oeste; de noite continua abaixo do horizonte
+        // ---- sol: arco leste→oeste; de noite continua abaixo do horizonte e
+        // no CREPÚSCULO segue aceso (sem sombra) pintando o céu pela física
         float p = DayProgress01;
-        float sunElev = night ? -Mathf.Sin(NightProgress01 * Mathf.PI) * maxSunElevation
+        float np = NightProgress01;
+        float nightLen = Mathf.Max(0.01f, 24f - (sunsetHour - sunriseHour));
+        float edgeH = Mathf.Min(np, 1f - np) * nightLen;   // horas desde o pôr / até o nascer
+        float twilight = night && twilightHours > 0.001f
+            ? Mathf.Clamp01(1f - edgeH / twilightHours) : 0f;
+        float sunElev = night ? -Mathf.Sin(np * Mathf.PI) * maxSunElevation
                               : Mathf.Sin(p * Mathf.PI) * maxSunElevation;
         float sunAz = Mathf.Lerp(90f, 270f, p) + orbitYaw;
         sun.transform.rotation = LookFromAzEl(sunAz, sunElev);
-        if (sun.enabled != !night) sun.enabled = !night;
+        bool sunOn = !night || twilight > 0f;
+        if (sun.enabled != sunOn) sun.enabled = sunOn;
         if (!night)
         {
-            sun.intensity = sunMaxLux * Mathf.Max(0f, sunIntensity.Evaluate(p));
+            // frio: sol perde força e esquenta em Kelvin (= esfria em cor)
+            sun.intensity = sunMaxLux * Mathf.Max(0f, sunIntensity.Evaluate(p)) *
+                            (1f - coldSunDim * coldK);
             sun.useColorTemperature = true;
-            sun.colorTemperature = sunTemperature.Evaluate(p);
+            sun.colorTemperature = sunTemperature.Evaluate(p) + coldSunKelvin * coldK;
+            if (sun.shadows != LightShadows.Soft) sun.shadows = LightShadows.Soft;
+        }
+        else if (sunOn)
+        {
+            // resíduo do fim do arco caindo a zero (quadrático = morre suave);
+            // sombra desligada — o único direcional com sombra à noite é a lua
+            float pEdge = np < 0.5f ? 1f : 0f;               // pôr ou nascer
+            sun.intensity = sunMaxLux * Mathf.Max(0f, sunIntensity.Evaluate(pEdge)) *
+                            twilight * twilight;
+            sun.useColorTemperature = true;
+            sun.colorTemperature = sunTemperature.Evaluate(pEdge);
+            if (sun.shadows != LightShadows.None) sun.shadows = LightShadows.None;
         }
 
         // ---- lua: arco espelhado cruzando o céu durante a noite
         if (moon != null)
         {
-            float np = NightProgress01;
             float moonElev = night ? Mathf.Sin(np * Mathf.PI) * maxSunElevation : -10f;
             float moonAz = Mathf.Lerp(90f, 270f, np) + orbitYaw;
             moon.transform.rotation = LookFromAzEl(moonAz, moonElev);
             if (moon.enabled != night) moon.enabled = night;
             if (night)
             {
-                float fade = Mathf.Sin(np * Mathf.PI);        // nasce/põe suave
-                moon.intensity = moonMaxLux * Mathf.Max(0.05f, fade);
+                // noite SIMPLIFICADA: luz CONSTANTE (a leitura das ~20h vale a
+                // noite inteira) — rampa de ~1.5h nas bordas cobre o crepúsculo
+                // sem pop. A fase escala tudo: cheia = 100%, nova = piso.
+                float ramp = Mathf.Clamp01(0.15f + edgeH / 1.5f);
+                moon.intensity = moonMaxLux * ramp *
+                                 Mathf.Lerp(moonNewPhaseFactor, 1f, moonIllumination);
                 moon.color = moonColor;
                 moon.shadows = moonShadows ? LightShadows.Soft : LightShadows.None;
                 if (moonHd != null)
@@ -329,7 +405,8 @@ public class DayNightCycle : MonoBehaviour
             // dim de lightmaps/probes DIFUSOS gerados de dia — sem isso a
             // vegetação baked continua "clareada" no meio da noite.
             indirect.indirectDiffuseLightingMultiplier.value =
-                Mathf.Clamp01(indirectByHour.Evaluate(ch));
+                Mathf.Clamp01(indirectByHour.Evaluate(ch)) *
+                (1f + (coldIndirectBoost - 1f) * coldK);   // bounce da neve
             // REFLEXOS ficam SEMPRE cheios (e vencem o 0.7 do perfil ALP):
             // é o céu vivo na água — estrelas/lua/nuvens/pôr do sol. Diminuir
             // isto à noite desconectava a água do céu.
@@ -525,33 +602,47 @@ public class DayNightCycle : MonoBehaviour
     /// <summary>Curvas padrão (públicas: o auto-setup usa para migrar cenas
     /// salvas com calibrações antigas).</summary>
     public static AnimationCurve DefaultExposureByHour() => new(
-        new Keyframe(0f, 6.3f), new Keyframe(4.5f, 6.3f), new Keyframe(6f, 8f),
-        new Keyframe(8f, 13.4f), new Keyframe(12f, 14.6f), new Keyframe(16f, 13.4f),
-        new Keyframe(18f, 8f), new Keyframe(19.5f, 6.6f), new Keyframe(24f, 6.3f));
+        new Keyframe(0f, 6.5f), new Keyframe(4.5f, 6.5f), new Keyframe(6f, 7f),
+        new Keyframe(8f, 13.4f), new Keyframe(16f, 13.4f),
+        new Keyframe(18f, 7f), new Keyframe(19f, 6.5f), new Keyframe(24f, 6.5f));
 
+    // Preenchimento (ambiente do céu) ALTO sempre que o céu está aceso —
+    // inclusive amanhecer/entardecer, quando o domo laranja é a MELHOR fonte de
+    // luz difusa. Dimava-se a 0.58 justo nessas horas → primeiro plano preto sob
+    // um céu brilhante (bug das 06:01). Só cai fundo (0.35) na noite fechada,
+    // onde o objetivo original — não "acender" a vegetação baked — continua valendo.
     public static AnimationCurve DefaultIndirectByHour() => new(
-        new Keyframe(0f, 0.3f), new Keyframe(5f, 0.3f), new Keyframe(7.5f, 1f),
-        new Keyframe(16.5f, 1f), new Keyframe(19.5f, 0.3f), new Keyframe(24f, 0.3f));
+        new Keyframe(0f, 0.35f), new Keyframe(4.5f, 0.35f), new Keyframe(6f, 0.9f),
+        new Keyframe(7.5f, 1f), new Keyframe(16.5f, 1f), new Keyframe(18f, 0.9f),
+        new Keyframe(19.5f, 0.35f), new Keyframe(24f, 0.35f));
 
+    // Pontas em 3400K (não 2200K): 2200K é luz de fogueira e tingia o
+    // amanhecer/entardecer inteiro de laranja pesado. 3400K ainda é dourado
+    // quente, mas natural — o Rayleigh do PBS já dá a cor do nascer, o sol não
+    // precisa somar fogo por cima.
     public static AnimationCurve DefaultSunTemperature() => new(
-        new Keyframe(0f, 2200f), new Keyframe(0.12f, 4300f), new Keyframe(0.5f, 5900f),
-        new Keyframe(0.88f, 4300f), new Keyframe(1f, 2200f));
+        new Keyframe(0f, 3400f), new Keyframe(0.13f, 4500f), new Keyframe(0.5f, 5900f),
+        new Keyframe(0.87f, 4500f), new Keyframe(1f, 3400f));
 
     public static AnimationCurve DefaultFogDistanceByHour() => new(
         new Keyframe(0f, 320f), new Keyframe(6f, 350f), new Keyframe(10f, 1400f),
         new Keyframe(15f, 1400f), new Keyframe(18f, 380f), new Keyframe(21f, 320f),
         new Keyframe(24f, 320f));
 
-    static Gradient DefaultFogTint()
+    /// <summary>Tinta da névoa nas 24h. Keys quentes DESSATURADAS: a névoa densa
+    /// do amanhecer/entardecer com laranja saturado (0.72/0.5) espalhava laranja
+    /// por toda a paisagem (o horizonte inteiro virava laranja). Warm suave
+    /// (0.84/0.7) mantém o clima sem tingir tudo. Público: o auto-setup migra.</summary>
+    public static Gradient DefaultFogTint()
     {
         var g = new Gradient();
         g.SetKeys(
             new[]
             {
                 new GradientColorKey(new Color(0.45f, 0.55f, 0.75f), 0f),     // madrugada azulada
-                new GradientColorKey(new Color(1f, 0.72f, 0.5f), 0.27f),      // amanhecer quente
+                new GradientColorKey(new Color(1f, 0.84f, 0.7f), 0.27f),      // amanhecer quente (suave)
                 new GradientColorKey(Color.white, 0.5f),                      // meio-dia neutro
-                new GradientColorKey(new Color(1f, 0.62f, 0.42f), 0.76f),     // entardecer
+                new GradientColorKey(new Color(1f, 0.78f, 0.62f), 0.76f),     // entardecer (suave)
                 new GradientColorKey(new Color(0.45f, 0.55f, 0.75f), 1f),
             },
             new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) });

@@ -10,8 +10,8 @@ using UnityEngine.Rendering.HighDefinition;
 ///    no load (shader Everwyrm/NightSkyStarGen) e aplicado no
 ///    spaceEmissionTexture do Physically Based Sky → o amanhecer as apaga
 ///    pela FÍSICA da atmosfera e a água futura as reflete de graça.
-///  - Firmamento gira ao longo da noite via spaceRotation (custo zero: o céu
-///    já re-renderiza pelo sol em movimento).
+///  - Firmamento ESTÁTICO por decisão de design (só as nuvens se movem);
+///    spaceRotation é setado uma vez no load (poleTilt = orientação fixa).
 ///  - Lua: TODO o visual dela vive aqui (disco, fase, textura, halo); o
 ///    DayNightCycle cuida só da LUZ (lux/cor/sombras) e da órbita. Fase
 ///    automática por ciclo lunar de 29.5 dias in-game (determinístico).
@@ -36,14 +36,15 @@ public class NightSky : MonoBehaviour
     [Range(0f, 3f)] public float milkyWayIntensity = 1f;
     [Tooltip("Meia-largura da faixa da Via Láctea (0-1).")]
     [Range(0.05f, 0.6f)] public float milkyWayWidth = 0.22f;
-    [Tooltip("Multiplicador do espaço por HORA solar (ajuste artístico — o fade do amanhecer é físico). 1.8 = estrelas médias vencem o brilho do céu ao luar.")]
+    [Tooltip("Multiplicador do espaço por HORA solar. ZERO durante o dia e o crepúsculo (constante 1.8 fazia estrelas furarem o céu laranja das 17:55/06:10 — a exposição baixa do fim de tarde vence a física); entra depois do pôr, some antes do nascer. 1.8 = estrelas médias vencem o brilho do céu ao luar.")]
     public AnimationCurve spaceMultiplierByHour = DefaultSpaceMultiplier();
 
-    public static AnimationCurve DefaultSpaceMultiplier() =>
-        AnimationCurve.Constant(0f, 24f, 1.8f);
+    public static AnimationCurve DefaultSpaceMultiplier() => new(
+        new Keyframe(0f, 1.8f), new Keyframe(4.75f, 1.8f), new Keyframe(6.25f, 0f),
+        new Keyframe(17.75f, 0f), new Keyframe(19.5f, 1.8f), new Keyframe(24f, 1.8f));
     [Tooltip("Cintilação GLOBAL sutil (amplitude da variação de brilho). 0 desliga.")]
     [Range(0f, 0.2f)] public float shimmer = 0.04f;
-    [Tooltip("Inclinação do polo celeste (graus) — eixo em torno do qual o firmamento gira na noite.")]
+    [Tooltip("Orientação FIXA do firmamento (graus de inclinação). As estrelas não giram — decisão de design: só as nuvens se movem no céu.")]
     [Range(0f, 90f)] public float poleTilt = 35f;
 
     [Header("Lua (visual — a luz fica no DayNightCycle)")]
@@ -81,7 +82,6 @@ public class NightSky : MonoBehaviour
     DayNightCycle cycle;
     RenderTexture starCube;
     Texture2D generatedMoonTex;
-    Vector3 poleAxis;
     float nextMeteorAt = -1f;
     System.Random rng;                    // eventos (meteoros) — única fonte
 
@@ -125,7 +125,8 @@ public class NightSky : MonoBehaviour
 
         ApplySpaceTexture(seed);
         ApplyMoonVisuals();
-        poleAxis = Quaternion.Euler(poleTilt, 0f, 0f) * Vector3.up;
+        // firmamento fixo: orientação setada UMA vez (estrelas não se movem)
+        cycle.Sky.spaceRotation.value = new Vector3(poleTilt, 0f, 0f);
         ScheduleNextMeteor();
     }
 
@@ -147,9 +148,8 @@ public class NightSky : MonoBehaviour
         if (sky == null) return;
         float hour = cycle.TimeOfDay;
 
-        // ---- rotação do firmamento: 360° por dia em torno do polo celeste
-        sky.spaceRotation.value =
-            Quaternion.AngleAxis(hour / 24f * 360f, poleAxis).eulerAngles;
+        // ---- fase → intensidade da luz noturna (o DayNightCycle escala a lua)
+        cycle.moonIllumination = 0.5f * (1f - Mathf.Cos(MoonPhase * 2f * Mathf.PI));
 
         // ---- brilho: curva artística (hora solar) + cintilação global sutil
         float k = Mathf.Max(0f, spaceMultiplierByHour.Evaluate(cycle.SolarCurveHour(hour)));

@@ -197,6 +197,53 @@ static class EverwyrmAutoSetup
             cycle.exposureByHour = DayNightCycle.DefaultExposureByHour();
             applied++;
         }
+
+        // v8: EV subindo 13.4→14.6 até o meio-dia CANCELAVA o arco do sol (9h→11h
+        // parecia escurecer); platô flat 13.4 devolve o pico de brilho às 12:00.
+        // Noite agora é flat 6.5 (config das 20h) e a rampa lenta 8→6.6 do
+        // entardecer — que apagava o jogo entre 18h e 19h — encurtou p/ 18→19.
+        if (Mathf.Abs(cycle.exposureByHour.Evaluate(12f) - 14.6f) < 0.05f)
+        {
+            cycle.exposureByHour = DayNightCycle.DefaultExposureByHour();
+            applied++;
+        }
+
+        // v9: faixa do auto-exposure 2.53 era larga demais — o "olho virtual"
+        // compensava ±2.5 EV e achatava o arco de brilho do dia que a v8
+        // devolveu (9h ficava igual a meio-dia). 1.5 deixa o pico das 12:00
+        // visível sem perder a adaptação em floresta fechada/noite.
+        if (Mathf.Abs(cycle.autoExposureRange - 2.53f) < 0.05f)
+        {
+            cycle.autoExposureRange = 1.5f;
+            applied++;
+        }
+
+        // v10: preenchimento (indireta) dimava a 0.58 no amanhecer/entardecer —
+        // primeiro plano preto sob céu laranja brilhante (bug das 06:01). Nova
+        // curva mantém ~0.9 enquanto o céu está aceso. Detecta a assinatura do
+        // default antigo (noite dim + amanhecer médio + dia cheio); curva
+        // ajustada à mão pelo designer não é tocada.
+        if (cycle.indirectByHour.Evaluate(0f) < 0.4f &&
+            cycle.indirectByHour.Evaluate(6f) < 0.75f &&
+            cycle.indirectByHour.Evaluate(12f) > 0.9f)
+        {
+            cycle.indirectByHour = DayNightCycle.DefaultIndirectByHour();
+            applied++;
+        }
+
+        // v10: pontas do sol a 2200K (luz de fogueira) + névoa de amanhecer
+        // saturada = laranja excessivo cobrindo toda a paisagem às 06:01. Sol a
+        // 3400K e névoa quente suave devolvem um nascer natural.
+        if (cycle.sunTemperature.Evaluate(0f) < 2500f)
+        {
+            cycle.sunTemperature = DayNightCycle.DefaultSunTemperature();
+            applied++;
+        }
+        if (cycle.fogTintByHour.Evaluate(0.27f).g < 0.78f)
+        {
+            cycle.fogTintByHour = DayNightCycle.DefaultFogTint();
+            applied++;
+        }
         if (Mathf.Abs(cycle.cloudOpacity - 0.6f) < 0.01f)
         {
             cycle.cloudOpacity = 0.5f;
@@ -215,6 +262,13 @@ static class EverwyrmAutoSetup
                 applied++;
             }
             if (Mathf.Abs(nightSky.spaceMultiplierByHour.Evaluate(0f) - 1f) < 0.05f)
+            {
+                nightSky.spaceMultiplierByHour = NightSky.DefaultSpaceMultiplier();
+                applied++;
+            }
+            // v8: multiplicador CONSTANTE 1.8 fazia estrelas aparecerem no céu
+            // laranja do pôr/nascer — a nova curva zera de dia e no crepúsculo
+            if (Mathf.Abs(nightSky.spaceMultiplierByHour.Evaluate(12f) - 1.8f) < 0.01f)
             {
                 nightSky.spaceMultiplierByHour = NightSky.DefaultSpaceMultiplier();
                 applied++;

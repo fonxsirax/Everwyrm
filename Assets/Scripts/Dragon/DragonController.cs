@@ -542,7 +542,9 @@ public class DragonController : MonoBehaviour
     bool IsRealGround(Vector3 point)
     {
         var world = InfiniteTerrain.Instance;
-        return world == null || point.y <= world.HeightAt(point.x, point.z) + 1f;
+        if (world == null || point.y <= world.HeightAt(point.x, point.z) + 1f) return true;
+        // placa de gelo da Tundra: fica metros acima do leito do lago, mas é chão
+        return world.IsWaterFrozenAt(point.x, point.z) && point.y <= world.WaterLevel + 1f;
     }
 
     // --------------------------------------------------- QUEDA E ÁGUA (VFX)
@@ -733,7 +735,8 @@ public class DragonController : MonoBehaviour
         var world = InfiniteTerrain.Instance;
         if (world == null || !world.HasLakes) return false;
         surfaceY = world.WaterLevel;
-        return world.HeightAt(pos.x, pos.z) < surfaceY - minSwimDepth;
+        return world.HeightAt(pos.x, pos.z) < surfaceY - minSwimDepth
+            && !world.IsWaterFrozenAt(pos.x, pos.z);   // Tundra: lâmina congelada = chão, não água
     }
 
     void SwimUpdate(float dt, float h, float v)
@@ -771,8 +774,19 @@ public class DragonController : MonoBehaviour
         // chegou ao raso: sai andando
         if (!DeepWaterAt(transform.position, out _))
         {
-            ExitSwim();
-            verticalVel = -4f;
+            // borda congelada (Tundra): o gelo é PAREDE pro nado — recua em vez
+            // de "sair andando", senão o dragão afunda e fica preso SOB a placa
+            var world = InfiniteTerrain.Instance;
+            if (world != null && world.IsWaterFrozenAt(transform.position.x, transform.position.z))
+            {
+                cc.Move(fwd * (-planarSpeed * dt));
+                planarSpeed = 0f;
+            }
+            else
+            {
+                ExitSwim();
+                verticalVel = -4f;
+            }
         }
     }
 

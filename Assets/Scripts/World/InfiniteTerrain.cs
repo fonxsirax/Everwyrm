@@ -84,6 +84,15 @@ public class InfiniteTerrain : MonoBehaviour
     [SerializeField] bool streamFlowRipples = true;
     [SerializeField] float streamRippleSpeed = 3.5f;
 
+    [Header("Gelo (Tundra — água congelada, caminhável)")]
+    [Tooltip("Na Tundra a água congela: uma placa de gelo sólida (com collider) cobre lagos e " +
+             "riachos no waterLevel — impossível nadar; o dragão pousa e anda por cima.")]
+    public bool freezeTundraWater = true;
+    [Tooltip("Peso mínimo do bioma frio p/ congelar (corte seco — a transição suave é da Fase 2).")]
+    [SerializeField, Range(0f, 1f)] float frozenColdThreshold = 0.6f;
+    [Tooltip("Opcional: material do gelo. Vazio = HDRP/Lit gerado em runtime (claro, bem liso).")]
+    [SerializeField] Material iceMaterial;
+
     [Header("Vegetação da Floresta/Campos (ALP)")]
     [Tooltip("Cada entrada = prefab + peso relativo (o 'pincel' serializável). Peso 0 desliga sem remover.")]
     public PaintTree[] treePrefabs;             // Floresta Antiga (+ raras nos Campos)
@@ -225,6 +234,16 @@ public class InfiniteTerrain : MonoBehaviour
     /// <summary>Altura da lâmina d'água (m de mundo).</summary>
     public float WaterLevel => waterLevel;
 
+    /// <summary>A água (lago/riacho) neste ponto do mundo está CONGELADA?
+    /// Corte seco por peso do bioma frio — a MESMA regra do mesh de gelo dos
+    /// tiles, então gameplay (nado/pouso) e visual nunca discordam.</summary>
+    public bool IsWaterFrozenAt(float wx, float wz)
+    {
+        if (!freezeTundraWater || (!enableLakes && !StreamsActive)) return false;
+        BiomeWeights(wx, wz, out _, out _, out _, out float cold, out _);
+        return cold >= frozenColdThreshold;
+    }
+
     float maxTreeHeightCache = -1f;
 
     /// <summary>
@@ -326,6 +345,10 @@ public class InfiniteTerrain : MonoBehaviour
         [Min(0)] public int attemptsPerTile = 100;
         [Tooltip("Peso mínimo do bioma para aparecer (0.4 = só razoavelmente dentro dele)")]
         [Range(0f, 1f)] public float minBiomeWeight = 0.4f;
+        [Tooltip("Bioma RIVAL que veta esta camada quando presente acima do limite " +
+                 "(ex.: árvores verdes nunca sobre areia dominante). 1 = veto desligado.")]
+        public Biome avoidBiome = Biome.Deserto;
+        [Range(0f, 1f)] public float avoidBiomeMax = 1f;
         [Tooltip("Chance base por ponto — a densidade final ainda cai perto da borda do bioma")]
         [Range(0f, 1f)] public float density = 0.5f;
 
@@ -655,8 +678,13 @@ public class InfiniteTerrain : MonoBehaviour
                 if (t != null)
                 {
                     var data = t.terrainData;
+                    // mesh do gelo é asset de runtime como o TerrainData: sem o
+                    // Destroy explícito ele vaza a cada tile descartado
+                    var iceFilter = t.GetComponentInChildren<MeshFilter>();
+                    var iceMesh = iceFilter != null ? iceFilter.sharedMesh : null;
                     Destroy(t.gameObject);
                     Destroy(data);
+                    if (iceMesh != null) Destroy(iceMesh);
                 }
                 break;
             }
@@ -820,11 +848,14 @@ public class InfiniteTerrain : MonoBehaviour
             {
                 name = "Floresta — árvores", biome = Biome.Floresta, prefabs = treePrefabs,
                 attemptsPerTile = treeAttempts, minBiomeWeight = 0.4f, density = 1f,
+                avoidBiomeMax = 0.25f,   // nunca sobre areia dominante
                 scaleRange = new Vector2(0.85f, 1.4f), aspectJitter = 0.1f,
                 maxSlope = 0.5f, landmark = true,
                 clusterStrength = 0.25f, clusterSize = 220f, clusterCoverage = 0.55f,
                 clusterEdgeSoftness = 0.8f, clusterIrregularity = 0.4f,
-                speciesClumping = 0.55f, speciesPatchSize = 150f
+                // 0.4/110 (era 0.55/150): stands de UMA espécie ficavam grandes
+                // demais e a mata lia como monocultura vista do ar
+                speciesClumping = 0.4f, speciesPatchSize = 110f
             },
             // Arbustos (ForestBush01–11): manchas GRANDES e irregulares com borda
             // suave, mancha tendendo a UMA espécie. Divide o noise (clusterGroup 2)
@@ -834,6 +865,7 @@ public class InfiniteTerrain : MonoBehaviour
             new()
             {
                 name = "Floresta — arbustos", biome = Biome.Floresta, prefabs = bushPrefabs,
+                avoidBiomeMax = 0.25f,
                 attemptsPerTile = forestBushPerTile, minBiomeWeight = 0.4f,
                 density = 1f, scaleRange = new Vector2(0.7f, 1.45f), aspectJitter = 0.12f,
                 maxSlope = 0.5f, minSpacing = 1.3f,
@@ -909,6 +941,8 @@ public class InfiniteTerrain : MonoBehaviour
             new()
             {
                 name = "Campos — árvores isoladas", biome = Biome.Campos, prefabs = treePrefabs,
+                avoidBiomeMax = 0.25f,   // nunca sobre areia dominante
+                speciesClumping = 0.35f, speciesPatchSize = 120f,   // capões com identidade
                 attemptsPerTile = 14, minBiomeWeight = 0.5f, density = 0.9f,
                 scaleRange = new Vector2(0.85f, 1.4f), maxSlope = 0.5f,
                 minSpacing = 18f, landmark = true,
@@ -920,6 +954,7 @@ public class InfiniteTerrain : MonoBehaviour
             new()
             {
                 name = "Campos — arbustos", biome = Biome.Campos, prefabs = bushPrefabs,
+                avoidBiomeMax = 0.25f,
                 attemptsPerTile = 46, minBiomeWeight = 0.5f, density = 0.9f,
                 scaleRange = new Vector2(0.8f, 1.2f), maxSlope = 0.5f, minSpacing = 8f,
                 clusterStrength = 0.85f, clusterSize = 50f, clusterCoverage = 0.18f,
@@ -948,8 +983,11 @@ public class InfiniteTerrain : MonoBehaviour
                 name = "Deserto — paredões", biome = Biome.Deserto,
                 prefabs = desertFormationPrefabs,
                 attemptsPerTile = Mathf.RoundToInt(260 * d), minBiomeWeight = 0.4f, density = 0.7f,
-                scaleRange = new Vector2(1.8f, 5.5f), aspectJitter = 0.2f,
-                minSlope = 0.35f, maxSlope = 99f,       // SÓ nas encostas: revestem os cânions
+                scaleRange = new Vector2(1.8f, 4.5f), aspectJitter = 0.2f,
+                // minSlope 0.5 (era 0.35): a borda convexa do TOPO das mesetas
+                // qualificava e as formações coroavam os cumes como cogumelos
+                // em balanço — 0.5 só existe nas paredes de verdade.
+                minSlope = 0.5f, maxSlope = 99f,
                 clusterStrength = 0.35f, clusterSize = 130f, clusterGroup = 0,
                 clusterIrregularity = 0.5f,
                 minSpacing = 5f, blockRadius = 5f
@@ -1025,9 +1063,9 @@ public class InfiniteTerrain : MonoBehaviour
             new()
             {
                 name = "Tundra — pedras", biome = Biome.Tundra, prefabs = winterRockPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(70 * w), minBiomeWeight = 0.35f, density = 0.7f,
+                attemptsPerTile = Mathf.RoundToInt(120 * w), minBiomeWeight = 0.35f, density = 0.7f,
                 scaleRange = new Vector2(0.35f, 1.9f), aspectJitter = 0.2f, maxSlope = 0.7f,
-                clusterStrength = 0.45f, clusterSize = 140f, clusterGroup = 3,  // junto dos afloramentos
+                clusterStrength = 0.3f, clusterSize = 140f, clusterGroup = 3,   // espalha pelo aberto
                 clusterIrregularity = 0.5f
             },
             // Bosques: pinheiros altos (Tree_B) são a espinha dorsal — manchas
@@ -1038,7 +1076,7 @@ public class InfiniteTerrain : MonoBehaviour
                 name = "Tundra — bosques (pinheiros)", biome = Biome.Tundra,
                 prefabs = winterPinePrefabs,
                 attemptsPerTile = Mathf.RoundToInt(380 * w), minBiomeWeight = 0.4f, density = 0.95f,
-                scaleRange = new Vector2(0.6f, 1.5f), maxSlope = 0.5f,
+                scaleRange = new Vector2(0.9f, 1.8f), maxSlope = 0.5f,   // +30%: escala p/ dragão
                 clusterStrength = 0.8f, clusterSize = 150f, clusterGroup = 1,
                 clusterCoverage = 0.42f, clusterEdgeSoftness = 0.65f, clusterIrregularity = 0.5f,
                 speciesClumping = 0.35f, speciesPatchSize = 90f,
@@ -1050,7 +1088,7 @@ public class InfiniteTerrain : MonoBehaviour
             {
                 name = "Tundra — abetos", biome = Biome.Tundra, prefabs = winterFirPrefabs,
                 attemptsPerTile = Mathf.RoundToInt(90 * w), minBiomeWeight = 0.4f, density = 0.7f,
-                scaleRange = new Vector2(0.75f, 1.3f), maxSlope = 0.5f,
+                scaleRange = new Vector2(1f, 1.6f), maxSlope = 0.5f,
                 clusterStrength = 0.7f, clusterSize = 150f, clusterGroup = 1,
                 clusterCoverage = 0.42f, clusterEdgeSoftness = 0.65f, clusterIrregularity = 0.5f,
                 speciesClumping = 0.5f, speciesPatchSize = 70f,
@@ -1063,7 +1101,7 @@ public class InfiniteTerrain : MonoBehaviour
                 name = "Tundra — capões de bétulas", biome = Biome.Tundra,
                 prefabs = winterBirchPrefabs,
                 attemptsPerTile = Mathf.RoundToInt(120 * w), minBiomeWeight = 0.45f, density = 0.8f,
-                scaleRange = new Vector2(0.75f, 1.6f), maxSlope = 0.5f,
+                scaleRange = new Vector2(0.95f, 1.8f), maxSlope = 0.5f,
                 clusterStrength = 0.8f, clusterSize = 70f,
                 clusterCoverage = 0.16f, clusterEdgeSoftness = 0.55f, clusterIrregularity = 0.6f,
                 speciesClumping = 0.5f, speciesPatchSize = 50f,
@@ -1075,9 +1113,9 @@ public class InfiniteTerrain : MonoBehaviour
             {
                 name = "Tundra — madeira caída", biome = Biome.Tundra,
                 prefabs = winterDeadwoodPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(60 * w), minBiomeWeight = 0.4f, density = 0.65f,
+                attemptsPerTile = Mathf.RoundToInt(90 * w), minBiomeWeight = 0.4f, density = 0.65f,
                 scaleRange = new Vector2(0.5f, 1.2f), aspectJitter = 0.15f, maxSlope = 0.5f,
-                clusterStrength = 0.5f, clusterSize = 150f, clusterGroup = 1,
+                clusterStrength = 0.35f, clusterSize = 150f, clusterGroup = 1,
                 clusterCoverage = 0.42f, clusterEdgeSoftness = 0.75f, clusterIrregularity = 0.5f,
                 minSpacing = 5f, avoidBlockers = 1f
             },
@@ -1086,9 +1124,9 @@ public class InfiniteTerrain : MonoBehaviour
             new()
             {
                 name = "Tundra — arbustos", biome = Biome.Tundra, prefabs = winterBushPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(420 * w), minBiomeWeight = 0.4f, density = 0.9f,
+                attemptsPerTile = Mathf.RoundToInt(560 * w), minBiomeWeight = 0.4f, density = 0.9f,
                 scaleRange = new Vector2(0.3f, 1.4f), maxSlope = 0.55f,
-                clusterStrength = 0.55f, clusterSize = 60f,
+                clusterStrength = 0.45f, clusterSize = 60f,   // mais vazamento p/ o aberto
                 clusterCoverage = 0.45f, clusterEdgeSoftness = 0.75f, clusterIrregularity = 0.6f,
                 speciesClumping = 0.5f, speciesPatchSize = 40f
             },
@@ -1098,19 +1136,19 @@ public class InfiniteTerrain : MonoBehaviour
             new()
             {
                 name = "Tundra — grama seca", biome = Biome.Tundra, prefabs = winterGrassPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(700 * w), minBiomeWeight = 0.35f, density = 1f,
+                attemptsPerTile = Mathf.RoundToInt(1000 * w), minBiomeWeight = 0.35f, density = 1f,
                 scaleRange = new Vector2(0.45f, 1.25f), maxSlope = 0.55f,
                 clusterStrength = 0.45f, clusterSize = 55f,
-                clusterCoverage = 0.5f, clusterEdgeSoftness = 0.85f, clusterIrregularity = 0.5f,
+                clusterCoverage = 0.6f, clusterEdgeSoftness = 0.85f, clusterIrregularity = 0.5f,
                 speciesClumping = 0.6f, speciesPatchSize = 45f
             },
             // Debris: galhada fina sob os bosques — a serrapilheira do inverno.
             new()
             {
                 name = "Tundra — debris", biome = Biome.Tundra, prefabs = winterDebrisPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(70 * w), minBiomeWeight = 0.35f, density = 0.7f,
+                attemptsPerTile = Mathf.RoundToInt(170 * w), minBiomeWeight = 0.35f, density = 0.7f,
                 scaleRange = new Vector2(0.4f, 1.3f), aspectJitter = 0.25f, maxSlope = 0.6f,
-                clusterStrength = 0.45f, clusterSize = 150f, clusterGroup = 1,
+                clusterStrength = 0.3f, clusterSize = 150f, clusterGroup = 1,   // galhada também no aberto
                 clusterCoverage = 0.42f, clusterEdgeSoftness = 0.8f, clusterIrregularity = 0.5f
             },
 
@@ -1280,7 +1318,7 @@ public class InfiniteTerrain : MonoBehaviour
                 name = "Montanha — treeline (abetos nevados)", biome = Biome.Montanha,
                 prefabs = winterFirPrefabs,
                 attemptsPerTile = Mathf.RoundToInt(60 * w), minBiomeWeight = 0.45f, density = 0.7f,
-                scaleRange = new Vector2(0.8f, 1.3f), maxSlope = 0.55f,
+                scaleRange = new Vector2(1f, 1.5f), maxSlope = 0.55f,
                 heightRange = new Vector2(52f, 80f),
                 clusterStrength = 0.4f, clusterSize = 120f,
                 clusterEdgeSoftness = 0.7f, clusterIrregularity = 0.5f,
@@ -1318,6 +1356,7 @@ public class InfiniteTerrain : MonoBehaviour
     {
         public Vector2Int coord;
         public TerrainData terrain;                     // heightmap + splatmap + trees
+        public Mesh ice;                                // placa de gelo da Tundra (null = tile sem gelo)
         public readonly List<Vector2> landmarks = new(); // XZ dos marcos (minimapa)
     }
 
@@ -1366,6 +1405,14 @@ public class InfiniteTerrain : MonoBehaviour
         td.terrainLayers = layers;
         td.SetHeights(0, 0, heights);
         yield return null;
+
+        // ---- gelo da Tundra: placa sólida sobre a água congelada (só dados;
+        //      renderer + collider nascem no InstantiateTile)
+        if (freezeTundraWater && (enableLakes || StreamsActive))
+        {
+            var iceGen = BuildIceMeshSteps(data, heights, ox, oz);
+            while (iceGen.MoveNext()) yield return null;
+        }
 
         // ---- texturas por bioma + inclinação
         //      canais: 0 grama · 1 floresta · 2 rocha de montanha · 3 neve · 4 areia
@@ -1425,8 +1472,13 @@ public class InfiniteTerrain : MonoBehaviour
                 float dirtShare = Mathf.Lerp(1f - forestGrassShare, 1f, dirtPatch);
 
                 Array.Clear(chAcc, 0, nCh);
-                chAcc[0] = plains + forest * (1f - dirtShare);
-                chAcc[1] = forest * dirtShare + sBank * 1.6f;
+                // Campos: manchas raras de terra batida (55% de blend — desgaste,
+                // não careca). Único bioma de canal ÚNICO em campo aberto — por
+                // isso só aqui o tiling da grama aparecia. Reusa o noise 'dn'.
+                float wear = Mathf.SmoothStep(0f, 1f,
+                    Mathf.InverseLerp(0.78f, 0.90f, dn)) * 0.55f;
+                chAcc[0] = plains * (1f - wear) + forest * (1f - dirtShare);
+                chAcc[1] = plains * wear + forest * dirtShare + sBank * 1.6f;
                 chAcc[2] = rock + sBed * 1.4f;
                 chAcc[3] = snow;
                 chAcc[4] = sand;
@@ -1471,6 +1523,90 @@ public class InfiniteTerrain : MonoBehaviour
         data.terrain = td;
     }
 
+    // -------------------------------------------------------- GELO DA TUNDRA
+    const float IceSurfaceOffset = 0.04f;   // acima da lâmina: a placa opaca esconde a água por baixo
+    const float IceShoreMargin = 0.30f;     // avança na margem: borda do gelo fica enterrada no barranco
+
+    /// <summary>
+    /// Mesh do gelo do tile: plano em waterLevel+ε cobrindo SÓ as células com
+    /// terreno submerso onde o peso do bioma frio passa do limiar (corte seco).
+    /// A máscara usa o MESMO Mathf.PerlinNoise da geração (BiomeWeights), na CPU —
+    /// nunca replicar em shader: o Perlin da GPU não bate com o da Unity. A placa
+    /// opaca acima da lâmina também resolve o visual de graça: a WaterSurface
+    /// global (que não congela por região) fica escondida por baixo dela.
+    /// </summary>
+    IEnumerator BuildIceMeshSteps(TileData data, float[,] heights, float ox, float oz)
+    {
+        int res = heightmapRes;
+        float step = tileSize / (res - 1);
+        float wet01 = (waterLevel + IceShoreMargin) / maxHeight;
+        float y = waterLevel + IceSurfaceOffset;    // tile fica em Y=0: local == mundo
+
+        var vertIdx = new int[res * res];           // cantos compartilhados entre células
+        for (int i = 0; i < vertIdx.Length; i++) vertIdx[i] = -1;
+        var verts = new List<Vector3>();
+        var uvs = new List<Vector2>();
+        var tris = new List<int>();
+
+        int VertAt(int x, int z)
+        {
+            int k = z * res + x;
+            if (vertIdx[k] >= 0) return vertIdx[k];
+            vertIdx[k] = verts.Count;
+            verts.Add(new Vector3(x * step, y, z * step));
+            // UV em mundo (4 m por repetição): textura contínua entre tiles vizinhos
+            uvs.Add(new Vector2((ox + x * step) / 4f, (oz + z * step) / 4f));
+            return vertIdx[k];
+        }
+
+        for (int z = 0; z < res - 1; z++)
+        {
+            for (int x = 0; x < res - 1; x++)
+            {
+                // célula entra se ALGUM canto está submerso (margem inclusa)...
+                if (heights[z, x] >= wet01 && heights[z, x + 1] >= wet01 &&
+                    heights[z + 1, x] >= wet01 && heights[z + 1, x + 1] >= wet01) continue;
+                // ...e o centro dela é frio o bastante (corte seco no limiar)
+                BiomeWeights(ox + (x + 0.5f) * step, oz + (z + 0.5f) * step,
+                             out _, out _, out _, out float cold, out _);
+                if (cold < frozenColdThreshold) continue;
+
+                int a = VertAt(x, z), b = VertAt(x + 1, z);
+                int c = VertAt(x, z + 1), d = VertAt(x + 1, z + 1);
+                tris.Add(a); tris.Add(c); tris.Add(b);
+                tris.Add(b); tris.Add(c); tris.Add(d);
+            }
+            if ((z & 7) == 7) yield return null;    // fatia: 8 linhas (3 Perlin por célula molhada)
+        }
+        if (tris.Count == 0) yield break;           // tile sem água congelada
+
+        var normals = new Vector3[verts.Count];
+        for (int i = 0; i < normals.Length; i++) normals[i] = Vector3.up;
+        var mesh = new Mesh { name = $"Ice {data.coord.x},{data.coord.y}" };
+        mesh.SetVertices(verts);
+        mesh.SetUVs(0, uvs);
+        mesh.SetTriangles(tris, 0);
+        mesh.SetNormals(normals);
+        data.ice = mesh;
+    }
+
+    Material iceRuntimeMat;
+
+    /// <summary>Material do gelo: o serializado, ou um HDRP/Lit mínimo criado em
+    /// runtime (mesmo padrão da WaterSurface, que também nasce toda em código).
+    /// Bem liso + SSR (que o WaterSetup já liga no pipeline) = reflexo de céu/cena.</summary>
+    Material IceMaterial => iceMaterial != null ? iceMaterial
+        : iceRuntimeMat != null ? iceRuntimeMat : (iceRuntimeMat = CreateIceMaterial());
+
+    static Material CreateIceMaterial()
+    {
+        var m = new Material(Shader.Find("HDRP/Lit")) { name = "M_Ice (runtime)" };
+        m.SetColor("_BaseColor", new Color(0.62f, 0.74f, 0.82f));   // azulado frio
+        m.SetFloat("_Smoothness", 0.92f);
+        m.SetFloat("_Metallic", 0f);
+        return m;
+    }
+
     /// <summary>INSTANCIAÇÃO VISUAL do tile — a única parte que toca a cena.</summary>
     void InstantiateTile(TileData data)
     {
@@ -1507,6 +1643,19 @@ public class InfiniteTerrain : MonoBehaviour
             mst.keywordSO = microSplatKeywords;
             mst.baseMapShader = microSplatBaseShader;
             mst.Sync();
+        }
+
+        // gelo da Tundra: placa visual + MeshCollider — o CharacterController do
+        // dragão (e qualquer física) pousa/anda nela como em chão comum
+        if (data.ice != null)
+        {
+            var ice = new GameObject("Ice");
+            ice.transform.SetParent(go.transform, false);
+            ice.AddComponent<MeshFilter>().sharedMesh = data.ice;
+            var mr = ice.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = IceMaterial;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            ice.AddComponent<MeshCollider>().sharedMesh = data.ice;
         }
 
         tiles[coord] = terrain;
@@ -1588,6 +1737,27 @@ public class InfiniteTerrain : MonoBehaviour
         go.name = "Snowfall (Winter pack)";
         snowfall = go.transform;
         snowfallPs = go.GetComponentsInChildren<ParticleSystem>(true);
+
+        // o prefab do pack cai uniforme demais (mesmo tamanho/velocidade, sem
+        // vento) — vira "Particle System padrão". Variação: flocos de 0.5–1.8x,
+        // velocidade 0.6–1.5x e turbulência de noise p/ deriva lateral.
+        for (int i = 0; i < snowfallPs.Length; i++)
+        {
+            var main = snowfallPs[i].main;
+            float size = main.startSize.mode == ParticleSystemCurveMode.TwoConstants
+                ? main.startSize.constantMax : main.startSize.constant;
+            main.startSize = new ParticleSystem.MinMaxCurve(size * 0.5f, size * 1.8f);
+            float speed = main.startSpeed.mode == ParticleSystemCurveMode.TwoConstants
+                ? main.startSpeed.constantMax : main.startSpeed.constant;
+            main.startSpeed = new ParticleSystem.MinMaxCurve(speed * 0.6f, speed * 1.5f);
+
+            var noise = snowfallPs[i].noise;
+            noise.enabled = true;
+            noise.strength = 0.4f;
+            noise.frequency = 0.12f;
+            noise.scrollSpeed = 0.3f;
+            noise.damping = true;
+        }
     }
 
     void UpdateSnowfall()
@@ -1637,10 +1807,19 @@ public class InfiniteTerrain : MonoBehaviour
                 double roll = rng.NextDouble();      // consumir SEMPRE mantém o determinismo
                 float wx = ox + nx * tileSize, wz = oz + nz * tileSize;
 
-                // 1) peso do bioma — densidade cai suavemente rumo à borda
+                // 1) peso do bioma — densidade cai suavemente rumo à borda.
+                //    O limiar ganha um JITTER espacial (~±12%): sem ele, a borda
+                //    do bioma virava uma "linha de plantio" de árvores perfeitas.
                 BiomeWeights(wx, wz, out float bPl, out float bFo, out float bMo, out float bCo, out float bDe);
                 float w = PickWeight(layer.biome, bPl, bFo, bMo, bCo, bDe);
-                if (w < layer.minBiomeWeight) continue;
+                float th = layer.minBiomeWeight *
+                           (0.88f + 0.24f * Mathf.PerlinNoise(wx * 0.021f + oxD + 71.7f,
+                                                              wz * 0.021f + ozD + 33.1f));
+                if (w < th) continue;
+                // veto do bioma rival (árvore verde × areia etc.)
+                if (layer.avoidBiomeMax < 1f &&
+                    PickWeight(layer.avoidBiome, bPl, bFo, bMo, bCo, bDe) > layer.avoidBiomeMax)
+                    continue;
                 float p = layer.density *
                           Mathf.Sqrt(Mathf.InverseLerp(layer.minBiomeWeight, 1f, w));
 
@@ -1665,8 +1844,9 @@ public class InfiniteTerrain : MonoBehaviour
                 float h = SampleHeight01(heights, heightmapRes, nx, nz) * maxHeight;
                 if (h < layer.heightRange.x || h > layer.heightRange.y) continue;
                 if (!layer.inStreamBed &&                     // seixos PODEM ficar submersos
-                    (enableLakes || StreamsActive) && h < waterLevel + 0.35f)
-                    continue;   // nada dentro/na beira d'água
+                    (enableLakes || StreamsActive) && h < waterLevel + 0.12f)
+                    continue;   // nada dentro d'água (0.12: a grama chega até a
+                                // beira — 0.35 abria um anel de terra nua nos lagos)
 
                 // 4) distância de outros objetos
                 var pos2 = new Vector2(wx, wz);
@@ -1936,7 +2116,12 @@ public class InfiniteTerrain : MonoBehaviour
         // (≤ ~2.5 m) para dar vida ao manto branco sem virar campo de dunas.
         float drift = 1f - Mathf.Abs(2f * Mathf.PerlinNoise(wx * 0.013f + oxT + 57.1f,
                                                             wz * 0.009f + ozT + 88.7f) - 1f);
-        float hTundra = 5f + FBM(wx, wz, 0.007f, 2) * 6f + drift * drift * 2.5f;
+        // montículos finos (~18 m): microrrelevo que o manto liso não tinha —
+        // "a montanha parece um cone suavizado" era a crítica
+        float micro = 1f - Mathf.Abs(2f * Mathf.PerlinNoise(wx * 0.055f + oxT + 13.9f,
+                                                            wz * 0.055f + ozT + 41.2f) - 1f);
+        float hTundra = 5f + FBM(wx, wz, 0.007f, 2) * 6f + drift * drift * 2.5f
+                      + micro * micro * 1.1f;
 
         // Deserto: perfil da Demo do RockyDesert — piso de cânion com dunas/ondulações
         // + MESETAS em DOIS níveis (~28 m e ~52 m) com paredões íngremes de borda
@@ -2047,8 +2232,11 @@ public class InfiniteTerrain : MonoBehaviour
         float free = (1f - mount) * (1f - cold);   // terreno plano restante (nem montanha nem tundra)
 
         // Deserto = quente + seco. Fica fora de montanha/tundra por causa do 'free'.
+        // Limiar de temperatura em 0.58 (era 0.52): garante ≥0.2 de faixa TEMPERADA
+        // entre o deserto e o frio (que começa em temp < 0.38) — sem isso, areia
+        // encostava na neve em ~100 m e o mundo lia como colagem de biomas.
         float desertNiche = enableDesert
-            ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.52f, 0.70f, temp)) *
+            ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.58f, 0.74f, temp)) *
               Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.50f, 0.68f, 1f - moist)) : 0f;
 
         forest = 0f; plains = 0f; desert = 0f;

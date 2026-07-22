@@ -175,6 +175,15 @@ public class HorizonVista : MonoBehaviour
                     Color col =
                         (colorCampos * pl + colorFloresta * fo + colorMontanha * mo +
                          colorTundra * co + colorDeserto * de) / sum;
+
+                    // relevo dá vida à rocha: encostas altas clareiam (pedra
+                    // exposta), vales escurecem — e um jitter fino por vértice
+                    // mata o aspecto "cone de plástico chapado" das montanhas.
+                    float lift = Mathf.InverseLerp(18f, 95f, rawH);
+                    col *= 1f + mo * Mathf.Lerp(-0.10f, 0.28f, lift);
+                    col *= 0.94f + 0.12f * Mathf.PerlinNoise(wx * 0.013f + 31.7f,
+                                                             wz * 0.013f + 87.3f);
+
                     // neve por altitude REAL (antes do exagero): picos nevados
                     // como no mundo de verdade (módulo Snow do MicroSplat)
                     float snow = Mathf.InverseLerp(snowLine, snowLine + 30f, rawH);
