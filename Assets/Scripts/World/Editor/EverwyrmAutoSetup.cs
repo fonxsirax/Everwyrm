@@ -51,6 +51,14 @@ static class EverwyrmAutoSetup
             WinterSetup.EnsureGlobalSettings();
         }
 
+        // 2e-m) Mountain Environment (NM) convertido? + vento global na cena
+        if (MountainSetup.IsInstalled)
+        {
+            if (!MountainSetup.IsConverted && MountainSetup.HdrpPackImported)
+                MountainSetup.Convert();
+            MountainSetup.EnsureWind();
+        }
+
         // limpeza one-shot: a galeria de diagnóstico (ferramenta já removida)
         // ficou salva na cena Main — remover se ainda existir.
         foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())

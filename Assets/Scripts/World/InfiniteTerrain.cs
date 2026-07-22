@@ -151,6 +151,45 @@ public class InfiniteTerrain : MonoBehaviour
     [Tooltip("Partícula de neve do pack (Snow_01) — segue o jogador dentro da Tundra/Montanha.")]
     public GameObject winterSnowfallPrefab;
 
+    [Header("Montanha (Mountain Environment — preenchido pelo MountainSetup)")]
+    [Tooltip("Pinheiros adultos (Forest_pine) — a mata dos vales e encostas baixas. " +
+             "Regra do autor: pintados a ~55% da escala (scaleRange já calibrado).")]
+    public PaintTree[] mountainPinePrefabs;
+    [Tooltip("Mudas e árvores jovens (pine_plant/tree_00) — sub-bosque e borda da mata.")]
+    public PaintTree[] mountainSaplingPrefabs;
+    [Tooltip("Krummholz (dwarf pine + hazel) — vegetação anã da treeline.")]
+    public PaintTree[] mountainBushPrefabs;
+    [Tooltip("Grama, urze, mirtilo, rododendro — cobertura dos vales.")]
+    public PaintTree[] mountainGrassPrefabs;
+    [Tooltip("Pedras avulsas (4 famílias: nua/musgo/agulhas/solo).")]
+    public PaintTree[] mountainRockPrefabs;
+    [Tooltip("Muralhas e formações grandes (big_rock/rock_wall/mountain_rock_big) — " +
+             "vestem penhascos em escala 2.5–7 como na Demo (lá chegam a 49×).")]
+    public PaintTree[] mountainBoulderPrefabs;
+    [Tooltip("Seixos de rio (river_stone 1–12) — SÓ no leito dos riachos (inStreamBed).")]
+    public PaintTree[] mountainRiverStonePrefabs;
+    [Tooltip("Raízes de barranco, tocos e troncos — vestem as quebras de encosta.")]
+    public PaintTree[] mountainDeadwoodPrefabs;
+    [Tooltip("Cogumelos (32 espécies) — chão da mata de pinheiros.")]
+    public PaintTree[] mountainMushroomPrefabs;
+    [Tooltip("Galhos, pinhas e formigueiros — serrapilheira da montanha.")]
+    public PaintTree[] mountainDetailPrefabs;
+    [Tooltip("Decals de chão — reforço de textura só em patamares planos.")]
+    public PaintTree[] mountainDecalPrefabs;
+    [Tooltip("Estátua Sviatovid — landmark RARÍSSIMO em platôs (decisão de lore: mantida).")]
+    public PaintTree[] mountainStatuePrefabs;
+    [Tooltip("Multiplicador geral de densidade da Montanha (1 = calibrado pela Demo NM).")]
+    [SerializeField, Range(0.1f, 2f)] float mountainDensity = 1f;
+    [Tooltip("Rocha de penhasco do pack — RESERVADA p/ um canal futuro só da montanha " +
+             "(no canal 2 global ela escurecia as bacias de lago; revertido).")]
+    public TerrainLayer mountainRockTerrainLayer;
+    [Tooltip("Musgo (vales úmidos) — canal extra do alphamap.")]
+    public TerrainLayer mountainMossLayer;
+    [Tooltip("Agulhas de pinheiro (sob a mata, via groundPaint) — canal extra.")]
+    public TerrainLayer mountainNeedleLayer;
+    [Tooltip("Solo de altitude (meia encosta) — canal extra.")]
+    public TerrainLayer mountainSoilLayer;
+
     [Header("Camadas de espalhamento (vazio = padrão gerado dos arrays acima)")]
     [Tooltip("Controle fino da distribuição. Deixe vazio para usar o conjunto padrão " +
              "(floresta + campos + deserto). Cada camada = um 'tipo' de objeto com suas regras.")]
@@ -331,8 +370,12 @@ public class InfiniteTerrain : MonoBehaviour
         public bool landmark = false;
 
         [Tooltip("≥ 0: a máscara de AGRUPAMENTO desta camada também pinta este canal do " +
-                 "alphamap (ex.: folhas congeladas sob os bosques da Tundra). -1 = não pinta.")]
+                 "alphamap (6 folhas · 8 agulhas — ex.: chão sob os bosques). -1 = não pinta.")]
         public int groundPaint = -1;
+
+        [Tooltip("Inverte a regra dos riachos: coloca SÓ no leito/margens (seixos de rio) " +
+                 "e permite ficar abaixo da lâmina d'água.")]
+        public bool inStreamBed = false;
 
         [NonSerialized] public int protoBase;   // offset no array de TreePrototypes
         [NonSerialized] public int protoCount;
@@ -382,6 +425,9 @@ public class InfiniteTerrain : MonoBehaviour
         [Range(0f, 1f)] public float fadeStart = 0.55f;
         [Tooltip("Peso do bioma abaixo do qual não existe riacho nenhum")]
         [Range(0f, 1f)] public float fadeEnd = 0.25f;
+        [Tooltip("Confina o riacho aos VALES em U da montanha (lê o mesmo campo de " +
+                 "cristas do relevo) — sem isso, o curso escavaria gargantas nos picos.")]
+        public bool valleyOnly = false;
 
         [NonSerialized] public Vector2 offCourse, offWidth, offRegion; // da seed (BuildStreamSetup)
     }
@@ -415,11 +461,18 @@ public class InfiniteTerrain : MonoBehaviour
 
         // Ordem dos canais do alphamap:
         // 0 grama · 1 floresta · 2 rocha de montanha · 3 neve · 4 areia
-        // · 5 rocha do deserto · 6 folhas congeladas (opcional, Winter pack)
+        // · 5 rocha do deserto — e, com os packs de bioma, o bloco ESTENDIDO em
+        // posições FIXAS: 6 folhas congeladas (Winter) · 7 musgo · 8 agulhas ·
+        // 9 solo de altitude (Mountain). O bloco entra por inteiro se QUALQUER
+        // layer dele existir (slots vazios ganham fallback) — os índices dos
+        // canais nunca mudam, então groundPaint e MicroSplat ficam estáveis.
         var layerList = new List<TerrainLayer>
         {
             MakeLayer(grassDiffuse, grassNormal, grassMask, grassColor, groundTextureTile),
             MakeLayer(forestDiffuse, forestNormal, forestMask, forestColor, groundTextureTile),
+            // canal 2 pinta encostas do MUNDO INTEIRO (bacias de lago incluídas)
+            // — fica com a rocha clara de sempre; a NM (escura, de penhasco) é
+            // agressiva demais fora da montanha e escureceu os lagos.
             MakeLayer(rockDiffuse, rockNormal, rockMask, rockColor, groundTextureTile * 1.6f),
             snowLayer != null ? snowLayer
                               : MakeLayer(snowDiffuse, snowNormal, snowMask, snowColor, groundTextureTile),
@@ -428,7 +481,18 @@ public class InfiniteTerrain : MonoBehaviour
             desertRockLayer != null ? desertRockLayer
                               : MakeLayer(null, null, null, desertRockColor, groundTextureTile * 1.6f)
         };
-        if (winterGroundLayer != null) layerList.Add(winterGroundLayer);
+        if (winterGroundLayer != null || mountainMossLayer != null ||
+            mountainNeedleLayer != null || mountainSoilLayer != null)
+        {
+            layerList.Add(winterGroundLayer != null ? winterGroundLayer
+                : MakeLayer(null, null, null, new Color(0.55f, 0.48f, 0.35f), groundTextureTile));
+            layerList.Add(mountainMossLayer != null ? mountainMossLayer
+                : MakeLayer(null, null, null, new Color(0.25f, 0.34f, 0.18f), groundTextureTile));
+            layerList.Add(mountainNeedleLayer != null ? mountainNeedleLayer
+                : MakeLayer(null, null, null, new Color(0.42f, 0.33f, 0.22f), groundTextureTile));
+            layerList.Add(mountainSoilLayer != null ? mountainSoilLayer
+                : MakeLayer(null, null, null, new Color(0.45f, 0.38f, 0.30f), groundTextureTile));
+        }
         layers = layerList.ToArray();
 
         BuildScatterSetup();
@@ -694,9 +758,11 @@ public class InfiniteTerrain : MonoBehaviour
     }
 
     /// <summary>
-    /// Config dos riachos (decisão de design: SÓ na Floresta Antiga). Canal de
-    /// 10–20 m escavado 1.8 m abaixo do waterLevel, meandros de ~430 m, presentes
-    /// em ~1/4 do bioma em bacias de ~2.6 km — achar um riacho é semi-raro.
+    /// Config dos riachos. Floresta: canal de 10–20 m escavado 1.8 m abaixo do
+    /// waterLevel, meandros de ~430 m, ~1/4 do bioma. Montanha: torrentes
+    /// CONFINADAS aos vales em U (valleyOnly) — o fundo do vale (~14–25 m)
+    /// escavado até a lâmina vira uma garganta de rio com paredes pintadas de
+    /// rocha pela inclinação, forrada de river stones (camada inStreamBed).
     /// </summary>
     static List<StreamSettings> DefaultStreams() => new()
     {
@@ -713,6 +779,21 @@ public class InfiniteTerrain : MonoBehaviour
             regionSize = 2600f,
             fadeStart = 0.55f,
             fadeEnd = 0.25f,
+        },
+        new StreamSettings
+        {
+            name = "Torrentes da Montanha",
+            biome = Biome.Montanha,
+            courseSize = 500f,
+            channelWidth = 0.02f,
+            depth = 1.4f,
+            bankHeight = 0.6f,
+            valleyWidthMul = 2.2f,
+            density = 0.3f,
+            regionSize = 2200f,
+            fadeStart = 0.5f,
+            fadeEnd = 0.22f,
+            valleyOnly = true,
         }
     };
 
@@ -726,6 +807,7 @@ public class InfiniteTerrain : MonoBehaviour
     {
         float d = desertDensity;
         float w = winterDensity;
+        float n = mountainDensity;
         int treeAttempts = Mathf.RoundToInt(forestVegetationPerTile * (1f - bushShare));
 
         return new List<ScatterLayer>
@@ -1032,48 +1114,185 @@ public class InfiniteTerrain : MonoBehaviour
                 clusterCoverage = 0.42f, clusterEdgeSoftness = 0.8f, clusterIrregularity = 0.5f
             },
 
-            // ---------------- MONTANHA (treeline + pedras nevadas) ----------------
-            // Árvores só nas encostas BAIXAS (heightRange limita a treeline ~60 m;
-            // hMount vai a ~130 m) — acima disso, só rocha nua e pedras com neve
-            // perto dos picos (a neve do terreno pinta a partir de h01 > 0.75).
+            // ---------------- MONTANHA (Mountain Environment - NM) ----------------
+            // Zonação alpina calibrada pela Demo NM (256 m ≈ 1 tile: 4.2k pines
+            // pintadas a wScale 0.5–0.66, 1.6k cogumelos, 2.4k galhos, 700 raízes
+            // em slope p90 37°, muralhas escala 5–49 nas paredes). Bandas de
+            // altura: vale/mata < 52 m · krummholz 45–75 · abetos nevados do
+            // Winter 52–80 · acima só rocha, pedra e neve (h01 > 0.75 pinta neve).
+            // Ordem: muralhas primeiro (reservam espaço).
             new()
             {
-                name = "Montanha — treeline (abetos)", biome = Biome.Montanha,
-                prefabs = winterFirPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(70 * w), minBiomeWeight = 0.45f, density = 0.7f,
-                scaleRange = new Vector2(0.8f, 1.3f), maxSlope = 0.55f,
+                name = "Montanha — muralhas", biome = Biome.Montanha,
+                prefabs = mountainBoulderPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(220 * n), minBiomeWeight = 0.4f, density = 0.7f,
+                scaleRange = new Vector2(2.5f, 7f), aspectJitter = 0.2f,
+                minSlope = 0.45f, maxSlope = 99f,      // revestem penhascos e quebras
+                clusterStrength = 0.35f, clusterSize = 150f, clusterGroup = 5,
+                clusterIrregularity = 0.5f,
+                minSpacing = 6f, blockRadius = 6f
+            },
+            new()
+            {
+                name = "Montanha — afloramentos", biome = Biome.Montanha,
+                prefabs = mountainBoulderPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(40 * n), minBiomeWeight = 0.45f, density = 0.5f,
+                scaleRange = new Vector2(1f, 2.5f), aspectJitter = 0.15f, maxSlope = 0.45f,
+                clusterStrength = 0.8f, clusterSize = 150f, clusterGroup = 5,
+                clusterIrregularity = 0.6f,
+                minSpacing = 8f, blockRadius = 5f
+            },
+            // Mata de pinheiros dos vales: a regra de ouro do autor — árvores a
+            // ~55% da escala do prefab (a Demo NUNCA as usa em 1.0).
+            new()
+            {
+                name = "Montanha — mata de pinheiros", biome = Biome.Montanha,
+                prefabs = mountainPinePrefabs,
+                attemptsPerTile = Mathf.RoundToInt(300 * n), minBiomeWeight = 0.4f, density = 0.95f,
+                scaleRange = new Vector2(0.4f, 0.9f), maxSlope = 0.55f,
+                heightRange = new Vector2(-1000f, 52f),
+                clusterStrength = 0.75f, clusterSize = 160f, clusterGroup = 4,
+                clusterCoverage = 0.5f, clusterEdgeSoftness = 0.7f, clusterIrregularity = 0.5f,
+                speciesClumping = 0.35f, speciesPatchSize = 90f,
+                minSpacing = 3f, landmark = true, groundPaint = 8   // agulhas sob a mata
+            },
+            new()
+            {
+                name = "Montanha — mudas e jovens", biome = Biome.Montanha,
+                prefabs = mountainSaplingPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(160 * n), minBiomeWeight = 0.4f, density = 0.8f,
+                scaleRange = new Vector2(0.4f, 1f), maxSlope = 0.55f,
+                heightRange = new Vector2(-1000f, 58f),
+                clusterStrength = 0.5f, clusterSize = 160f, clusterGroup = 4,
+                clusterCoverage = 0.5f, clusterEdgeSoftness = 0.8f, clusterIrregularity = 0.5f,
+                minSpacing = 2f
+            },
+            // Hero pines: pinheiros agarrados nas paredes de pedra (a Demo os
+            // coloca à mão com 34–40% em slope > 45° — aqui o filtro faz isso).
+            new()
+            {
+                name = "Montanha — pinheiros das encostas", biome = Biome.Montanha,
+                prefabs = mountainPinePrefabs,
+                attemptsPerTile = Mathf.RoundToInt(40 * n), minBiomeWeight = 0.45f, density = 0.5f,
+                scaleRange = new Vector2(0.35f, 0.7f),
+                minSlope = 0.5f, maxSlope = 99f, heightRange = new Vector2(-1000f, 78f),
+                minSpacing = 8f, avoidBlockers = 1f
+            },
+            // Krummholz: pinheiros anões e aveleiras na faixa da treeline.
+            new()
+            {
+                name = "Montanha — krummholz", biome = Biome.Montanha,
+                prefabs = mountainBushPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(120 * n), minBiomeWeight = 0.4f, density = 0.8f,
+                scaleRange = new Vector2(0.7f, 1.3f), maxSlope = 0.6f,
+                heightRange = new Vector2(45f, 75f),
+                clusterStrength = 0.6f, clusterSize = 60f,
+                clusterCoverage = 0.35f, clusterEdgeSoftness = 0.7f, clusterIrregularity = 0.6f
+            },
+            new()
+            {
+                name = "Montanha — grama e urze", biome = Biome.Montanha,
+                prefabs = mountainGrassPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(500 * n), minBiomeWeight = 0.35f, density = 1f,
+                scaleRange = new Vector2(0.6f, 1.5f), maxSlope = 0.5f,
                 heightRange = new Vector2(-1000f, 60f),
+                clusterStrength = 0.45f, clusterSize = 55f,
+                clusterCoverage = 0.5f, clusterEdgeSoftness = 0.85f, clusterIrregularity = 0.5f,
+                speciesClumping = 0.6f, speciesPatchSize = 40f
+            },
+            new()
+            {
+                name = "Montanha — cogumelos", biome = Biome.Montanha,
+                prefabs = mountainMushroomPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(120 * n), minBiomeWeight = 0.4f, density = 0.8f,
+                scaleRange = new Vector2(0.5f, 1.5f), maxSlope = 0.5f,
+                heightRange = new Vector2(-1000f, 55f),
+                clusterStrength = 0.6f, clusterSize = 160f, clusterGroup = 4,   // sob a mata
+                clusterCoverage = 0.5f, clusterEdgeSoftness = 0.8f, clusterIrregularity = 0.5f,
+                speciesClumping = 0.6f, speciesPatchSize = 30f
+            },
+            new()
+            {
+                name = "Montanha — serrapilheira", biome = Biome.Montanha,
+                prefabs = mountainDetailPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(180 * n), minBiomeWeight = 0.35f, density = 0.9f,
+                scaleRange = new Vector2(0.5f, 1.3f), aspectJitter = 0.2f, maxSlope = 0.55f,
+                heightRange = new Vector2(-1000f, 58f),
+                clusterStrength = 0.45f, clusterSize = 160f, clusterGroup = 4,
+                clusterCoverage = 0.5f, clusterEdgeSoftness = 0.85f, clusterIrregularity = 0.4f
+            },
+            // Raízes/tocos nos barrancos — a Demo os usa a slope p90 = 37°.
+            new()
+            {
+                name = "Montanha — raízes de barranco", biome = Biome.Montanha,
+                prefabs = mountainDeadwoodPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(70 * n), minBiomeWeight = 0.4f, density = 0.7f,
+                scaleRange = new Vector2(0.5f, 1.1f), aspectJitter = 0.15f,
+                minSlope = 0.2f, maxSlope = 0.9f, heightRange = new Vector2(-1000f, 70f),
+                minSpacing = 5f, avoidBlockers = 1f
+            },
+            new()
+            {
+                name = "Montanha — pedras", biome = Biome.Montanha,
+                prefabs = mountainRockPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(140 * n), minBiomeWeight = 0.35f, density = 0.7f,
+                scaleRange = new Vector2(0.4f, 1.8f), aspectJitter = 0.2f, maxSlope = 0.75f,
+                clusterStrength = 0.4f, clusterSize = 150f, clusterGroup = 5,   // junto do rochedo
+                clusterIrregularity = 0.5f
+            },
+            // Seixos de rio: SÓ no leito/margens das torrentes (inStreamBed) —
+            // podem ficar submersos, como os 6.4k river stones da Demo.
+            new()
+            {
+                name = "Montanha — seixos do rio", biome = Biome.Montanha,
+                prefabs = mountainRiverStonePrefabs,
+                attemptsPerTile = Mathf.RoundToInt(400 * n), minBiomeWeight = 0.3f, density = 0.9f,
+                scaleRange = new Vector2(0.5f, 1.6f), aspectJitter = 0.25f, maxSlope = 0.8f,
+                inStreamBed = true
+            },
+            // Decals de chão: reforço de textura APENAS em patamares planos,
+            // em pequenos grupos (a Demo nunca os espalha uniformemente).
+            new()
+            {
+                name = "Montanha — decals", biome = Biome.Montanha,
+                prefabs = mountainDecalPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(20 * n), minBiomeWeight = 0.5f, density = 0.4f,
+                scaleRange = new Vector2(0.8f, 1.3f), maxSlope = 0.08f,
+                clusterStrength = 0.8f, clusterSize = 40f, clusterCoverage = 0.15f,
+                minSpacing = 4f
+            },
+            // Estátua Sviatovid: landmark RARÍSSIMO — só platôs planos a meia
+            // altura; achar uma é evento (aparece no minimapa como marco).
+            new()
+            {
+                name = "Montanha — estátua (landmark)", biome = Biome.Montanha,
+                prefabs = mountainStatuePrefabs,
+                attemptsPerTile = 2, minBiomeWeight = 0.7f, density = 0.06f,
+                scaleRange = new Vector2(1.3f, 1.6f), maxSlope = 0.08f,
+                heightRange = new Vector2(40f, 70f),
+                minSpacing = 200f, avoidBlockers = 3f, landmark = true
+            },
+
+            // Treeline nevada (Winter pack): abetos acima da mata de pinheiros —
+            // a transição para o topo branco; pedras nevadas perto dos picos.
+            new()
+            {
+                name = "Montanha — treeline (abetos nevados)", biome = Biome.Montanha,
+                prefabs = winterFirPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(60 * w), minBiomeWeight = 0.45f, density = 0.7f,
+                scaleRange = new Vector2(0.8f, 1.3f), maxSlope = 0.55f,
+                heightRange = new Vector2(52f, 80f),
                 clusterStrength = 0.4f, clusterSize = 120f,
                 clusterEdgeSoftness = 0.7f, clusterIrregularity = 0.5f,
                 minSpacing = 6f, landmark = true
-            },
-            // Pinheiros esparsos morrendo na subida — os últimos sobreviventes
-            // acima da mata fechada, cada vez mais raros até a rocha nua.
-            new()
-            {
-                name = "Montanha — pinheiros da treeline", biome = Biome.Montanha,
-                prefabs = winterPinePrefabs,
-                attemptsPerTile = Mathf.RoundToInt(30 * w), minBiomeWeight = 0.45f, density = 0.55f,
-                scaleRange = new Vector2(0.6f, 1.2f), maxSlope = 0.6f,
-                heightRange = new Vector2(30f, 75f),
-                clusterStrength = 0.3f, clusterSize = 90f,
-                minSpacing = 9f
-            },
-            new()
-            {
-                name = "Montanha — madeira caída", biome = Biome.Montanha,
-                prefabs = winterDeadwoodPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(14 * w), minBiomeWeight = 0.45f, density = 0.5f,
-                scaleRange = new Vector2(0.5f, 1.1f), aspectJitter = 0.15f, maxSlope = 0.55f,
-                heightRange = new Vector2(-1000f, 65f), minSpacing = 8f
             },
             new()
             {
                 name = "Montanha — pedras nevadas", biome = Biome.Montanha,
                 prefabs = winterRockPrefabs,
-                attemptsPerTile = Mathf.RoundToInt(60 * w), minBiomeWeight = 0.4f, density = 0.7f,
+                attemptsPerTile = Mathf.RoundToInt(50 * w), minBiomeWeight = 0.4f, density = 0.7f,
                 scaleRange = new Vector2(0.7f, 1.8f), aspectJitter = 0.25f,
-                maxSlope = 0.8f, heightRange = new Vector2(40f, 1000f)
+                maxSlope = 0.8f, heightRange = new Vector2(75f, 1000f)
             },
         };
     }
@@ -1167,10 +1386,28 @@ public class InfiniteTerrain : MonoBehaviour
                 float h01 = SampleHeight01(heights, heightmapRes, x * aNorm, nz);
                 float slope = SlopeFromGrid(heights, heightmapRes, x * aNorm, nz);
                 float slopeRock = Mathf.Clamp01(slope * 2.2f - 0.35f);
-                float rock = mount + slopeRock * (1f - desert);           // encostas fora do deserto
                 float snow = cold + Mathf.Clamp01((h01 - 0.75f) * 4f);    // neve só em picos altos/tundra
                 float dRock = desert * Mathf.Clamp01(slope * 2.6f - 0.3f); // penhascos de arenito
                 float sand = Mathf.Max(0f, desert - dRock);
+
+                // Montanha: com as layers do Mountain pack (canais 7–9), o chão
+                // vira zonação alpina real — musgo nos vales, solo a meia altura,
+                // rocha nua no alto/íngreme (Demo NM: Moss 32% + agulhas 30% +
+                // solo 24%; as agulhas entram sob a mata via groundPaint).
+                // Sem as layers, comportamento antigo: montanha 100% rocha.
+                float rock = slopeRock * (1f - desert);   // encostas fora do deserto
+                float mMoss = 0f, mSoil = 0f;
+                if (nCh >= 10 && mount > 0.001f)
+                {
+                    float hM = h01 * maxHeight;
+                    float soft = mount * (1f - slopeRock);
+                    float higher = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(38f, 52f, hM));
+                    float bare = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(72f, 92f, hM));
+                    mMoss = soft * (1f - higher);
+                    mSoil = soft * higher * (1f - bare);
+                    rock += mount * slopeRock + soft * higher * bare;
+                }
+                else rock += mount;
 
                 // riachos: leito pinta rocha molhada, margens do vale pintam terra
                 float sBed = 0f, sBank = 0f;
@@ -1194,6 +1431,7 @@ public class InfiniteTerrain : MonoBehaviour
                 chAcc[3] = snow;
                 chAcc[4] = sand;
                 chAcc[5] = dRock;
+                if (nCh >= 10) { chAcc[7] = mMoss; chAcc[9] = mSoil; }
 
                 // camadas com groundPaint: a MESMA mancha de agrupamento que junta
                 // os objetos pinta o chão sob eles (folhas congeladas sob os bosques
@@ -1415,8 +1653,10 @@ public class InfiniteTerrain : MonoBehaviour
                     p *= Mathf.Lerp(1f, ClusterMask(layer, cOff, wx, wz), layer.clusterStrength);
                 if (roll > p) continue;
 
-                // 2.5) riachos: nada dentro do canal nem nas margens do vale
-                if (StreamExcluded(wx, wz, bPl, bFo, bMo, bCo, bDe)) continue;
+                // 2.5) riachos: fora do vale para as camadas normais; DENTRO
+                //      dele para as inStreamBed (seixos forrando o leito)
+                bool inValley = StreamExcluded(wx, wz, bPl, bFo, bMo, bCo, bDe);
+                if (layer.inStreamBed ? !inValley : inValley) continue;
 
                 // 3) relevo — do heightmap JÁ CALCULADO (rechamar HeightAt/SlopeAt
                 //    aqui era o custo dominante do scatter: ~60 Perlin por tentativa)
@@ -1424,7 +1664,8 @@ public class InfiniteTerrain : MonoBehaviour
                 if (slope < layer.minSlope || slope > layer.maxSlope) continue;
                 float h = SampleHeight01(heights, heightmapRes, nx, nz) * maxHeight;
                 if (h < layer.heightRange.x || h > layer.heightRange.y) continue;
-                if ((enableLakes || StreamsActive) && h < waterLevel + 0.35f)
+                if (!layer.inStreamBed &&                     // seixos PODEM ficar submersos
+                    (enableLakes || StreamsActive) && h < waterLevel + 0.35f)
                     continue;   // nada dentro/na beira d'água
 
                 // 4) distância de outros objetos
@@ -1570,6 +1811,17 @@ public class InfiniteTerrain : MonoBehaviour
             if (fade <= 0.002f) return 0f;
         }
 
+        // riachos de montanha: confinados aos VALES em U — o mesmo campo de
+        // cristas do hMount decide (t = ridge² baixo = fundo de vale). Sem isto,
+        // a curva de nível atravessaria picos escavando gargantas de 100 m.
+        if (s.valleyOnly)
+        {
+            float r = 1f - Mathf.Abs(2f * Mathf.PerlinNoise(wx * 0.0035f + oxH,
+                                                            wz * 0.0035f + ozH) - 1f);
+            fade *= 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.12f, 0.28f, r * r));
+            if (fade <= 0.002f) return 0f;
+        }
+
         // largura respira ao longo do curso e AFINA junto com o fade do bioma —
         // na borda da floresta o riacho estreita antes de secar (nunca corte seco)
         float wn = Mathf.PerlinNoise(wx / (s.courseSize * 0.31f) + s.offWidth.x,
@@ -1698,8 +1950,14 @@ public class InfiniteTerrain : MonoBehaviour
         float tier2 = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.70f, 0.78f, mesaN + edgeJit * 0.6f));
         float hDesert = dFloor + ripple * 2.2f + tier1 * 28f + tier2 * 24f;
 
+        // Montanha: cristas ridged com VALES EM U (fundo ~14–25 m, onde mata,
+        // torrentes e musgo vivem), PLATÔS a meia altura (~52 m — patamares de
+        // pouso/ninho; o t entre 0.33 e 0.45 não sobe) e picos piramidais.
         float ridge = 1f - Mathf.Abs(2f * Mathf.PerlinNoise(wx * 0.0035f + oxH, wz * 0.0035f + ozH) - 1f);
-        float hMount = 14f + ridge * ridge * 100f + FBM(wx, wz, 0.02f, 2) * 10f;
+        float tR = ridge * ridge;
+        float tLow = Mathf.Clamp01(tR / 0.33f);
+        float tHigh = Mathf.Clamp01((tR - 0.45f) / 0.55f);
+        float hMount = 14f + tLow * 38f + tHigh * tHigh * 62f + FBM(wx, wz, 0.02f, 2) * 10f;
 
         float h = plains * hPlains + forest * hForest + mount * hMount + cold * hTundra + desert * hDesert;
 
@@ -1849,17 +2107,18 @@ public class InfiniteTerrain : MonoBehaviour
     }
 
     /// <summary>
-    /// Inclinação por diferenças centrais na grade do heightmap já calculado —
-    /// mesma razão m/m do SlopeAt, ZERO chamadas de noise. Janela de 2 células
-    /// (~3.9 m no tile de 250 m/res 129) ≈ o passo e=3 m do SlopeAt analítico.
+    /// Inclinação por diferenças centrais INTERPOLADAS no heightmap já calculado
+    /// — mesma razão m/m do antigo SlopeAt, zero chamadas de noise. As amostras
+    /// são bilineares (não o ponto de grade mais próximo): a versão "snapped"
+    /// serrilhava a pintura de rocha na resolução da grade — regressão visível
+    /// nas bordas das bacias de lago.
     /// </summary>
     float SlopeFromGrid(float[,] h, int res, float nx, float nz)
     {
-        int x = Mathf.Clamp(Mathf.RoundToInt(Mathf.Clamp01(nx) * (res - 1)), 1, res - 2);
-        int z = Mathf.Clamp(Mathf.RoundToInt(Mathf.Clamp01(nz) * (res - 1)), 1, res - 2);
-        float span = 2f * tileSize / (res - 1);
-        float dx = (h[z, x + 1] - h[z, x - 1]) * maxHeight / span;
-        float dz = (h[z + 1, x] - h[z - 1, x]) * maxHeight / span;
+        float e = 1f / (res - 1);                 // 1 célula (~1.95 m)
+        float span = 2f * tileSize * e;
+        float dx = (SampleHeight01(h, res, nx + e, nz) - SampleHeight01(h, res, nx - e, nz)) * maxHeight / span;
+        float dz = (SampleHeight01(h, res, nx, nz + e) - SampleHeight01(h, res, nx, nz - e)) * maxHeight / span;
         return Mathf.Sqrt(dx * dx + dz * dz);
     }
 
@@ -2106,6 +2365,88 @@ public class InfiniteTerrain : MonoBehaviour
                 WPack + "/Prefabs/Particles/Snow_01.prefab");
             if (winterSnowfallPrefab != null) dirty = true;
         }
+
+        // ---- Mountain Environment (NM): reencontra os prefabs limpos da conversão
+        //      (Tools > Everwyrm > Mountain) — mesmas categorias do MountainSetup.
+        if ((Empty(mountainPinePrefabs) || Empty(mountainSaplingPrefabs) ||
+             Empty(mountainBushPrefabs) || Empty(mountainGrassPrefabs) ||
+             Empty(mountainRockPrefabs) || Empty(mountainBoulderPrefabs) ||
+             Empty(mountainRiverStonePrefabs) || Empty(mountainDeadwoodPrefabs) ||
+             Empty(mountainMushroomPrefabs) || Empty(mountainDetailPrefabs) ||
+             Empty(mountainDecalPrefabs) || Empty(mountainStatuePrefabs)) &&
+            UnityEditor.AssetDatabase.IsValidFolder("Assets/Everwyrm/Mountain"))
+        {
+            var mcats = new (List<GameObject> list, string[] keys)[]
+            {
+                (new List<GameObject>(), new[] { "sviatovid" }),
+                (new List<GameObject>(), new[] { "river_stone" }),
+                (new List<GameObject>(), new[] { "dwarf_pine", "hazel" }),
+                (new List<GameObject>(), new[] { "pine_plant", "pine_tree_00" }),
+                (new List<GameObject>(), new[] { "forest_pine" }),
+                (new List<GameObject>(), new[] { "_log", "log_pile", "stump", "roots", "root_" }),
+                (new List<GameObject>(), new[] { "big_rock", "rock_wall", "mountain_rock_big" }),
+                (new List<GameObject>(), new[] { "rock", "stone" }),
+                (new List<GameObject>(), new[] { "mushroom" }),
+                (new List<GameObject>(), new[] { "grass_", "heath", "billberry", "lingonberry", "rhododendron" }),
+                (new List<GameObject>(), new[] { "branch", "cone", "anthill" }),
+                (new List<GameObject>(), new[] { "decal" }),
+            };
+            foreach (var guid in UnityEditor.AssetDatabase.FindAssets(
+                         "t:Prefab", new[] { "Assets/Everwyrm/Mountain" }))
+            {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                string mn = System.IO.Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+                var go = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (go == null) continue;
+                foreach (var (list, keys) in mcats)
+                {
+                    bool hit = false;
+                    foreach (var k in keys) if (mn.Contains(k)) { hit = true; break; }
+                    if (hit) { list.Add(go); break; }
+                }
+            }
+            void MFill(ref PaintTree[] arr, List<GameObject> list)
+            {
+                if (Empty(arr) && list.Count > 0) { arr = PaintTree.From(list); dirty = true; }
+            }
+            MFill(ref mountainStatuePrefabs, mcats[0].list);
+            MFill(ref mountainRiverStonePrefabs, mcats[1].list);
+            MFill(ref mountainBushPrefabs, mcats[2].list);
+            MFill(ref mountainSaplingPrefabs, mcats[3].list);
+            MFill(ref mountainPinePrefabs, mcats[4].list);
+            MFill(ref mountainDeadwoodPrefabs, mcats[5].list);
+            MFill(ref mountainBoulderPrefabs, mcats[6].list);
+            MFill(ref mountainRockPrefabs, mcats[7].list);
+            MFill(ref mountainMushroomPrefabs, mcats[8].list);
+            MFill(ref mountainGrassPrefabs, mcats[9].list);
+            MFill(ref mountainDetailPrefabs, mcats[10].list);
+            MFill(ref mountainDecalPrefabs, mcats[11].list);
+        }
+        const string MPack = "Assets/NatureManufacture Assets/Mountain Environment";
+        if (mountainMossLayer == null)
+        {
+            mountainMossLayer = UnityEditor.AssetDatabase.LoadAssetAtPath<TerrainLayer>(
+                MPack + "/Terrain/Terrain Layer_Moss.terrainlayer");
+            if (mountainMossLayer != null) dirty = true;
+        }
+        if (mountainNeedleLayer == null)
+        {
+            mountainNeedleLayer = UnityEditor.AssetDatabase.LoadAssetAtPath<TerrainLayer>(
+                MPack + "/Terrain/Terrain Layer_needless_01.terrainlayer");
+            if (mountainNeedleLayer != null) dirty = true;
+        }
+        if (mountainSoilLayer == null)
+        {
+            mountainSoilLayer = UnityEditor.AssetDatabase.LoadAssetAtPath<TerrainLayer>(
+                MPack + "/Terrain/Terrain Layer_soil_01.terrainlayer");
+            if (mountainSoilLayer != null) dirty = true;
+        }
+        if (mountainRockTerrainLayer == null)
+        {
+            mountainRockTerrainLayer = UnityEditor.AssetDatabase.LoadAssetAtPath<TerrainLayer>(
+                MPack + "/Terrain/Terrain Layer_rocks.terrainlayer");
+            if (mountainRockTerrainLayer != null) dirty = true;
+        }
         if (sandLayer == null)
         {
             sandLayer = UnityEditor.AssetDatabase.LoadAssetAtPath<TerrainLayer>(
@@ -2136,7 +2477,8 @@ public class InfiniteTerrain : MonoBehaviour
         // sem reconversão, a Tundra fica sem a neve/folhas novas no shader.
         if (!msLayerWarned && microSplatMaterial != null)
         {
-            int want = winterGroundLayer != null ? 7 : 6;
+            int want = (winterGroundLayer != null || mountainMossLayer != null ||
+                        mountainNeedleLayer != null || mountainSoilLayer != null) ? 10 : 6;
             if (microSplatMaterial.GetTexture("_Diffuse") is Texture2DArray arr && arr.depth < want)
             {
                 msLayerWarned = true;

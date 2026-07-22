@@ -68,19 +68,35 @@ public static class MicroSplatSetup
         Color snowColor = so.FindProperty("snowColor").colorValue;
 
         // ordem OBRIGATÓRIA = canais do alphamap em InfiniteTerrain.BuildTile:
-        // 0 grama · 1 floresta · 2 rocha de montanha · 3 neve · 4 areia
-        // · 5 rocha do deserto · 6 folhas congeladas (opcional, Winter pack)
+        // 0 grama · 1 floresta · 2 rocha de montanha · 3 neve · 4 areia · 5 rocha
+        // do deserto · bloco estendido em posições FIXAS quando algum pack de
+        // bioma existe: 6 folhas (Winter) · 7 musgo · 8 agulhas · 9 solo (Mountain)
         var layerList = new System.Collections.Generic.List<TerrainLayer>
         {
             LayerAsset("MS_0_Grama", it.grassDiffuse, it.grassNormal, it.grassMask, tile),
             LayerAsset("MS_1_Floresta", it.forestDiffuse, it.forestNormal, it.forestMask, tile),
+            // canal 2 = rocha GLOBAL (bacias de lago incluídas) — manter a clara;
+            // a rocha NM escura escurecia os lagos fora da montanha
             LayerAsset("MS_2_RochaMontanha", it.rockDiffuse, it.rockNormal, it.rockMask, tile * 1.6f),
             it.snowLayer != null ? it.snowLayer   // neve funda do Winter pack
                 : LayerAsset("MS_3_Neve", SnowTexture(it, snowColor), it.snowNormal, it.snowMask, tile),
             it.sandLayer,
             it.desertRockLayer
         };
-        if (it.winterGroundLayer != null) layerList.Add(it.winterGroundLayer);
+        if (it.winterGroundLayer != null || it.mountainMossLayer != null ||
+            it.mountainNeedleLayer != null || it.mountainSoilLayer != null)
+        {
+            // slots vazios ganham fallback sólido — o texture array exige textura
+            // em todo canal e os índices são fixos (6..9)
+            layerList.Add(it.winterGroundLayer != null ? it.winterGroundLayer
+                : LayerAsset("MS_6_Folhas", SolidTexture("MS_6_Folhas_D", new Color(0.55f, 0.48f, 0.35f)), null, null, tile));
+            layerList.Add(it.mountainMossLayer != null ? it.mountainMossLayer
+                : LayerAsset("MS_7_Musgo", SolidTexture("MS_7_Musgo_D", new Color(0.25f, 0.34f, 0.18f)), null, null, tile));
+            layerList.Add(it.mountainNeedleLayer != null ? it.mountainNeedleLayer
+                : LayerAsset("MS_8_Agulhas", SolidTexture("MS_8_Agulhas_D", new Color(0.42f, 0.33f, 0.22f)), null, null, tile));
+            layerList.Add(it.mountainSoilLayer != null ? it.mountainSoilLayer
+                : LayerAsset("MS_9_Solo", SolidTexture("MS_9_Solo_D", new Color(0.45f, 0.38f, 0.30f)), null, null, tile));
+        }
         var layers = layerList.ToArray();
         for (int i = 0; i < layers.Length; i++)
             if (layers[i] == null || layers[i].diffuseTexture == null)
@@ -169,16 +185,18 @@ public static class MicroSplatSetup
     /// mas o texture array do MicroSplat precisa de um asset — gera um PNG 64×64.
     /// </summary>
     static Texture2D SnowTexture(InfiniteTerrain it, Color snowColor)
-    {
-        if (it.snowDiffuse != null) return it.snowDiffuse;
+        => it.snowDiffuse != null ? it.snowDiffuse : SolidTexture("MS_3_Neve_D", snowColor);
 
-        string path = $"{Dir}/MS_3_Neve_D.png";
+    /// <summary>PNG 64×64 de cor sólida p/ canais sem textura real (idempotente).</summary>
+    static Texture2D SolidTexture(string name, Color color)
+    {
+        string path = $"{Dir}/{name}.png";
         var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         if (existing != null) return existing;
 
         var tex = new Texture2D(64, 64, TextureFormat.RGBA32, false);
         var px = new Color[64 * 64];
-        for (int i = 0; i < px.Length; i++) px[i] = snowColor;
+        for (int i = 0; i < px.Length; i++) px[i] = color;
         tex.SetPixels(px);
         tex.Apply();
         File.WriteAllBytes(path, tex.EncodeToPNG());
