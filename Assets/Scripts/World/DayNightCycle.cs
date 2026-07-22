@@ -98,8 +98,8 @@ public class DayNightCycle : MonoBehaviour
     [Range(0f, 1f)] public float cloudThickness = 0.5f;
     [Tooltip("Sombras das nuvens no chão (viram cookie da luz direcional).")]
     public bool cloudShadows = true;
-    [Tooltip("Vento do céu (velocidade de scroll das nuvens, km/h).")]
-    public float cloudWindSpeed = 30f;
+    [Tooltip("Vento do céu (velocidade de scroll das nuvens, km/h). ~120 = movimento claramente visível; 30 era quase imperceptível. OBS: nuvens só andam no GAME view em Play (Scene view congela materiais animados, salvo com 'Always Refresh').")]
+    public float cloudWindSpeed = 120f;
     [Range(0f, 360f)] public float cloudWindOrientation = 40f;
 
     [Header("Névoa")]
@@ -116,7 +116,7 @@ public class DayNightCycle : MonoBehaviour
     /// <summary>Versão da calibração aplicada pelo EverwyrmAutoSetup — evita
     /// re-rodar migrações a cada recompilação.</summary>
     [HideInInspector] public int tuningVersion;
-    public const int CurrentTuningVersion = 6;
+    public const int CurrentTuningVersion = 7;
 
     // ---------------------------------------------------------------- estado
     double hours;                       // hora do dia [0, 24) — fonte de verdade
@@ -347,7 +347,11 @@ public class DayNightCycle : MonoBehaviour
             shadows.directionalTransmissionMultiplier.value = Mathf.Clamp01(transmissionByHour.Evaluate(ch));
         }
         if (cloudLayer != null)
+        {
             cloudLayer.opacity.value = cloudOpacity;   // ao vivo — o clima futuro anima isto
+            env.windSpeed.value = cloudWindSpeed;      // vento ao vivo p/ calibrar em Play
+            env.windOrientation.value = cloudWindOrientation;
+        }
     }
 
     /// <summary>Rotação de um direcional a partir de azimute/elevação (graus).

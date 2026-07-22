@@ -109,6 +109,19 @@ static class EverwyrmAutoSetup
         EnsureMoonTexture(cycle.GetComponent<NightSky>());
         EnsureStarShaderInBuild();
 
+        // 4b) vista de horizonte (montanhas reais da seed a 1-9 km, estilo BotW)
+        var worldGen = Object.FindFirstObjectByType<InfiniteTerrain>();
+        if (worldGen != null && worldGen.GetComponent<HorizonVista>() == null)
+        {
+            worldGen.gameObject.AddComponent<HorizonVista>();
+            EditorUtility.SetDirty(worldGen.gameObject);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(
+                UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+            Debug.Log("[EverwyrmAutoSetup] HorizonVista criada (montanhas do horizonte via seed) — salve a cena.");
+        }
+        if (worldGen != null)
+            SyncVistaColors(worldGen.GetComponent<HorizonVista>());
+
         // 5) Fauna configurada? (controllers + espécies do Forest Animals 2.0)
         if (AssetDatabase.IsValidFolder("Assets/Red_Deer/Wild_Animals"))
         {
@@ -152,6 +165,13 @@ static class EverwyrmAutoSetup
         if (Mathf.Abs(cycle.sunTemperature.Evaluate(0.5f) - 6500f) < 1f)
         {
             cycle.sunTemperature = DayNightCycle.DefaultSunTemperature();
+            applied++;
+        }
+        // v7: vento das nuvens 30→120 km/h (30 era quase imperceptível na
+        // conversão de scroll do CloudLayer)
+        if (Mathf.Abs(cycle.cloudWindSpeed - 30f) < 0.01f)
+        {
+            cycle.cloudWindSpeed = 120f;
             applied++;
         }
 
@@ -211,6 +231,62 @@ static class EverwyrmAutoSetup
         UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(cycle.gameObject.scene);
         if (applied > 0)
             Debug.Log($"[EverwyrmAutoSetup] Calibração do ciclo migrada p/ v{DayNightCycle.CurrentTuningVersion} ({applied} ajuste(s)) — salve a cena.");
+    }
+
+    // -------------------------------------------------- CORES DA VISTA
+    /// <summary>Deriva as cores de bioma da vista dos ALBEDOS REAIS das
+    /// terrain layers (média = mip 1x1 via Blit) — o horizonte casa com o chão
+    /// MicroSplat/RockyDesert em vez de usar tintas chutadas. Idempotente: só
+    /// substitui cores que ainda são o default (calibração manual respeitada).</summary>
+    static void SyncVistaColors(HorizonVista vista)
+    {
+        if (vista == null) return;
+        int applied = 0;
+        applied += SyncColor(ref vista.colorCampos, new Color(0.45f, 0.52f, 0.30f),
+            "Assets/Everwyrm/MicroSplat/MS_0_Grama.terrainlayer");
+        applied += SyncColor(ref vista.colorFloresta, new Color(0.22f, 0.35f, 0.20f),
+            "Assets/Everwyrm/MicroSplat/MS_1_Floresta.terrainlayer");
+        applied += SyncColor(ref vista.colorMontanha, new Color(0.45f, 0.44f, 0.42f),
+            "Assets/Everwyrm/MicroSplat/MS_2_RochaMontanha.terrainlayer");
+        applied += SyncColor(ref vista.colorDeserto, new Color(0.76f, 0.66f, 0.47f),
+            "Assets/RockyDesert/Terrain/Terrain_Sand.terrainlayer");
+        // Tundra fica no branco-neve default (o Snow do MicroSplat cobre o chão)
+
+        if (applied > 0)
+        {
+            EditorUtility.SetDirty(vista);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(vista.gameObject.scene);
+            Debug.Log($"[EverwyrmAutoSetup] Vista sincronizada com os albedos do terreno ({applied} cor(es)) — salve a cena.");
+        }
+    }
+
+    static int SyncColor(ref Color field, Color defaultValue, string layerPath)
+    {
+        // só mexe se ainda for o default (tolerância p/ serialização float)
+        if (Mathf.Abs(field.r - defaultValue.r) > 0.005f ||
+            Mathf.Abs(field.g - defaultValue.g) > 0.005f ||
+            Mathf.Abs(field.b - defaultValue.b) > 0.005f) return 0;
+
+        var layer = AssetDatabase.LoadAssetAtPath<TerrainLayer>(layerPath);
+        if (layer == null || layer.diffuseTexture == null) return 0;
+
+        // média do albedo: Blit p/ RT 1x1 — com mips, o sampler cai no último
+        // mip (que É a média da textura)
+        var rt = RenderTexture.GetTemporary(1, 1, 0, RenderTextureFormat.ARGB32);
+        Graphics.Blit(layer.diffuseTexture, rt);
+        var prev = RenderTexture.active;
+        RenderTexture.active = rt;
+        var probe = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+        probe.ReadPixels(new Rect(0, 0, 1, 1), 0, 0);
+        probe.Apply();
+        RenderTexture.active = prev;
+        RenderTexture.ReleaseTemporary(rt);
+        Color avg = probe.GetPixel(0, 0);
+        Object.DestroyImmediate(probe);
+
+        if (avg.maxColorComponent <= 0.01f) return 0;   // textura suspeita, mantém
+        field = new Color(avg.r, avg.g, avg.b, 1f);
+        return 1;
     }
 
     // ------------------------------------------------- SHADER NA BUILD
