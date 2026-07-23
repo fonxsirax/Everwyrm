@@ -328,7 +328,8 @@ public static class DragonSetup
     }
 
     // --------------------------------------------------------------- MUNDO
-    [MenuItem("Tools/Dragão/3 - Mundo Infinito na Cena")]
+    // (menu removido na limpeza de jul/2026 — a cena Main já tem o mundo;
+    //  para rodar de novo, re-adicione o [MenuItem] aqui)
     public static void SetupWorld()
     {
         // desativa terrains fixos existentes (o mundo agora é gerado)

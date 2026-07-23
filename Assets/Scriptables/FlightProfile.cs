@@ -11,8 +11,9 @@ public class FlightProfile : ScriptableObject
     [Header("Fase de decolagem (segurar Space = subida contínua)")]
     [Tooltip("Segundos após decolar em que SEGURAR Space sobe continuamente")]
     public float takeoffClimbTime = 3f;
-    [Tooltip("Velocidade de subida na fase de decolagem (m/s)")]
-    public float takeoffClimbRate = 6.5f;
+    [Tooltip("Velocidade de subida na fase de decolagem (m/s) — precisa ser ALTA: " +
+             "abaixo do impulso de entrada, segurar Space PUXA o dragão pra baixo")]
+    public float takeoffClimbRate = 9f;
     [Tooltip("Energia por segundo segurando a subida de decolagem")]
     public float takeoffClimbEnergyPerSec = 4f;
 
@@ -20,9 +21,9 @@ public class FlightProfile : ScriptableObject
     [Tooltip("Batidas disponíveis por ciclo — soltar Space + recuperação renova")]
     public int flapsPerCycle = 2;
     [Tooltip("Intervalo mínimo entre batidas (s)")]
-    public float flapMinInterval = 0.32f;
+    public float flapMinInterval = 0.22f;
     [Tooltip("Tempo após a última batida para o ciclo renovar (precisa soltar o botão)")]
-    public float cycleRecovery = 0.45f;
+    public float cycleRecovery = 0.3f;
 
     [Header("Bônus de timing (soltar Space no fim da batida)")]
     [Tooltip("Duração da batida de asa — janela para soltar e ganhar o bônus (s)")]
@@ -46,16 +47,22 @@ public class FlightProfile : ScriptableObject
     [Tooltip("Afundamento planando RÁPIDO (m/s) — voar rápido conserva altitude")]
     public float sinkAtSpeed = 0.7f;
     [Tooltip("Afundamento planando LENTO (m/s) — voar devagar despenca")]
-    public float sinkAtStall = 3.8f;
+    public float sinkAtStall = 3f;
     [Tooltip("Curva da transição rápido→lento (maior = punição só bem devagar)")]
-    public float slownessPower = 1.4f;
-    [Tooltip("Rapidez com que o impulso da batida decai rumo ao planeio (m/s²)")]
-    public float verticalResponse = 4.5f;
+    public float slownessPower = 1.8f;
+    [Tooltip("Rapidez com que o impulso da batida decai rumo ao planeio (m/s²) — " +
+             "alto = subida/afundo engatam quase na hora (hack and slash)")]
+    public float verticalResponse = 9f;
     [Tooltip("Segundos após a última batida para a animação de planar")]
     public float glideAnimDelay = 1f;
 
     [Header("Mergulho")]
     public float diveSink = 14f;
+    [Tooltip("Mergulhando a velocidade pode passar do máximo (multiplicador)")]
+    public float diveOverspeed = 1.3f;
+    [Tooltip("Ao SAIR do mergulho, fração da queda convertida em velocidade à " +
+             "frente (swoop) — o loop de energia mergulho→voo rasante")]
+    public float swoopConversion = 0.35f;
 
     [Header("Custo de energia")]
     [Tooltip("Energia por batida (multiplicada pelo peso do dragão)")]

@@ -39,6 +39,7 @@ public class DragonVitals : MonoBehaviour
     DragonController dragon;
     DragonAttributes attrs;                          // opcional
     float lastH = -1f, lastE = -1f, lastF = -1f;     // últimos valores emitidos
+    float invulnUntil = -99f;                        // i-frames (dash/boost)
 
     // máximos efetivos (Resistência aumenta vida e energia total)
     public float MaxHealthEff => maxHealth * (attrs != null ? attrs.MaxHealthMul : 1f);
@@ -55,6 +56,8 @@ public class DragonVitals : MonoBehaviour
 
     public bool IsDead { get; private set; }
     public bool IsExhausted => Energy <= 0.5f;
+    /// <summary>i-frames do dash/boost: dano é ignorado até aqui.</summary>
+    public bool IsInvulnerable => Time.time < invulnUntil;
     public bool IsStarving => Hunger <= 0.5f;
     public bool IsHungerCritical => Hunger < criticalHunger;
 
@@ -146,11 +149,16 @@ public class DragonVitals : MonoBehaviour
         EmitStats();
     }
 
+    /// <summary>Invulnerabilidade curta (i-frames do dash/boost) — janelas
+    /// sobrepostas mantêm a MAIOR, nunca encurtam.</summary>
+    public void GrantIFrames(float seconds) =>
+        invulnUntil = Mathf.Max(invulnUntil, Time.time + seconds);
+
     public void Damage(float amount) => Damage(amount, null);
 
     public void Damage(float amount, Vector3? source)
     {
-        if (IsDead || amount <= 0f) return;
+        if (IsDead || amount <= 0f || IsInvulnerable) return;
         Health = Mathf.Max(0f, Health - amount);
         OnDamaged?.Invoke(amount, source);
         if (Health <= 0f)

@@ -32,6 +32,9 @@ public class DragonFlight : MonoBehaviour
     float takeoffClimbUntil = -99f;
     bool releasedSinceFlap = true;
     bool bonusPending;        // batida em andamento aguardando a soltura (timing)
+    bool wasDiving;           // p/ detectar a SAÍDA do mergulho (swoop)
+    float swoopUntil = -99f;  // janela pós-mergulho com resposta dobrada
+    float scriptedClimbUntil = -99f;   // salto parado: sobe sem depender do botão
 
     public int FlapsLeft => flapsLeft;
     public int FlapsPerCycle => profile.flapsPerCycle;
@@ -42,6 +45,8 @@ public class DragonFlight : MonoBehaviour
     public float ThinAir01 { get; private set; }
     /// <summary>Teto de voo atual (m, altura do mundo) — vem da Resistência.</summary>
     public float Ceiling => attrs != null ? attrs.MaxAltitude : float.PositiveInfinity;
+    /// <summary>Mergulhando a velocidade fura o máximo (× maxFlySpeed).</summary>
+    public float DiveOverspeed => profile.diveOverspeed;
 
     /// <summary>Observer: (restantes, total) — HUD desenha os "pips" de asa.</summary>
     public event Action<int, int> OnFlapsChanged;
@@ -81,6 +86,28 @@ public class DragonFlight : MonoBehaviour
     /// <summary>Fase híbrida: logo após decolar, segurar Space sobe contínuo.</summary>
     public bool InTakeoffClimb => Time.time < takeoffClimbUntil;
 
+    /// <summary>Salto de decolagem parado: enquanto a animação roda, a subida é
+    /// do DRAGÃO, não do botão (o jogador está travado no clipe). `maxSeconds` é
+    /// só uma rédea de segurança — quem encerra de fato é o Launch.</summary>
+    public void BeginScriptedClimb(float maxSeconds) =>
+        scriptedClimbUntil = Time.time + maxSeconds;
+
+    /// <summary>BOTE das asas no fim do salto: joga o dragão pra cima de verdade.
+    /// É o clímax do salto — antes o impulso vinha todo no PRIMEIRO frame e
+    /// chegava gasto no voo, e a decolagem parecia perder força justo aqui.
+    /// Nunca reduz um vy já maior, e devolve o ciclo de batidas cheio.</summary>
+    public void Launch(float climbSpeed)
+    {
+        vy = Mathf.Max(vy, climbSpeed);
+        scriptedClimbUntil = Time.time;      // o roteiro acabou: o voo é do jogador
+        flapsLeft = profile.flapsPerCycle;
+        lastFlapTime = Time.time;
+        releasedSinceFlap = true;
+        bonusPending = false;
+        OnFlapsChanged?.Invoke(flapsLeft, profile.flapsPerCycle);
+        OnFlapped?.Invoke();
+    }
+
     /// <summary>Tranco vertical externo (colisões em voo): soma direto no vy.</summary>
     public void Knock(float deltaVy) => vy += deltaVy;
 
@@ -106,11 +133,15 @@ public class DragonFlight : MonoBehaviour
 
         // ---- FASE DE DECOLAGEM (híbrido): segurar Space = subida contínua.
         //      Soltar (ou o tempo acabar) entrega o voo ao ciclo de batidas.
+        //      No SALTO PARADO a subida é roteirizada: o jogador está preso na
+        //      animação, então o dragão sobe sozinho — soltar não o derruba no
+        //      meio do próprio bote (Launch fecha essa janela no fim do clipe).
         if (Time.time < takeoffClimbUntil)
         {
-            if (held && (vitals == null || !vitals.IsExhausted))
+            bool scripted = Time.time < scriptedClimbUntil;
+            if ((held || scripted) && (vitals == null || !vitals.IsExhausted))
             {
-                vitals?.Drain(p.takeoffClimbEnergyPerSec * CostMul);
+                if (!scripted) vitals?.Drain(p.takeoffClimbEnergyPerSec * CostMul);
                 lastFlapTime = Time.time;   // sem anim de glide, ciclo renova depois
                 vy = Mathf.MoveTowards(vy, p.takeoffClimbRate * ClimbMul * sizeScale * airLift,
                                        p.verticalResponse * 2f * dt);
@@ -171,9 +202,17 @@ public class DragonFlight : MonoBehaviour
         if (diving) sink = p.diveSink * sizeScale;
         else
         {
+            // SWOOP: sair do mergulho converte a queda em velocidade à frente e
+            // arremata com resposta dobrada — o loop de energia mergulho→rasante
+            if (wasDiving && vy < -4f)
+            {
+                forwardSpeed += -vy * p.swoopConversion;
+                swoopUntil = Time.time + 0.5f;
+            }
             float slowness = Mathf.Pow(1f - Mathf.Clamp01(speed01), p.slownessPower);
             sink = Mathf.Lerp(p.sinkAtSpeed, p.sinkAtStall, slowness) * SinkMul;
         }
+        wasDiving = diving;
 
         // updraft também perde força no ar rarefeito: nem térmica fura o teto
         float targetVy = -sink + CurrentWind.y * p.windInfluence * airLift;
@@ -182,6 +221,7 @@ public class DragonFlight : MonoBehaviour
         // resposta TRIPLICADA — o mergulho de pouso engata rápido e decidido.
         // Nem updraft segura um dragão decidido a pousar.
         float response = p.verticalResponse;
+        if (Time.time < swoopUntil) response *= 2f;   // recuperação RÁPIDA pós-mergulho
         if (landingSink > 0f)
         {
             targetVy = Mathf.Min(targetVy, -landingSink);

@@ -95,7 +95,8 @@ public static class WinterSetup
     }
 
     // ------------------------------------------------------------- CONVERSÃO
-    [MenuItem("Tools/Everwyrm/Winter — (Re)converter pack")]
+    // (menu removido na limpeza de jul/2026 — pack já convertido e calibrado;
+    //  para rodar de novo, re-adicione o [MenuItem] aqui)
     public static void ConvertMenu() => Convert();
 
     public static void Convert()

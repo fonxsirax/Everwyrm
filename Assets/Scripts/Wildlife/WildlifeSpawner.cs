@@ -73,6 +73,10 @@ public class WildlifeSpawner : MonoBehaviour
     public static bool DragonFlying =>
         Instance != null && Instance.dragonCtrl != null && Instance.dragonCtrl.IsFlying;
 
+    /// <summary>Passo de caçada (Shift): a fauna quase não percebe o dragão.</summary>
+    public static bool DragonStealth =>
+        Instance != null && Instance.dragonCtrl != null && Instance.dragonCtrl.IsStealth;
+
     /// <summary>Contra-ataque da fauna (alce/urso/javali defendendo-se).
     /// `source` = posição do atacante — alimenta o feedback de dano.</summary>
     public static void DamageDragon(float damage, Vector3? source = null)

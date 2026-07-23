@@ -4,27 +4,35 @@ using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Controlador do dragão (Unka) — chão, decolagem, voo, pouso, combate e sobrevivência.
+/// Rework hack and slash: resposta INSTANTÂNEA ao input; o peso vira derrapada,
+/// câmera e VFX — nunca atraso. Buffer de comandos + cancel de golpes por dash/voo.
 ///
-/// CONTROLES
-///  Chão : W/S anda · A/D vira · corrida é AUTOMÁTICA: andando pra frente o dragão
-///         acelera até correr (dragão gordo/grande demora mais — peso!)
-///         Space parado = bate as asas · Space andando = DECOLA
-///         LMB combo (mordida/garras) · Q cauda · E asas · F fogo · T rugido
-///         Alt esquiva · R descansar · G comer carcaça próxima
+/// CONTROLES (ver DragonInput — bindings centralizados)
+///  Chão : WASD move RELATIVO À CÂMERA (o corpo gira sozinho — fechado devagar,
+///         arco em corrida) · o dragão SEMPRE CORRE
+///         Ctrl SEGURADO = Stealth: passo de caçada, fauna quase não percebe
+///         Space no chão DECOLA sempre — parado inclusive: o dragão dá o salto
+///         (UJump Up) e as asas o arrancam do chão no fim do clipe. Em corrida
+///         plena nem toca essa animação: abre as asas e já está voando. O salto
+///         é uma animação FECHADA — travada e estável, não gira nem é cancelada
+///         Shift + A/D = DASH lateral com i-frames — cancela golpes após ~40% do
+///         swing (as duas teclas precisam ser um toque FRESCO e próximo: segurar
+///         a direcional de antes não conta, solte e aperte as duas de novo)
+///         LMB combo (mordida/garras) · Q cauda · E asas · RMB/F fogo · T rugido
+///         R descansar · G comer carcaça próxima
 ///  Voo  : W acelera · S freia (SEGURE p/ pousar quando houver chão) · A/D vira
+///         (curva fechada devagar, ampla em alta velocidade)
 ///         Space sobe — soltar perto do fim da batida dá impulso extra (timing!)
-///         Ctrl/C mergulha
-///         Alt esquiva aérea · Sem bater asas ~1s = planar
-///         Colisão tem consequência FÍSICA (sem dano): raspão desvia e freia;
-///         batida forte derruba a sustentação — desequilíbrio até recuperar.
-///         Voando rente ao chão sem pedir altura, pousa sozinho (nada de raspar).
-///         Peso importa: gordo sobe mal e afunda planando; grande plana melhor
-///         Energia zerada = estol e queda!
-///         DANO só de QUEDA: acima de ~70% da maior árvore da floresta.
-///  Água : voo rasante sobre lago/rio faz spray e ondulações e NÃO derruba —
-///         só encostar na lâmina vira nado (queda amortecida, sem dano).
-///         Entra andando em lago fundo ou pousando na água.
-///         W/S nada · A/D vira · Space decola da água. Gordo nada mais devagar.
+///         Shift toque = WING BOOST (batida forte: aceleração instantânea, i-frames)
+///         Shift + A/D = esquiva simples: desvia o rumo, sem animação dedicada
+///         A/D + Shift + SPACE = ESQUIVA COMPLETA: toca o Fly Dodge L/R exato e
+///         VIRA O VOO para o novo rumo (não é empurrão lateral — muda de direção)
+///         Shift SEGURADO = mergulho (passa da vel. máx.; sair converte a queda
+///         em velocidade — swoop)
+///         Sem bater asas ~1s = planar · Energia zerada = estol e queda!
+///         Colisão tem consequência FÍSICA (sem dano), e bater FORTE derruba o
+///         dragão num tombo (Fly Fall Death) · DANO só de QUEDA alta.
+///  Água : encostar na lâmina vira nado · W/S nada · A/D vira · Space decola.
 ///  Morto: Enter renasce.
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
@@ -32,25 +40,68 @@ using UnityEngine.SceneManagement;
 public class DragonController : MonoBehaviour
 {
     [Header("Chão")]
-    [SerializeField] float walkSpeed = 3.84f;   // +20% geral na locomoção terrestre
+    [SerializeField] float walkSpeed = 3.84f;   // passo de caçada (Stealth) — era o "andar"
     [SerializeField] float runSpeed = 11.4f;
-    [SerializeField] float reverseSpeed = 1.7f;
-    [SerializeField] float groundAccel = 9f;
-    [SerializeField] float momentumDecay = 1.6f;   // freio ao soltar W
-    [SerializeField] float turnSpeedGround = 120f;
+    [SerializeField] float reverseSpeed = 1.7f; // ré (só no nado — no chão o corpo vira)
+    [SerializeField] float groundAccel = 35f;   // 90% da corrida em ~0.35 s (hack and slash)
+    [SerializeField] float groundDecel = 25f;   // soltar a direção: derrapada curta (peso)
+    [SerializeField] float turnRateIdle = 540f; // giro parado/lento (°/s)
+    [SerializeField] float turnRateRun = 240f;  // giro em corrida plena (°/s) — arco
     [SerializeField] float gravity = 28f;
-    [SerializeField] float hopImpulse = 6.5f;
 
     [Header("Decolagem")]
-    [SerializeField] float takeoffMinSpeed = 1.5f;
+    [Tooltip("Acima desta fração da corrida, decola DIRETO pro voo (sem anim de salto)")]
+    [SerializeField] float runningTakeoffFraction = 0.5f;
+    [Tooltip("Trava mínima (s) no 1º frame do salto parado, até o Animator confirmar " +
+             "que entrou no estado TakeOff (depois disso a trava segue o clipe real)")]
+    [SerializeField] float takeoffLockMinimum = 0.15f;
+    [Tooltip("Subida durante o salto (m/s) — o dragão sobe sozinho enquanto o clipe roda")]
+    [SerializeField] float takeoffHopClimb = 6f;
+    [Tooltip("BOTE no fim do salto: velocidade de subida imposta (m/s) — é aqui " +
+             "que a decolagem parada ganha altura de verdade")]
+    [SerializeField] float takeoffLaunchClimb = 12f;
+    [Tooltip("Empurrão pra frente no bote (m/s) — sai do salto já com sustentação")]
+    [SerializeField] float takeoffLaunchForward = 3f;
+    [Tooltip("Rédea de segurança: se o clipe do salto não terminar até aqui, solta (s)")]
+    [SerializeField] float takeoffMaxLock = 2.5f;
+    [Tooltip("Carência pós-decolagem p/ auto-pouso e colisão (s)")]
+    [SerializeField] float takeoffGrace = 0.8f;
+
+    [Header("Dash (Shift + A/D no chão)")]
+    [SerializeField] float dashSpeedMul = 1.7f;    // × velocidade de corrida
+    [SerializeField] float dashDuration = 0.35f;
+    [SerializeField] float dashCooldown = 0.6f;
+    [SerializeField] float dashIFrames = 0.3f;
+
+    [Header("Wing Boost (Shift no ar)")]
+    [SerializeField] float boostImpulse = 8f;        // m/s à frente (× escala do corpo)
+    [SerializeField] float boostMaxOverspeed = 1.25f;// × vel. máx. de voo
+    [SerializeField] float boostCooldown = 1f;
+    [SerializeField] float boostIFrames = 0.25f;
+    [SerializeField] float boostCost = 6f;
+    [Tooltip("Esquiva simples (Shift + A/D no ar): desvio do rumo, sem animação " +
+             "dedicada — o juke que escapa da linha do ataque (graus)")]
+    [SerializeField] float airDodgeYaw = 18.2f;
+
+    [Header("Esquiva de voo COMPLETA (A/D + Shift + Space)")]
+    [Tooltip("Quanto o voo VIRA — não é empurrão lateral, é mudar de rumo (graus)")]
+    [SerializeField] float flyDodgeTurn = 90f;
+    [Tooltip("Tempo da virada — a animação Fly Dodge L/R toca inteira nela (s)")]
+    [SerializeField] float flyDodgeDuration = 0.45f;
+    [SerializeField] float flyDodgeIFrames = 0.4f;
+    [SerializeField] float flyDodgeCost = 8f;
+
+    [Header("Cancel de golpes")]
+    [Tooltip("Fração do golpe após a qual dash/decolagem podem cancelá-lo")]
+    [SerializeField, Range(0f, 1f)] float attackCancelWindow = 0.4f;
 
     [Header("Voo")]
     [SerializeField] float minFlySpeed = 6f;
     [SerializeField] float cruiseSpeed = 14f;
     [SerializeField] float maxFlySpeed = 26f;
-    [SerializeField] float flyAccel = 9f;
-    [SerializeField] float turnSpeedAir = 75f;
-    [SerializeField] float bankAngle = 42f;
+    [SerializeField] float flyAccel = 22f;      // engata rápido; perder velocidade é lento
+    [SerializeField] float turnSpeedAir = 95f;
+    [SerializeField] float bankAngle = 48f;
     [SerializeField] float pitchAngle = 28f;
     [SerializeField] float climbRate = 7.5f;
     [SerializeField] float diveRate = 14f;
@@ -109,7 +160,6 @@ public class DragonController : MonoBehaviour
     [SerializeField] float flapCost = 3.5f;
     [SerializeField] float climbCost = 7f;
     [SerializeField] float glideCost = 0.3f;
-    [SerializeField] float hopCost = 4f;
     [SerializeField] float takeoffCost = 6f;
     [SerializeField] float dodgeCost = 8f;
     [SerializeField] float fireCost = 15f;
@@ -121,7 +171,8 @@ public class DragonController : MonoBehaviour
     static readonly int P_Vertical   = Animator.StringToHash("Vertical");
     static readonly int P_Flying     = Animator.StringToHash("Flying");
     static readonly int P_Glide      = Animator.StringToHash("Glide");
-    static readonly int P_Flap       = Animator.StringToHash("Flap");
+    // "Flap" (estado Flap Ground) era o bate-asas parado do antigo hop — o Space
+    // parado agora decola de verdade, então o trigger não é mais disparado.
     static readonly int P_Rest       = Animator.StringToHash("Rest");
     static readonly int P_Roar       = Animator.StringToHash("Roar");
     static readonly int P_Attack     = Animator.StringToHash("Attack");
@@ -136,21 +187,38 @@ public class DragonController : MonoBehaviour
     static readonly int P_DeathVar   = Animator.StringToHash("DeathVar");
     static readonly int P_IdleVar    = Animator.StringToHash("IdleVar");
     static readonly int P_Swim       = Animator.StringToHash("Swimming");
+    static readonly int P_Stealth    = Animator.StringToHash("Stealth");
+
+    // Estados alcançados por CrossFade direto (precisão que o trigger não dá)
+    const string FallDeathState = "Fly Fall Death";   // tombo da colisão em voo
+    const string TakeOffState = "TakeOff";            // salto da decolagem parada
+    const string FlyDodgeLState = "Fly Dodge L";
+    const string FlyDodgeRState = "Fly Dodge R";
+
+    /// <summary>O que travou as ações: golpes podem ser CANCELADOS por dash/voo
+    /// (após a janela); desequilíbrio/queda (Stagger), nunca.</summary>
+    enum LockKind { Action, Attack, Stagger }
 
     CharacterController cc;
     Animator anim;
+    Transform camT;                      // câmera p/ movimento relativo (auto)
     DragonVitals vitals;                 // opcional
     DragonGrowth growth;                 // opcional
     DragonAttributes attrs;              // opcional
     DragonFlight flight;                 // opcional (voo skill-based)
 
-    bool flying, gliding, stalling, resting, dead, swimming;
+    bool flying, gliding, stalling, resting, dead, swimming, stealth, diving;
     float planarSpeed, flySpeed, verticalVel;
-    float momentum;                      // 0..1 — corrida automática
-    float yaw, pitch, roll;
+    float yaw, pitch, roll, prevYaw;
     float turnSmoothed, vertInput;
-    float lastFlapTime, takeoffTime = -99f;
-    float actionLockUntil;
+    float takeoffTime = -99f;
+    bool inStationaryTakeoff;             // salto parado: trava estável até o Animator sair dele
+    float actionLockUntil, lockStart;
+    LockKind lockKind = LockKind.Action;
+    float dashUntil = -99f, dashReadyAt = -99f, boostReadyAt = -99f;
+    Vector3 dashVel;
+    float flyDodgeUntil = -99f, flyDodgeYawTarget;
+    float lastAirDodgeTime = -99f, lastAirDodgeYaw;  // p/ o combo absorver a esquiva simples
     Vector3 flightVel, pendingNormal, pendingPoint;  // colisão em voo
     Collider pendingCollider;
     float pendingImpact, lastImpactTime = -99f, staggerUntil = -99f;
@@ -160,6 +228,7 @@ public class DragonController : MonoBehaviour
     const float FlinchAngle = 9f;                    // graus de rolagem no pico
     int meleeCombo;
     bool tailLeft, wingLeft;
+    bool hasStealthParam, hasFallDeathState;
     float nextIdleChange, nextHintCheck;
     string currentHint = "";
 
@@ -169,9 +238,14 @@ public class DragonController : MonoBehaviour
     public bool IsResting => resting;
     public bool IsDead => dead;
     public bool IsSwimming => swimming;
+    /// <summary>Shift segurado no chão: passo de caçada — a fauna mal percebe.</summary>
+    public bool IsStealth => stealth;
+    /// <summary>Ctrl segurado em voo: mergulho (câmera acompanha).</summary>
+    public bool IsDiving => flying && diving;
+    public bool IsDashing => Time.time < dashUntil;
     public float MaxGroundSpeed => EffRunSpeed;          // p/ menu de atributos
     public float MaxFlightSpeed => maxFlySpeed * S;
-    public float TimeToRun => AccelTime;
+    public float TimeToRun => EffRunSpeed / Mathf.Max(0.01f, EffGroundAccel);
     public float Speed01 => flying ? Mathf.InverseLerp(0f, maxFlySpeed * S, flySpeed)
                                    : Mathf.InverseLerp(0f, EffRunSpeed, Mathf.Abs(planarSpeed));
 
@@ -181,16 +255,25 @@ public class DragonController : MonoBehaviour
     bool Locked => Time.time < actionLockUntil;
     bool Exhausted => vitals != null && vitals.IsExhausted;
 
+    /// <summary>Golpe em andamento já pode ser cancelado por dash/decolagem?</summary>
+    bool CanCancelAttack => Locked && lockKind == LockKind.Attack &&
+        Time.time - lockStart >= (actionLockUntil - lockStart) * attackCancelWindow;
+
     // ---- Peso/tamanho (DragonGrowth) + atributos — neutros se não existirem
     float AttrSpeed => attrs != null ? attrs.SpeedMul : 1f;   // Velocidade
     float AttrAccel => attrs != null ? attrs.AccelMul : 1f;   // Velocidade + Resistência
     float S => (growth != null ? growth.SpeedScale : 1f) * AttrSpeed;
     float CostMul => growth != null ? growth.EnergyCostMul : 1f;
-    float AccelTime => (growth != null ? growth.AccelTime : 2.5f) / AttrAccel;
     float RunMul => growth != null ? growth.RunSpeedMul : 1f;
     float ClimbMul => growth != null ? growth.ClimbMul : 1f;
     float SinkMul => growth != null ? growth.SinkMul : 1f;
+    float TurnMul => growth != null ? growth.TurnAgilityMul : 1f;
     float EffRunSpeed => runSpeed * RunMul * S;
+    /// <summary>Aceleração terrestre efetiva: peso e idade modulam a EXPLOSÃO,
+    /// não criam espera (filhote arranca ligeiro; gordo/colossal empurram mais).</summary>
+    float EffGroundAccel => groundAccel * S * AttrAccel *
+        (growth != null ? growth.AccelAgilityMul : 1f);
+    float GroundSpeed01 => Mathf.Clamp01(planarSpeed / Mathf.Max(0.01f, EffRunSpeed));
 
     void Awake()
     {
@@ -206,7 +289,14 @@ public class DragonController : MonoBehaviour
         if (vitals != null && GetComponent<DragonDamageFeedback>() == null)
             gameObject.AddComponent<DragonDamageFeedback>(); // shake/vinheta/som de dano
         anim.applyRootMotion = false;
-        yaw = transform.eulerAngles.y;
+        yaw = prevYaw = transform.eulerAngles.y;
+
+        // o parâmetro "Stealth" e o estado "Fly Fall Death" só existem após rodar
+        // o DragonAnimatorTuner — sem eles tudo funciona igual, só sem a postura
+        // de caça no idle e sem o tombo da colisão em voo
+        foreach (var p in anim.parameters)
+            if (p.name == "Stealth") { hasStealthParam = true; break; }
+        hasFallDeathState = anim.HasState(0, Animator.StringToHash(FallDeathState));
 
         if (groundMask == 0)
             groundMask = Physics.DefaultRaycastLayers & ~(1 << gameObject.layer);
@@ -233,17 +323,29 @@ public class DragonController : MonoBehaviour
         if (DragonStatsMenu.IsOpen) return; // menu pausa o jogo
 
         float dt = Time.deltaTime;
+        DragonInput.Sample();
 
         if (dead)
         {
             if (!cc.isGrounded) cc.Move(Vector3.down * 10f * dt);
-            if (Input.GetKeyDown(KeyCode.Return))
+            if (DragonInput.RespawnDown)
                 SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
             return;
         }
 
-        float h = Locked ? 0f : Input.GetAxis("Horizontal");
-        float v = Locked ? 0f : Input.GetAxis("Vertical");
+        // salto de decolagem parado: refaz a trava TODO frame enquanto o Animator
+        // ainda estiver nele — h/v saem zerados abaixo (Locked), corpo estável
+        if (inStationaryTakeoff) UpdateStationaryTakeoffLock();
+
+        float h = Locked ? 0f : DragonInput.Horizontal;
+        float v = Locked ? 0f : DragonInput.Vertical;
+
+        stealth = !flying && !swimming && !resting && DragonInput.StealthHeld;
+
+        // dash/boost ANTES do movimento: se disparar agora, "dashing" já nasce
+        // true e o GroundUpdate deste MESMO frame pula o giro normal — senão o
+        // corpo vira um pouco rumo ao input antes do dash sequer ser detectado
+        if (!resting && !swimming) HandleBurst();          // cancela golpes também
 
         if (resting) RestUpdate();
         else if (swimming) SwimUpdate(dt, h, v);
@@ -261,24 +363,46 @@ public class DragonController : MonoBehaviour
     void GroundUpdate(float dt, float h, float v)
     {
         bool grounded = cc.isGrounded;
+        bool dashing = Time.time < dashUntil;
 
-        // ---- corrida automática: momentum cresce andando pra frente.
-        //      Peso manda: gordo/grande demora mais para engatar a corrida.
-        if (v > 0.1f && !Exhausted)
-            momentum = Mathf.Min(1f, momentum + dt / AccelTime);
+        Vector3 planarVel;
+        if (dashing)
+        {
+            // rajada LATERAL pura: decai suave no fim, corpo travado (yaw parado).
+            // planarSpeed (só usado p/ anim de corrida p/ frente) fica intocado —
+            // a corrida retoma de onde estava assim que o dash termina.
+            float t01 = 1f - Mathf.Clamp01((dashUntil - Time.time) / dashDuration);
+            planarVel = dashVel * (1f - t01 * t01 * 0.55f);
+        }
         else
-            momentum = Mathf.Max(0f, momentum - momentumDecay * dt);
+        {
+            // ---- direção desejada RELATIVA À CÂMERA (hack and slash)
+            Vector3 wish = CameraRelativeInput(h, v);
+            float mag = Mathf.Clamp01(wish.magnitude);
 
-        float topSpeed = Mathf.Lerp(walkSpeed, runSpeed * RunMul, momentum * momentum);
-        float target = v > 0.01f ? v * topSpeed
-                     : v < -0.01f ? v * reverseSpeed
-                     : 0f;
-        target *= S;
-        planarSpeed = Mathf.MoveTowards(planarSpeed, target, groundAccel * S * dt);
+            // o corpo gira rumo ao input: fechado devagar, arco em corrida (peso VISÍVEL)
+            if (mag > 0.05f)
+            {
+                float desiredYaw = Mathf.Atan2(wish.x, wish.z) * Mathf.Rad2Deg;
+                float rate = Mathf.Lerp(turnRateIdle, turnRateRun, GroundSpeed01) * TurnMul;
+                yaw = Mathf.MoveTowardsAngle(yaw, desiredYaw, rate * dt);
+            }
+
+            // ---- SEMPRE CORRE; Shift = passo de caçada; exausto não engata corrida
+            float top = stealth ? walkSpeed * S : EffRunSpeed;
+            if (Exhausted) top = Mathf.Min(top, walkSpeed * S);
+            float target = mag > 0.05f ? top * mag : 0f;
+
+            float decel = groundDecel * S;
+            if (Locked && lockKind == LockKind.Attack) decel *= 0.35f;  // desliza no golpe
+            float rate2 = target > planarSpeed ? EffGroundAccel : decel;
+            planarSpeed = Mathf.MoveTowards(planarSpeed, target, rate2 * dt);
+
+            Vector3 fwdMove = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+            planarVel = fwdMove * planarSpeed;
+        }
 
         if (planarSpeed > (walkSpeed + 0.5f) * S) vitals?.Drain(runCost * CostMul);
-
-        yaw += h * turnSpeedGround * dt;
 
         if (grounded)
         {
@@ -287,7 +411,7 @@ public class DragonController : MonoBehaviour
             float severity = ResolveFall();
             if (severity > 0f)
             {
-                Lock(1.2f);
+                Lock(1.2f, LockKind.Stagger);
                 ImpactEffects.Emit(new ImpactEvent
                 {
                     kind = ImpactKind.HardLanding,
@@ -306,22 +430,17 @@ public class DragonController : MonoBehaviour
             TrackFall(verticalVel < -2f);   // do ápice em diante: é queda
         }
 
-        if (!Locked && Input.GetKeyDown(KeyCode.Space))
+        // ---- decolagem (bufferizada; cancela golpe após a janela — nunca um Stagger)
+        if (!dashing && (!Locked || CanCancelAttack) &&
+            DragonInput.Consume(DragonInput.Act.Flap))
         {
-            if (grounded && v > 0.1f && planarSpeed >= takeoffMinSpeed * S)
-            {
-                if (Spend(takeoffCost * CostMul)) EnterFlight();
-            }
-            else if (grounded)
-            {
-                if (Spend(hopCost * CostMul))
-                {
-                    verticalVel = hopImpulse;
-                    anim.SetTrigger(P_Flap);
-                }
-            }
-            else if (Spend(takeoffCost * CostMul)) EnterFlight();
+            // Space no chão SEMPRE decola — parado inclusive. Antes, parar de vez
+            // caía num "bate asas no lugar" (UPFly Stand) que ficava horrível: o
+            // salto bom (UJump Up) exigia estar em movimento, então quem estava
+            // parado nunca o via. No ar, coyote de penhasco: abrir as asas vale.
+            if (Spend(takeoffCost * CostMul)) BeginTakeoff();
         }
+        if (flying) return;   // decolou neste frame
 
         if (grounded && Mathf.Abs(planarSpeed) < 0.1f && Time.time > nextIdleChange)
         {
@@ -329,8 +448,7 @@ public class DragonController : MonoBehaviour
             anim.SetFloat(P_IdleVar, UnityEngine.Random.Range(0, 3));
         }
 
-        Vector3 fwd = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
-        cc.Move((fwd * planarSpeed + Vector3.up * verticalVel) * dt);
+        cc.Move((planarVel + Vector3.up * verticalVel) * dt);
 
         // andou até água funda: começa a nadar
         if (DeepWaterAt(transform.position, out float surface) &&
@@ -338,12 +456,103 @@ public class DragonController : MonoBehaviour
             EnterSwim();
     }
 
+    /// <summary>Input WASD no plano da câmera (fallback: relativo ao corpo).</summary>
+    Vector3 CameraRelativeInput(float h, float v)
+    {
+        if (camT == null && Camera.main != null) camT = Camera.main.transform;
+        if (camT == null)
+            return Vector3.ClampMagnitude(Quaternion.Euler(0f, yaw, 0f) * new Vector3(h, 0f, v), 1f);
+
+        Vector3 f = camT.forward; f.y = 0f; f.Normalize();
+        Vector3 r = camT.right; r.y = 0f; r.Normalize();
+        return Vector3.ClampMagnitude(f * v + r * h, 1f);
+    }
+
+    /// <summary>Space no chão/ar: em corrida plena abre as asas DIRETO pro voo;
+    /// devagar/parado dá o salto clássico — travado e ESTÁVEL até o fim (ver
+    /// UpdateStationaryTakeoffLock): não gira nem é interrompido por outra ação.</summary>
+    void BeginTakeoff()
+    {
+        bool canceling = Locked;              // só chega aqui via CanCancelAttack
+        if (canceling) CancelLock();
+
+        // decide pelo MESMO valor que as transições do Animator testam (o
+        // parâmetro Speed é amortecido): controller e state machine nunca
+        // divergem no instante da decolagem. 1.5 = metade da corrida
+        // (runningTakeoffFraction × 3, a escala do blend de locomoção).
+        bool runningStart = anim.GetFloat(P_Speed) >= runningTakeoffFraction * 3f;
+        if (!runningStart)
+        {
+            inStationaryTakeoff = true;
+            // trava mínima já no frame 0: cobre o blend de entrada até o Animator
+            // confirmar "TakeOff" (Stagger: nem dash/ataque cancela — estável de verdade)
+            Lock(takeoffLockMinimum, LockKind.Stagger);
+        }
+        EnterFlight(runningStart);
+        // a subida do salto é roteirizada (EnterFlight acabou de zerar a fase):
+        // sobe sozinho durante o clipe, e o bote vem no fim, em TakeoffLaunch
+        if (!runningStart) flight?.BeginScriptedClimb(takeoffMaxLock);
+
+        // cancelou um golpe: corta a animação na mão (não há transição saindo
+        // dos estados de ataque antes do exit time — o CrossFade resolve)
+        if (canceling)
+            anim.CrossFadeInFixedTime(runningStart ? "Fly" : "TakeOff", 0.1f, 0);
+    }
+
+    /// <summary>Mantém o lock (rotação zerada + ações bloqueadas) enquanto o
+    /// Animator estiver de fato no salto de decolagem — a duração real do
+    /// CLIPE, não um número chutado. Sai sozinho no instante em que o Animator
+    /// avança para Fly, sem depender de contar segundos manualmente.</summary>
+    void UpdateStationaryTakeoffLock()
+    {
+        var info = anim.GetCurrentAnimatorStateInfo(0);
+        bool stillInClip = info.IsName(TakeOffState) && info.normalizedTime < 0.98f;
+        bool enteringClip = anim.IsInTransition(0) &&
+            anim.GetNextAnimatorStateInfo(0).IsName(TakeOffState);
+        // o Animator leva 1-2 frames para entrar no estado: sem esta carência o
+        // salto seria "encerrado" no primeiro frame, antes mesmo de começar
+        bool settling = Time.time - takeoffTime < takeoffLockMinimum;
+        bool ranAway = Time.time - takeoffTime > takeoffMaxLock;   // rédea de segurança
+
+        if ((stillInClip || enteringClip || settling) && !ranAway)
+            Lock(takeoffLockMinimum, LockKind.Stagger);   // refresca — nunca cancelável
+        else
+        {
+            inStationaryTakeoff = false;
+            TakeoffLaunch();
+        }
+    }
+
+    /// <summary>O clímax do salto: o bote das asas que arranca o dragão do chão.
+    /// Vem no FIM do clipe, exatamente na virada para o voo — antes todo o
+    /// impulso era dado no primeiro frame e chegava gasto aqui, então a
+    /// decolagem parecia PERDER força justo quando devia ganhar.</summary>
+    void TakeoffLaunch()
+    {
+        flight?.Launch(takeoffLaunchClimb * S * ClimbMul);
+        flySpeed += takeoffLaunchForward * S;
+        vertInput = 1f;
+
+        DragonCamera.Instance?.AddShake(0.18f);
+        ImpactEffects.Emit(new ImpactEvent
+        {
+            kind = ImpactKind.WingBoost,
+            position = transform.position,
+            normal = Vector3.up,
+            velocity = flightVel,
+            strength01 = 0.85f,
+            scale = VfxScale,
+        });
+    }
+
     // ------------------------------------------------------------------- VOO
     // Voo como habilidade: 1 toque de Space = 1 batida, 2 por ciclo (DragonFlight).
     // Entre batidas: planeio com sustentação pela velocidade; updrafts ajudam.
     void FlightUpdate(float dt, float h, float v)
     {
-        bool diving = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.C);
+        // Shift segurado = mergulho, MENOS durante a esquiva completa (o combo
+        // exige Shift segurado: mergulhar junto arruinaria a virada)
+        diving = DragonInput.Held(DragonInput.Act.Burst) && Time.time >= flyDodgeUntil;
 
         float s = S;
         ProcessFlightImpact(s);   // consequências da colisão do frame anterior
@@ -351,17 +560,30 @@ public class DragonController : MonoBehaviour
         float target = cruiseSpeed * s;
         if (v > 0.1f) target = Mathf.Lerp(cruiseSpeed, maxFlySpeed, v) * s;
         else if (v < -0.1f) target = Mathf.Lerp(cruiseSpeed, minFlySpeed, -v) * s;
-        if (diving) target = maxFlySpeed * s;
+        if (diving) target = maxFlySpeed * flight.DiveOverspeed * s;   // mergulho FURA o teto
         if (stalling) target = minFlySpeed * s;
-        flySpeed = Mathf.MoveTowards(flySpeed, target, flyAccel * s * dt);
 
-        float turnFactor = Mathf.Lerp(1.25f, 0.8f, Speed01);
-        yaw += h * turnSpeedAir * turnFactor * dt;
+        // engata rápido, sangra devagar: conservar velocidade é o prazer do voo
+        float accel = target > flySpeed ? flyAccel * (diving ? 2f : 1f) * s
+                                        : flyAccel * 0.35f * s;
+        flySpeed = Mathf.MoveTowards(flySpeed, target, accel * dt);
+
+        if (Time.time < flyDodgeUntil)
+        {
+            // esquiva completa: o rumo vira DECIDIDO até o alvo — taxa = ângulo
+            // que falta ÷ tempo que resta, então a virada fecha exatamente no fim
+            float rate = Mathf.Abs(Mathf.DeltaAngle(yaw, flyDodgeYawTarget)) /
+                         Mathf.Max(0.01f, flyDodgeUntil - Time.time);
+            yaw = Mathf.MoveTowardsAngle(yaw, flyDodgeYawTarget, rate * dt);
+        }
+        else
+        {
+            // curva fechada devagar, ampla em alta — predador, não avião
+            float turnFactor = Mathf.Lerp(1.5f, 0.85f, Speed01) * TurnMul;
+            yaw += h * turnSpeedAir * turnFactor * dt;
+        }
 
         // ---- pouso controlado: segurar S = descida DECIDIDA rumo ao solo.
-        //      Alto (sem chão no alcance da sondagem) desce na taxa cheia; com o
-        //      chão à vista faz o gradiente até o "flare" suave do toque, e as
-        //      condições de pouso abaixo completam a transição naturalmente.
         float landingSink = 0f;
         if (v < -0.1f && !stalling)
         {
@@ -376,14 +598,19 @@ public class DragonController : MonoBehaviour
             else landingSink = landDescendRate * s;
         }
 
-        // ---- ciclo de batidas de asa
-        bool flapPressed = !Locked && Input.GetKeyDown(KeyCode.Space);
-        bool held = Input.GetKey(KeyCode.Space);
+        // ---- ciclo de batidas de asa (Space bufferizado: nunca "come" a batida)
+        bool flapPressed = !Locked && DragonInput.Consume(DragonInput.Act.Flap, 0.15f);
+        bool held = DragonInput.Held(DragonInput.Act.Flap);
         float vy = flight != null
             ? flight.Tick(dt, flapPressed, held, diving, Speed01, s,
                           transform.position, ref flySpeed, landingSink)
             : Time.time - takeoffTime < 0.9f ? climbRate * s     // fallback sem módulo
             : diving ? -diveRate * s : -glideSink * SinkMul;
+
+        // swoop/boost podem passar do máximo — trava no overspeed permitido
+        flySpeed = Mathf.Min(flySpeed,
+            maxFlySpeed * Mathf.Max(flight != null ? flight.DiveOverspeed : 1f,
+                                    boostMaxOverspeed) * s);
 
         gliding = flight == null || flight.IsGliding;
 
@@ -422,17 +649,13 @@ public class DragonController : MonoBehaviour
         // barriga rente à lâmina: spray e ondulações — puramente visual
         if (overDeepWater) UpdateWaterSkim(surface);
 
-        // carência maior pós-decolagem e pouso só em DESCIDA REAL (vy < -1.5):
+        // carência pós-decolagem e pouso só em DESCIDA REAL (vy < -1.5):
         // o afundamento suave do planeio rápido (~-0.9) não força pouso.
-        // Com intenção de pouso (S + chão perto), o flare gentil também conta.
-        if (Time.time - takeoffTime < 1.5f) return;
+        if (Time.time - takeoffTime < takeoffGrace) return;
         if (cc.isGrounded) { Land(); return; }
 
         // ---- POUSO AUTOMÁTICO: voando rente ao chão sem intenção de subir, o
         //      dragão pousa de verdade em vez de "raspar" o terreno voando.
-        //      Nunca contraria o jogador: segurar Space, qualquer subida real ou
-        //      a fase de decolagem cancelam. Só em chão pousável e fora da água
-        //      (sobre lago o voo rasante é livre — é o skim visual acima).
         bool wantsAltitude = held || vy > 0.5f || (flight != null && flight.InTakeoffClimb);
         if (!wantsAltitude && !overDeepWater)
         {
@@ -456,6 +679,136 @@ public class DragonController : MonoBehaviour
                     groundMask, QueryTriggerInteraction.Ignore))
                 Land();
         }
+    }
+
+    // -------------------------------------------------- DASH / WING BOOST
+    /// <summary>Chão: Shift + A/D = dash lateral (chord — as duas teclas frescas
+    /// e próximas). Ar: Shift = Wing Boost/esquiva/mergulho. Cancela golpes após
+    /// a janela de ataque.</summary>
+    void HandleBurst()
+    {
+        if (dead || Time.time < dashUntil) return;
+        if (Locked && !CanCancelAttack) return;
+
+        if (flying)
+        {
+            // ESQUIVA COMPLETA: A/D + Shift + Space. Shift e direcional são
+            // MODIFICADORES (segurados), Space é o gatilho — sem chord por tempo,
+            // então sai no frame exato do toque. Consumir o Flap aqui impede a
+            // batida de asa de sair junto (o HandleBurst roda antes do voo).
+            float steer = DragonInput.Horizontal;
+            if (Mathf.Abs(steer) > 0.5f && DragonInput.Held(DragonInput.Act.Burst) &&
+                DragonInput.Consume(DragonInput.Act.Flap, 0.15f))
+            {
+                FlyDodge(steer < 0f ? -1f : 1f);
+                return;
+            }
+
+            if (Time.time < boostReadyAt) return;
+            if (!DragonInput.Consume(DragonInput.Act.Burst)) return;
+            AirBurst();
+            return;
+        }
+
+        if (!cc.isGrounded || Time.time < dashReadyAt) return;
+        bool right = DragonInput.ConsumeDashRight();
+        bool left = !right && DragonInput.ConsumeDashLeft();
+        if (right || left) GroundDash(right ? 1f : -1f);
+    }
+
+    /// <summary>Dash lateral puro (side: +1 direita, -1 esquerda) — mesma
+    /// animação Dodge L/R do dash aéreo (era o pedido: "mesma animação de voo").</summary>
+    void GroundDash(float side)
+    {
+        if (!Spend(dodgeCost * CostMul)) return;
+        if (Locked) CancelLock();
+
+        Vector3 rightDir = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+        dashVel = rightDir * side * EffRunSpeed * dashSpeedMul;
+        dashUntil = Time.time + dashDuration;
+        dashReadyAt = Time.time +
+            dashCooldown * (growth != null ? growth.DashCooldownMul : 1f);
+        vitals?.GrantIFrames(dashIFrames);
+
+        anim.SetFloat(P_DodgeDir, side);
+        anim.SetTrigger(P_Dodge);
+
+        DragonCamera.Instance?.AddShake(0.15f);
+        ImpactEffects.Emit(new ImpactEvent
+        {
+            kind = ImpactKind.DashBurst,
+            position = transform.position,
+            normal = Vector3.up,
+            velocity = dashVel,
+            strength01 = 0.7f,
+            scale = VfxScale,
+        });
+    }
+
+    void AirBurst()
+    {
+        if (vitals != null && !vitals.TrySpend(boostCost * CostMul)) return;
+        if (Locked) CancelLock();
+        boostReadyAt = Time.time + boostCooldown;
+        vitals?.GrantIFrames(boostIFrames);
+
+        float side = DragonInput.Horizontal;
+        if (Mathf.Abs(side) > 0.5f)
+        {
+            // esquiva SIMPLES: desvia o rumo e escapa da linha do ataque, sem
+            // animação dedicada — a Fly Dodge L/R é exclusiva do combo com Space
+            // (era o trigger daqui que saía impreciso, disputando o blend de voo).
+            lastAirDodgeYaw = (side < 0f ? -1f : 1f) * airDodgeYaw;
+            lastAirDodgeTime = Time.time;
+            yaw += lastAirDodgeYaw;
+        }
+        else
+        {
+            // WING BOOST: batida forte — aceleração instantânea (fantasia de dragão).
+            // O visual vem do tranco de sustentação (Knock) refletido no blend de voo.
+            float mul = growth != null ? growth.BoostMul : 1f;
+            flySpeed = Mathf.Min(flySpeed + boostImpulse * S * mul,
+                                 maxFlySpeed * boostMaxOverspeed * S);
+            flight?.Knock(1.5f * mul);
+        }
+
+        DragonCamera.Instance?.AddShake(0.2f);
+        ImpactEffects.Emit(new ImpactEvent
+        {
+            kind = ImpactKind.WingBoost,
+            position = transform.position,
+            normal = Vector3.up,
+            velocity = flightVel,
+            strength01 = 0.8f,
+            scale = VfxScale,
+        });
+    }
+
+    /// <summary>Esquiva de voo COMPLETA (A/D + Shift + Space): toca o clipe exato
+    /// Fly Dodge L/R e VIRA O VOO INTEIRO para o novo rumo — não é um empurrão
+    /// lateral mantendo a direção, é trocar de direção. Se vier logo depois de
+    /// uma esquiva simples (o Shift do próprio combo dispara aquela primeiro),
+    /// ABSORVE-A: desfaz o juke e não cobra energia de novo — o combo é UMA ação.</summary>
+    void FlyDodge(float side)
+    {
+        bool absorbing = Time.time - lastAirDodgeTime < 0.3f;
+        if (!absorbing && vitals != null && !vitals.TrySpend(flyDodgeCost * CostMul)) return;
+        if (absorbing) yaw -= lastAirDodgeYaw;
+        lastAirDodgeTime = -99f;
+        if (Locked) CancelLock();
+
+        flyDodgeYawTarget = yaw + side * flyDodgeTurn * TurnMul;
+        flyDodgeUntil = Time.time + flyDodgeDuration;
+        diving = false;                    // o Shift do combo não vira mergulho
+        vitals?.GrantIFrames(flyDodgeIFrames);
+
+        // CrossFade no estado EXATO: o trigger dependia da transição vencer o
+        // blend do voo, e era isso que fazia a animação sair imprecisa
+        anim.ResetTrigger(P_Dodge);
+        anim.SetFloat(P_DodgeDir, side);
+        anim.CrossFadeInFixedTime(side < 0f ? FlyDodgeLState : FlyDodgeRState, 0.08f, 0);
+
+        DragonCamera.Instance?.AddShake(0.18f);
     }
 
     // -------------------------------------------------------- COLISÃO EM VOO
@@ -494,7 +847,7 @@ public class DragonController : MonoBehaviour
 
         if (impact <= 0f || IsStaggered) return;
         if (Time.time - lastImpactTime < impactCooldown) return;
-        if (Time.time - takeoffTime < 1.5f) return;   // carência pós-decolagem
+        if (Time.time - takeoffTime < takeoffGrace) return;   // carência pós-decolagem
 
         float impact01 = Mathf.Clamp01(impact / (maxFlySpeed * s));
         if (impact01 < impactLight) return;           // raspão: navegação rente é permitida
@@ -532,7 +885,13 @@ public class DragonController : MonoBehaviour
             staggerUntil = Time.time + staggerTime;
             SetStall(true);
             flySpeed = Mathf.Min(flySpeed, minFlySpeed * s);
-            Lock(staggerTime);
+            Lock(staggerTime, LockKind.Stagger);
+            flyDodgeUntil = -99f;          // bateu no meio da esquiva: ela acaba aqui
+
+            // TOMBO: bater forte derruba o dragão de verdade (UPFly Fall Death).
+            // Só a COLISÃO usa este clipe — o estol por exaustão segue no Stall
+            // Fall, que é uma queda controlada, não um tombo.
+            if (hasFallDeathState) anim.CrossFadeInFixedTime(FallDeathState, 0.1f, 0);
         }
         else Spend(impactEnergyCost * impact01);
     }
@@ -613,68 +972,59 @@ public class DragonController : MonoBehaviour
     void HandleActions()
     {
         bool grounded = !flying && cc.isGrounded;
+        if (!grounded) return;   // golpes aéreos vivem no DragonAbilities (1-4)
 
-        if (Input.GetKeyDown(KeyCode.LeftAlt) && Spend(dodgeCost * CostMul))
-        {
-            float dir = Input.GetAxisRaw("Horizontal");
-            anim.SetFloat(P_DodgeDir, dir < -0.01f ? -1f : 1f);
-            anim.SetTrigger(P_Dodge);
-            Lock(0.7f);
-            return;
-        }
-
-        if (!grounded) return;
-
-        if (Input.GetKeyDown(KeyCode.G))                            // comer
+        if (DragonInput.Consume(DragonInput.Act.Eat))               // comer
         {
             var food = Carcass.FindNearest(transform.position, eatRange * S);
             if (food != null)
             {
                 anim.SetInteger(P_AttackType, 0);                   // mordida
                 anim.SetTrigger(P_Attack);
-                Lock(1.0f);
+                Lock(1.0f, LockKind.Attack);
                 float n = food.Consume();
                 vitals?.Eat(n);
                 growth?.NotifyAte(n);
             }
         }
-        else if (Input.GetMouseButtonDown(0) && Spend(attackCost * CostMul))
+        else if (DragonInput.Consume(DragonInput.Act.Melee) && Spend(attackCost * CostMul))
         {
             anim.SetInteger(P_AttackType, meleeCombo);
             anim.SetTrigger(P_Attack);
             meleeCombo = (meleeCombo + 1) % 4;
-            Lock(1.0f);
+            Lock(1.0f, LockKind.Attack);
             StrikeWildlife(2.2f, 3.0f, 16f);
         }
-        else if (Input.GetKeyDown(KeyCode.Q) && Spend(attackCost * CostMul))
+        else if (DragonInput.Consume(DragonInput.Act.Tail) && Spend(attackCost * CostMul))
         {
             anim.SetInteger(P_AttackType, tailLeft ? 4 : 5);
             tailLeft = !tailLeft;
             anim.SetTrigger(P_Attack);
-            Lock(1.2f);
+            Lock(1.2f, LockKind.Attack);
             StrikeWildlife(0f, 4.0f, 12f);      // cauda varre ao redor
         }
-        else if (Input.GetKeyDown(KeyCode.E) && Spend(attackCost * CostMul))
+        else if (DragonInput.Consume(DragonInput.Act.Wing) && Spend(attackCost * CostMul))
         {
             anim.SetInteger(P_AttackType, wingLeft ? 6 : 7);
             wingLeft = !wingLeft;
             anim.SetTrigger(P_Attack);
-            Lock(1.1f);
+            Lock(1.1f, LockKind.Attack);
             StrikeWildlife(1.2f, 3.5f, 10f);
         }
-        else if (Input.GetKeyDown(KeyCode.F) && Spend(fireCost * CostMul))
+        else if (DragonInput.Consume(DragonInput.Act.Fire) && Spend(fireCost * CostMul))
         {
             anim.SetTrigger(P_Fire);
-            Lock(1.9f);
+            Lock(1.9f, LockKind.Attack);
         }
-        else if (Input.GetKeyDown(KeyCode.T))
+        else if (DragonInput.Consume(DragonInput.Act.Roar))
         {
             anim.SetTrigger(P_Roar);
-            Lock(2.4f);
+            Lock(2.4f, LockKind.Attack);   // rugido também cancela com dash
         }
-        else if (Input.GetKeyDown(KeyCode.R) && Mathf.Abs(planarSpeed) < 0.5f)
+        else if (Mathf.Abs(planarSpeed) < 0.5f && DragonInput.Consume(DragonInput.Act.Rest))
         {
             resting = true;
+            stealth = false;
             anim.SetBool(P_Rest, true);
         }
     }
@@ -713,13 +1063,13 @@ public class DragonController : MonoBehaviour
     void RestUpdate()
     {
         planarSpeed = 0f;
-        momentum = 0f;
         if (cc.isGrounded) verticalVel = -4f;
         cc.Move(Vector3.up * verticalVel * Time.deltaTime);
 
-        if (Input.GetKeyDown(KeyCode.R) || Input.GetKeyDown(KeyCode.Space) ||
-            Mathf.Abs(Input.GetAxisRaw("Horizontal")) > 0.1f ||
-            Mathf.Abs(Input.GetAxisRaw("Vertical")) > 0.1f)
+        if (DragonInput.Consume(DragonInput.Act.Rest) ||
+            DragonInput.Consume(DragonInput.Act.Flap) ||
+            Mathf.Abs(DragonInput.Horizontal) > 0.1f ||
+            Mathf.Abs(DragonInput.Vertical) > 0.1f)
         {
             resting = false;
             anim.SetBool(P_Rest, false);
@@ -763,11 +1113,11 @@ public class DragonController : MonoBehaviour
         vitals?.Drain(swimCost * CostMul * (Mathf.Abs(planarSpeed) > 0.3f ? 1f : 0.35f));
 
         // Space: decola da água (explosão de asas — custa um pouco mais)
-        if (!Locked && Input.GetKeyDown(KeyCode.Space) &&
+        if (!Locked && DragonInput.Consume(DragonInput.Act.Flap) &&
             Spend(takeoffCost * 1.3f * CostMul))
         {
             ExitSwim();
-            EnterFlight();
+            EnterFlight(false);
             return;
         }
 
@@ -810,9 +1160,9 @@ public class DragonController : MonoBehaviour
         swimming = true;
         flying = false;
         gliding = false;
+        stealth = false;
         SetStall(false);
         fallFromY = float.NaN;      // água amortece: queda não machuca
-        momentum = 0f;
         verticalVel = 0f;
         vertInput = 0f;
         planarSpeed = Mathf.Min(Mathf.Abs(planarSpeed), swimSpeed * S);
@@ -828,16 +1178,22 @@ public class DragonController : MonoBehaviour
     }
 
     // -------------------------------------------------------------- ESTADOS
-    void EnterFlight()
+    /// <summary>`running` = decolagem em corrida: já entra voando pra frente,
+    /// sem a fase de salto (o Animator vai direto Locomotion→Fly pelo Speed).</summary>
+    void EnterFlight(bool running)
     {
         flying = true;
         gliding = false;
+        stealth = false;
         SetStall(false);
         takeoffTime = Time.time;
-        lastFlapTime = Time.time;
-        flySpeed = Mathf.Max(planarSpeed, (minFlySpeed + 2f) * S);
-        vertInput = 1f;
-        flight?.OnEnterFlight(9f * S);   // impulso de decolagem + ciclo de batidas cheio
+        flyDodgeUntil = -99f;      // decolagem nova nunca herda uma esquiva pendente
+        flySpeed = running ? Mathf.Max(planarSpeed, cruiseSpeed * 0.8f * S)
+                           : Mathf.Max(planarSpeed, (minFlySpeed + 2f) * S);
+        vertInput = running ? 0.35f : 1f;
+        // parado, este é só o SALTO — o impulso de verdade vem do bote das asas
+        // no fim do clipe (TakeoffLaunch). Correndo, as asas já abrem em movimento.
+        flight?.OnEnterFlight((running ? 5f : takeoffHopClimb) * S);
         anim.SetBool(P_Flying, true);
         anim.SetBool(P_Glide, false);
     }
@@ -849,7 +1205,7 @@ public class DragonController : MonoBehaviour
         // por Stall Fall + Land, reagir de novo em pé parecia um espasmo.
         bool wasStalling = stalling;
         float severity = ResolveFall();
-        if (wasStalling) Lock(1.2f);
+        if (wasStalling) Lock(1.2f, LockKind.Stagger);
 
         ImpactEffects.Emit(new ImpactEvent
         {
@@ -861,23 +1217,18 @@ public class DragonController : MonoBehaviour
                        : Mathf.Clamp01(flySpeed / Mathf.Max(1f, maxFlySpeed * S)),
             scale = VfxScale,
         });
+        if (severity > 0f) DragonCamera.Instance?.AddShake(0.25f * severity);
 
         flying = false;
         gliding = false;
+        diving = false;
         SetStall(false);
 
-        // toca o chão CORRENDO: um pouso rápido vira corrida e desacelera sozinho
-        // (cortar direto para caminhada dava um solavanco). Queda feia estanca.
-        if (wasStalling || severity > 0f)
-        {
-            planarSpeed = Mathf.Min(flySpeed, walkSpeed * S);
-            momentum = 0f;
-        }
-        else
-        {
-            planarSpeed = Mathf.Min(flySpeed, EffRunSpeed);
-            momentum = Mathf.Clamp01(planarSpeed / Mathf.Max(0.01f, EffRunSpeed));
-        }
+        // toca o chão CORRENDO: pouso rápido vira corrida e desacelera sozinho
+        // (aterrissagem inteligente — nunca a parada brusca). Queda feia estanca.
+        planarSpeed = wasStalling || severity > 0f
+            ? Mathf.Min(flySpeed, walkSpeed * S)
+            : Mathf.Min(flySpeed, EffRunSpeed);
         verticalVel = -4f;
         vertInput = 0f;
         anim.SetBool(P_Flying, false);
@@ -913,7 +1264,7 @@ public class DragonController : MonoBehaviour
         }
         anim.SetFloat(P_HitVar, UnityEngine.Random.Range(0, 4));
         anim.SetTrigger(P_Hit);
-        Lock(0.8f);
+        Lock(0.8f, LockKind.Stagger);
     }
 
     void Die()
@@ -922,27 +1273,43 @@ public class DragonController : MonoBehaviour
         resting = false;
         flying = false;
         swimming = false;
+        stealth = false;
         anim.SetBool(P_Swim, false);
         anim.SetFloat(P_DeathVar, UnityEngine.Random.Range(0, 2));
         anim.SetTrigger(P_Die);
     }
 
     bool Spend(float amount) => vitals == null || vitals.TrySpend(amount);
-    void Lock(float seconds) => actionLockUntil = Time.time + seconds;
+
+    void Lock(float seconds, LockKind kind = LockKind.Action)
+    {
+        lockStart = Time.time;
+        actionLockUntil = Time.time + seconds;
+        lockKind = kind;
+    }
+
+    /// <summary>Encerra o lock atual (cancel por dash/decolagem).</summary>
+    void CancelLock() => actionLockUntil = Time.time;
 
     /// <summary>Escala corporal efetiva (crescimento × atributos) — combate usa
     /// para dimensionar dano, alcance e origem dos projéteis.</summary>
     public float BodyScale => S;
 
-    /// <summary>Trava ações/entradas por alguns segundos (habilidades 1-4).</summary>
-    public void LockActions(float seconds) => Lock(seconds);
+    /// <summary>Trava ações por alguns segundos (habilidades 1-4). É um lock de
+    /// GOLPE: dash e decolagem cancelam após a janela — profundidade mecânica.</summary>
+    public void LockActions(float seconds) => Lock(seconds, LockKind.Attack);
 
     /// <summary>Golpe corpo a corpo atinge a fauna viva (caça de verdade — GDD).
-    /// Presas abatidas viram carcaças que se comem com G, como sempre.</summary>
+    /// Presas abatidas viram carcaças que se comem com G. Acertou: hit stop +
+    /// micro-shake — o impacto tem PESO (hack and slash).</summary>
     void StrikeWildlife(float forwardOffset, float radius, float damage)
     {
         Vector3 p = transform.position + transform.forward * (forwardOffset * S);
-        AnimalAgent.DamageNearest(p, radius * S, damage * S, transform);
+        if (AnimalAgent.DamageNearest(p, radius * S, damage * S, transform))
+        {
+            HitStop.Hit();
+            DragonCamera.Instance?.AddShake(0.12f);
+        }
     }
 
     // -------------------------------------------------------- VISUAL / ANIM
@@ -964,7 +1331,17 @@ public class DragonController : MonoBehaviour
 
     void UpdateAnimator(float dt, float h)
     {
-        turnSmoothed = Mathf.MoveTowards(turnSmoothed, h, 4f * dt);
+        // no chão o "Turn" vem do giro REAL do corpo (movimento câmera-relativo);
+        // no ar e na água continua vindo do input (A/D giram)
+        float turnTarget;
+        if (flying || swimming) turnTarget = h;
+        else
+        {
+            float yawRate = Mathf.DeltaAngle(prevYaw, yaw) / Mathf.Max(dt, 0.0001f);
+            turnTarget = Mathf.Clamp(yawRate / 180f, -1f, 1f);
+        }
+        prevYaw = yaw;
+        turnSmoothed = Mathf.MoveTowards(turnSmoothed, turnTarget, 6f * dt);
         anim.SetFloat(P_Turn, turnSmoothed);
 
         float animSpeed;
@@ -980,5 +1357,6 @@ public class DragonController : MonoBehaviour
 
         anim.SetFloat(P_Vertical, vertInput, 0.15f, dt);
         anim.SetBool(P_Glide, flying && gliding && !stalling);
+        if (hasStealthParam) anim.SetBool(P_Stealth, stealth);
     }
 }

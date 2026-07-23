@@ -268,6 +268,27 @@ via queda), pouso automático rente ao chão, updrafts nas montanhas, **teto de 
 Resistência** (ar rarefeito, sem parede invisível), natação e voo rasante com spray.
 Números centralizados em FlightProfile (asset) — pronto para variações por idade/fase.
 
+**Rework hack and slash (jul/2026) [IMPL]** — o voo virou o brinquedo do predador:
+
+- **Mergulho com overspeed**: Ctrl segurado passa da velocidade máxima (`diveOverspeed`);
+- **Swoop**: sair do mergulho converte a queda em velocidade à frente
+  (`swoopConversion`) com recuperação dobrada — o loop de energia mergulho→rasante;
+- **Wing Boost**: Shift toque = batida forte com aceleração instantânea, i-frames curtos
+  e custo de energia;
+- **Duas esquivas aéreas, em camadas**: `Shift + A/D` = esquiva simples (desvia o rumo
+  ~18°, i-frames, sem animação dedicada); `A/D + Shift + Space` = **esquiva completa**,
+  que toca o clipe exato `Fly Dodge L/R` (por CrossFade, não por trigger — era o
+  trigger disputando o blend de voo que saía impreciso) e **vira o voo inteiro** ~90°
+  para o novo rumo, em vez de empurrar de lado mantendo a direção. O combo absorve a
+  esquiva simples que o próprio Shift dispara antes, então cobra energia uma vez só;
+- **Tombo na colisão**: bater FORTE em algo voando derruba o dragão com o clipe
+  `UPFly Fall Death` (o estol por exaustão segue no `Stall Fall` — queda controlada,
+  não tombo);
+- **Curvas por velocidade**: fechadas devagar, amplas em alta (fator 1.5→0.85);
+- Velocidade **engata rápido e sangra devagar** (accel assimétrica) — conservar
+  velocidade é o prazer central do voo;
+- Câmera antecipa: lead na curva, pitch/FOV extras no mergulho.
+
 ## Eventos Dinâmicos
 
 Eventos aleatórios spawnam no mundo usando **prefabs pré-prontos** + os sistemas
@@ -289,8 +310,45 @@ fauna **[IMPL]**).
   tecla" (G de comer sai).
 - **Mira em voo** *(novo)*: voando, uma mira/retículo aparece para disparar os golpes
   usáveis no ar; slots de golpes não-usáveis em voo ficam `interactable = false` no HUD.
-- Chão: WASD + golpes nas teclas 1–4 **[IMPL]**; esquema final converge para
-  mouse-driven. **[ABERTO]** gamepad.
+- **Movimento & game feel (rework hack and slash, jul/2026) [IMPL]** — prioridade
+  absoluta: responsividade (referências: DMC, Bayonetta, Dragon's Dogma, Spyro).
+  O peso do dragão vira derrapada/câmera/VFX — nunca atraso de input.
+  - **Sempre corre**; aceleração quase instantânea (~0,35 s até 90% da corrida);
+  - **Chão relativo à câmera**: WASD move na direção da tela, o corpo gira sozinho
+    (fechado devagar, arco em corrida). No voo A/D seguem girando;
+  - **Ctrl segurado = Stealth**: passo de caçada (velocidade do antigo "andar"),
+    fauna percebe a ~1/3 do normal (percepção 0.35→0.12) — tocaia de verdade;
+  - **Shift = explosão**: no CHÃO é um dash **lateral puro** — Shift+A ou Shift+D,
+    as duas teclas precisam ser um toque FRESCO e próximo uma da outra (segurar a
+    direcional de antes de apertar Shift não dispara: solte e aperte as duas juntas
+    ou quase); no AR, Shift toque = Wing Boost/esquiva, segurar = mergulho.
+    i-frames curtos, custo de energia, **cancela golpes após ~40% do swing**;
+    reaproveita a mesma animação Dodge L/R do dash aéreo;
+  - **Buffer de comandos** (~0,2 s): apertar antes da hora enfileira e executa no
+    primeiro frame possível; coyote de voo (Space no ar sempre abre as asas);
+  - **Decolagem em corrida** pula a animação de salto (Locomotion→Fly direto);
+    parada, o salto é uma animação **fechada**: trava rotação e ações pela duração
+    REAL do clipe (lida do Animator, não um tempo fixo) — não gira nem é
+    interrompida por outro comando, corrige o dragão torto de vez;
+  - **Space no chão sempre decola**, parado inclusive — o salto `UJump Up` toca
+    inteiro e as asas dão o **bote** no fim do clipe (impulso de subida + empurrão
+    à frente, shake e VFX). Antes o impulso vinha todo no 1º frame e chegava gasto
+    na virada para o voo — a decolagem *perdia* força no clímax. O antigo "bate
+    asas parado" (`UPFly Stand`) saiu: parado nunca se via o salto bom;
+  - **Pouso vira corrida** se houver velocidade (sem parada brusca);
+  - Feedback: hit stop nos golpes que conectam, micro-shake em dash/decolagem/boost,
+    VFX de poeira/sopro (DashBurst/WingBoost). **Squash & stretch: NÃO** — rig
+    realista deformaria mal; o equivalente é shake + VFX + trancos de sustentação;
+  - **Filhote vs colossal**: filhote gira/acelera melhor, dash renova mais rápido,
+    boost fraco e é mais furtivo (×0.85 na percepção); colossal é um aríete que
+    conserva velocidade (boost ×1.15, giro ×0.85).
+- Mapa de teclas atual: `WASD` mover · `Ctrl` stealth · `Space` asa/decolar ·
+  `Shift+A`/`Shift+D` dash lateral (chão) · `Shift` boost/mergulho (ar) ·
+  `Shift+A/D` esquiva simples (ar) · `A/D + Shift + Space` esquiva completa (ar) ·
+  `LMB` combo · `RMB`/`F` fogo · `Q`/`E` cauda/asas · `1–4` skills · `T` rugir ·
+  `R` descansar · `G` comer · `Tab` ficha. Bindings centralizados em
+  `DragonInput` (preparo p/ gamepad).
+- Esquema final ainda converge para mouse-driven. **[ABERTO]** gamepad.
 - UI: barras de vida/energia/fome/crescimento, pips de batida de asa, minimapa com faro +
   relógio **[IMPL]** · **ficha do dragão** com fase de vida, idade, expectativa,
   atributos (IVs ocultos — mas dá pra "sentir" que estão ruins) · **UI de linhagem/base**

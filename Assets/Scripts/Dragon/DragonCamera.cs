@@ -27,6 +27,13 @@ public class DragonCamera : MonoBehaviour
     [SerializeField] float autoAlignDelay = 1.5f;
     [SerializeField] float autoAlignSpeed = 1.6f;
 
+    [Header("Antecipação (game feel)")]
+    [Tooltip("Em voo, a câmera adianta alguns graus na direção da curva")]
+    [SerializeField] float turnLeadAngle = 6f;
+    [Tooltip("No mergulho, a câmera inclina para baixo antecipando o alvo")]
+    [SerializeField] float divePitchBias = 10f;
+    [SerializeField] float diveFovKick = 6f;
+
     [Header("FOV")]
     [SerializeField] float baseFov = 60f;
     [SerializeField] float flightFov = 74f;
@@ -43,10 +50,18 @@ public class DragonCamera : MonoBehaviour
     float lastMouseTime;
     Vector3 smoothPos;
     float trauma;                                  // 0..1 — amplitude = trauma²
+    float turnLead, divePitch;                     // antecipação suavizada
+
+    /// <summary>A câmera do dragão — o controller dispara shakes de dash,
+    /// decolagem e golpes conectados por aqui.</summary>
+    public static DragonCamera Instance { get; private set; }
 
     /// <summary>Micro-shake de impacto (DragonDamageFeedback). Amplitude cresce
     /// com trauma², então golpes fracos são quase subliminares.</summary>
     public void AddShake(float amount) => trauma = Mathf.Clamp01(trauma + amount);
+
+    void Awake() => Instance = this;
+    void OnDestroy() { if (Instance == this) Instance = null; }
 
     void Start()
     {
@@ -108,11 +123,19 @@ public class DragonCamera : MonoBehaviour
         distance = Mathf.Clamp(distance - Input.GetAxis("Mouse ScrollWheel") * zoomSpeed * distance * 0.35f,
                                minDistance, maxDistance);
 
+        // ---- antecipação: em curva a câmera adianta na direção do giro; no
+        //      mergulho inclina para baixo — a câmera "lê" a intenção do voo
+        bool flying = dragon != null && dragon.IsFlying;
+        float leadTarget = flying ? Input.GetAxisRaw("Horizontal") * turnLeadAngle : 0f;
+        turnLead = Mathf.Lerp(turnLead, leadTarget, 3f * dt);
+        float diveTarget = flying && dragon.IsDiving ? divePitchBias : 0f;
+        divePitch = Mathf.Lerp(divePitch, diveTarget, 3f * dt);
+
         // acompanha o crescimento do dragão (filhote = câmera perto, colossal = longe)
         float sizeScale = Mathf.Max(0.2f, target.lossyScale.y);
 
         Vector3 pivot = target.position + Vector3.up * pivotHeight * sizeScale;
-        Quaternion rot = Quaternion.Euler(camPitch, camYaw, 0f);
+        Quaternion rot = Quaternion.Euler(camPitch + divePitch, camYaw + turnLead, 0f);
         float dist = distance * sizeScale;
 
         // não atravessar paredes/terreno
@@ -137,9 +160,10 @@ public class DragonCamera : MonoBehaviour
                 (Mathf.PerlinNoise(t, t) - 0.5f) * amp * 0.6f);
         }
 
-        // FOV com sensação de velocidade
-        float targetFov = dragon != null && dragon.IsFlying
+        // FOV com sensação de velocidade (+ chute extra no mergulho)
+        float targetFov = flying
             ? Mathf.Lerp(baseFov, flightFov, dragon.Speed01)
+              + (dragon.IsDiving ? diveFovKick : 0f)
             : baseFov;
         cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFov, 3f * dt);
     }

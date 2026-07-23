@@ -1473,18 +1473,32 @@ MonoBehaviour:
   walkSpeed: 3.84
   runSpeed: 11.4
   reverseSpeed: 1.7
-  groundAccel: 9
-  momentumDecay: 1.6
-  turnSpeedGround: 120
+  groundAccel: 35
+  groundDecel: 25
+  turnRateIdle: 540
+  turnRateRun: 240
   gravity: 28
   hopImpulse: 6.5
   takeoffMinSpeed: 1.5
+  runningTakeoffFraction: 0.5
+  takeoffSteerLock: 0.35
+  takeoffGrace: 0.8
+  dashSpeedMul: 1.7
+  dashDuration: 0.35
+  dashCooldown: 0.6
+  dashIFrames: 0.3
+  boostImpulse: 8
+  boostMaxOverspeed: 1.25
+  boostCooldown: 1
+  boostIFrames: 0.25
+  boostCost: 6
+  attackCancelWindow: 0.4
   minFlySpeed: 6
   cruiseSpeed: 14
   maxFlySpeed: 26
-  flyAccel: 9
-  turnSpeedAir: 75
-  bankAngle: 42
+  flyAccel: 22
+  turnSpeedAir: 95
+  bankAngle: 48
   pitchAngle: 28
   climbRate: 7.5
   diveRate: 14
@@ -1493,9 +1507,25 @@ MonoBehaviour:
   stallSink: 9
   landProbeDistance: 3.5
   landMaxSpeed: 11
+  landApproachProbe: 16
+  landDescendRate: 16
+  landFlareRate: 3
+  autoLandHeight: 1.6
+  autoLandMaxSlope: 0.7
   groundMask:
     serializedVersion: 2
     m_Bits: 0
+  safeFallTreeFraction: 0.7
+  safeFallFallback: 18
+  fallDamageAtDouble: 35
+  waterSkimHeight: 1.8
+  impactLight: 0.2
+  impactHeavy: 0.5
+  impactSpeedLoss: 0.6
+  impactKnockDown: 6
+  staggerTime: 1.2
+  impactCooldown: 0.4
+  impactEnergyCost: 6
   swimSpeed: 3.4
   swimBackSpeed: 1.2
   swimTurnSpeed: 85
@@ -1589,6 +1619,9 @@ MonoBehaviour:
   energyPerPoint: 0.1
   hungerResistPerPoint: 0.04
   takeoffClimbPerPoint: 0.12
+  ceilingBase: 150
+  ceilingPerPoint: 15
+  ceilingMaxPoints: 10
 --- !u!114 &2878444471970049892
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -169,6 +169,16 @@ public static class ImpactVFX
             case ImpactKind.WaterEntry:
                 Splash(e.position, strength01, e.scale);
                 break;
+
+            // rework hack and slash: a explosão do dash levanta o chão…
+            case ImpactKind.DashBurst:
+                Dust(e.position, strength01 * 0.55f, e.scale, GroundTintAt(e.position));
+                break;
+
+            // …e a batida forte de asas desloca um sopro de ar (neutro, sem chão)
+            case ImpactKind.WingBoost:
+                Dust(e.position, strength01 * 0.5f, e.scale, new Color(0.88f, 0.9f, 0.95f, 1f));
+                break;
         }
     }
 

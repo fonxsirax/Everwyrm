@@ -34,7 +34,8 @@ public static class ImpactVFXSetup
         "Assets/ANGRY MESH/Nature Pack - Winter Environment/Sources/Materials/FX_Snow_A_01.mat";
 
     // ================================================= 1. TEXTURAS E MATERIAIS
-    [MenuItem(Menu + "1 - Gerar Texturas e Materiais")]
+    // (menus removidos na limpeza de jul/2026 — Baked*.png com GUIDs estáveis
+    //  já gerados; para iterar de novo, re-adicione os [MenuItem])
     public static void GenerateAssets()
     {
         EnsureFolder(TexDir);
@@ -534,7 +535,6 @@ public static class ImpactVFXSetup
     }
 
     // ======================================================= 2. CENA DE DEBUG
-    [MenuItem(Menu + "2 - Criar Cena de Debug")]
     public static void CreateDebugScene()
     {
         if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
@@ -602,28 +602,13 @@ public static class ImpactVFXSetup
     }
 
     // ============================================================ 3. TESTES
-    [MenuItem(Menu + "Testar - Poeira (pouso)")]
     static void TestDust() => Fire(ImpactVFXTester.TestMode.Poeira);
-
-    [MenuItem(Menu + "Testar - Queda forte (poeira + torrões)")]
     static void TestHard() => Fire(ImpactVFXTester.TestMode.QuedaForte);
-
-    [MenuItem(Menu + "Testar - Folhas (árvore)")]
     static void TestLeaves() => Fire(ImpactVFXTester.TestMode.Folhas);
-
-    [MenuItem(Menu + "Testar - Lascas (rocha)")]
     static void TestChips() => Fire(ImpactVFXTester.TestMode.Lascas);
-
-    [MenuItem(Menu + "Testar - Splash (entrar na água)")]
     static void TestSplash() => Fire(ImpactVFXTester.TestMode.Splash);
-
-    [MenuItem(Menu + "Testar - Spray (raspar a água)")]
     static void TestSpray() => Fire(ImpactVFXTester.TestMode.Spray);
-
-    [MenuItem(Menu + "Testar - TUDO (ciclar)")]
     static void TestAll() => Fire(ImpactVFXTester.TestMode.Tudo);
-
-    [MenuItem(Menu + "Testar - Parar")]
     static void TestStop() => Fire(ImpactVFXTester.TestMode.Nada);
 
     static void Fire(ImpactVFXTester.TestMode mode)

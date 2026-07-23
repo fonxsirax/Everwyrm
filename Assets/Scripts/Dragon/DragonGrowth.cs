@@ -70,6 +70,18 @@ public class DragonGrowth : MonoBehaviour
     /// <summary>Custo de energia. Gordo e grande gastam mais.</summary>
     public float EnergyCostMul => Mathf.Lerp(0.9f, 1.4f, condition) * Mathf.Lerp(0.85f, 1.25f, growth01);
 
+    // ---- Agilidade por idade (rework hack and slash): o peso modula a
+    //      EXPLOSÃO e o giro, nunca cria espera. Filhote = ágil e furtivo;
+    //      colossal = ariete que conserva velocidade.
+    /// <summary>Velocidade de giro (chão e voo). Filhote vira no lugar.</summary>
+    public float TurnAgilityMul => Mathf.Lerp(1.25f, 0.85f, growth01);
+    /// <summary>Aceleração terrestre: filhote arranca; gordo empurra mais devagar.</summary>
+    public float AccelAgilityMul => Mathf.Lerp(1.3f, 0.9f, growth01) * Mathf.Lerp(1.15f, 0.75f, condition);
+    /// <summary>Cooldown do dash (filhote ~0.45 s · adulto 0.6 · colossal 0.75).</summary>
+    public float DashCooldownMul => Mathf.Lerp(0.75f, 1.25f, growth01);
+    /// <summary>Força do Wing Boost — a batida do colossal é um aríete.</summary>
+    public float BoostMul => Mathf.Lerp(0.7f, 1.15f, growth01);
+
     // ---- Observer
     public event Action<DragonGrowth> OnGrowthChanged;   // tamanho/condição/peso
     public event Action<LifeStage> OnStageChanged;

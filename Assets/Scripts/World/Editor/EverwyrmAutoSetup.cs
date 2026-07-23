@@ -59,6 +59,11 @@ static class EverwyrmAutoSetup
             MountainSetup.EnsureWind();
         }
 
+        // 2f) gelo da Tundra: texturas PBR + material transparente com refração
+        //     (a placa nasce em runtime, então precisa do material pronto no disco)
+        if (!IceSetup.IsGenerated) IceSetup.EnsureAssets();
+        EnsureIceMaterial();
+
         // limpeza one-shot: a galeria de diagnóstico (ferramenta já removida)
         // ficou salva na cena Main — remover se ainda existir.
         foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
@@ -295,6 +300,21 @@ static class EverwyrmAutoSetup
             Debug.Log($"[EverwyrmAutoSetup] Calibração do ciclo migrada p/ v{DayNightCycle.CurrentTuningVersion} ({applied} ajuste(s)) — salve a cena.");
     }
 
+    // -------------------------------------------------------------- GELO
+    /// <summary>Liga o M_Ice_Lake no InfiniteTerrain da cena. Idempotente e não
+    /// invasivo: só preenche o campo vazio (uma troca manual é respeitada).</summary>
+    static void EnsureIceMaterial()
+    {
+        var it = Object.FindFirstObjectByType<InfiniteTerrain>(FindObjectsInactive.Include);
+        if (it == null || it.iceMaterial != null) return;
+        var mat = AssetDatabase.LoadAssetAtPath<Material>("Assets/Everwyrm/Ice/M_Ice_Lake.mat");
+        if (mat == null) return;
+        it.iceMaterial = mat;
+        EditorUtility.SetDirty(it);
+        UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(it.gameObject.scene);
+        Debug.Log("[EverwyrmAutoSetup] Gelo da Tundra ligado no M_Ice_Lake — salve a cena.");
+    }
+
     // -------------------------------------------------- CORES DA VISTA
     /// <summary>Deriva as cores de bioma da vista dos ALBEDOS REAIS das
     /// terrain layers (média = mip 1x1 via Blit) — o horizonte casa com o chão
@@ -507,16 +527,14 @@ static class EverwyrmAutoSetup
             Debug.Log("[EverwyrmAutoSetup] billboards_ calibrado (_Brightness 0.65, sem specular) — LOD distante mais próximo do tom das árvores 3D.");
         }
 
-        // a fila TRANSPARENT (3000) forçada pelo material Unlit antigo sobrevive
-        // à troca de shader — e transparente no HDRP NÃO recebe sombra, então o
-        // billboard seguia claro à noite. Restaura a fila do shader (alpha-test),
-        // remove keywords órfãos e recalibra o brilho (a textura assada tem a
-        // luz do dia embutida ≈ albedo x sol; 0.35 recupera o "albedo" real).
-        if (mat.renderQueue == 3000)
+        // a fila TRANSPARENT forçada pelo material Unlit antigo sobrevive à troca
+        // de shader — e transparente no HDRP NÃO recebe sombra, então o billboard
+        // seguia claro à noite. Vira opaco alpha-test e recalibra o brilho (a
+        // textura assada tem a luz do dia embutida ≈ albedo x sol; 0.35 recupera
+        // o "albedo" real).
+        if (IsTransparentSurface(mat))
         {
-            mat.renderQueue = -1;                       // usa a fila do shader
-            mat.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            mat.DisableKeyword("_ENABLE_FOG_ON_TRANSPARENT");
+            MakeOpaqueAlphaTest(mat);
             mat.DisableKeyword("_ADD_PRECOMPUTED_VELOCITY");
             if (mat.HasProperty("_Brightness") &&
                 Mathf.Abs(mat.GetFloat("_Brightness") - 0.65f) < 0.001f)
@@ -525,6 +543,34 @@ static class EverwyrmAutoSetup
             AssetDatabase.SaveAssets();
             Debug.Log("[EverwyrmAutoSetup] billboards_ tirado da fila Transparent (não recebia sombra!) — agora leva sombra e escurece à noite como as árvores 3D.");
         }
+    }
+
+    // ------------------------------------------ OPACO ALPHA-TEST (HDRP)
+    /// <summary>O material ainda está na configuração transparente? Olha o ESTADO
+    /// SERIALIZADO (_SurfaceType/_RenderQueueType), não `renderQueue`: com fila
+    /// automática (-1) o HDRP recalcula 3000 a cada reload a partir dessas
+    /// propriedades — checar a fila fazia o conserto "acontecer" para sempre.</summary>
+    static bool IsTransparentSurface(Material mat) =>
+        (mat.HasProperty("_SurfaceType") && mat.GetFloat("_SurfaceType") > 0.5f) ||
+        (mat.HasProperty("_RenderQueueType") && mat.GetFloat("_RenderQueueType") >= 3.5f) ||
+        mat.renderQueue >= 2981;
+
+    /// <summary>Vegetação transparente → opaca com alpha-test: recebe sombra e
+    /// escurece à noite. Grava a fila EXPLÍCITA (2450) para o conserto persistir
+    /// entre reloads em vez de voltar a 3000 pela fila automática.</summary>
+    static void MakeOpaqueAlphaTest(Material mat)
+    {
+        if (mat.HasProperty("_SurfaceType")) mat.SetFloat("_SurfaceType", 0f);
+        if (mat.HasProperty("_RenderQueueType")) mat.SetFloat("_RenderQueueType", 1f);
+        if (mat.HasProperty("_AlphaCutoffEnable")) mat.SetFloat("_AlphaCutoffEnable", 1f);
+        if (mat.HasProperty("_AlphaCutoff") && mat.GetFloat("_AlphaCutoff") <= 0.01f)
+            mat.SetFloat("_AlphaCutoff", 0.4f);
+        mat.EnableKeyword("_ALPHATEST_ON");
+        mat.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        mat.DisableKeyword("_ENABLE_FOG_ON_TRANSPARENT");
+        mat.DisableKeyword("_BLENDMODE_ALPHA");
+        ValidateHdrp(mat);                       // recalcula keywords/passes
+        mat.renderQueue = 2450;                  // AlphaTest — depois do Validate
     }
 
     // --------------------------------- VEGETAÇÃO DO MUNDO (todos os biomas)
@@ -556,24 +602,9 @@ static class EverwyrmAutoSetup
             if (mat.name.StartsWith("FX_")) continue;
             if (mat.shader.name.Contains("Unlit")) continue;
 
-            bool hdrpLitTransparent = mat.shader.name.StartsWith("HDRP/") &&
-                mat.HasProperty("_SurfaceType") && mat.GetFloat("_SurfaceType") > 0.5f;
-            bool transparentQueue = mat.renderQueue >= 2981;
-            if (!hdrpLitTransparent && !transparentQueue) continue;
+            if (!IsTransparentSurface(mat)) continue;
 
-            if (hdrpLitTransparent)
-            {
-                mat.SetFloat("_SurfaceType", 0f);
-                mat.SetFloat("_AlphaCutoffEnable", 1f);
-                if (mat.HasProperty("_AlphaCutoff") && mat.GetFloat("_AlphaCutoff") <= 0.01f)
-                    mat.SetFloat("_AlphaCutoff", 0.4f);
-                mat.EnableKeyword("_ALPHATEST_ON");
-            }
-            mat.renderQueue = -1;                       // fila do shader
-            mat.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            mat.DisableKeyword("_ENABLE_FOG_ON_TRANSPARENT");
-            mat.DisableKeyword("_BLENDMODE_ALPHA");
-            if (mat.shader.name.StartsWith("HDRP/")) ValidateHdrp(mat);
+            MakeOpaqueAlphaTest(mat);
             EditorUtility.SetDirty(mat);
             fixedCount++;
             Debug.Log($"[EverwyrmAutoSetup] '{mat.name}' tirado da fila Transparent (não recebia sombra) — agora escurece à noite.");

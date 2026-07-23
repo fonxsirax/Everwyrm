@@ -14,7 +14,8 @@ public static class DragonCombatSetup
 {
     const string Dir = "Assets/Resources/Attacks";
 
-    [MenuItem("Tools/Dragão/Combate — Habilidades (1-4)")]
+    // (menu removido na limpeza de jul/2026 — assets de ataque já criados em
+    //  Resources/Attacks; para rodar de novo, re-adicione o [MenuItem] aqui)
     public static void Setup()
     {
         if (!AssetDatabase.IsValidFolder("Assets/Resources"))

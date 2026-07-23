@@ -11,6 +11,8 @@ public enum ImpactKind
     ObstacleStrike,   // colisão em voo — folhas/galhos (árvore) ou lascas (rocha)
     WaterEntry,       // corpo entrando na água — splash
     WaterSkim,        // barriga raspando a lâmina d'água — spray contínuo
+    DashBurst,        // dash terrestre — rajada de poeira na largada
+    WingBoost,        // batida forte de asas em voo — sopro de ar deslocado
 }
 
 /// <summary>

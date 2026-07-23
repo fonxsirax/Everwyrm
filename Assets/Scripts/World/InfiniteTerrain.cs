@@ -88,10 +88,29 @@ public class InfiniteTerrain : MonoBehaviour
     [Tooltip("Na Tundra a água congela: uma placa de gelo sólida (com collider) cobre lagos e " +
              "riachos no waterLevel — impossível nadar; o dragão pousa e anda por cima.")]
     public bool freezeTundraWater = true;
-    [Tooltip("Peso mínimo do bioma frio p/ congelar (corte seco — a transição suave é da Fase 2).")]
+    [Tooltip("Peso mínimo do bioma frio p/ congelar (corte seco no gameplay: nadar/pousar).")]
     [SerializeField, Range(0f, 1f)] float frozenColdThreshold = 0.6f;
-    [Tooltip("Opcional: material do gelo. Vazio = HDRP/Lit gerado em runtime (claro, bem liso).")]
-    [SerializeField] Material iceMaterial;
+    [Tooltip("Material da placa (Tools > Everwyrm > Gelo gera o M_Ice_Lake: HDRP/Lit " +
+             "transparente + refração, com a água do lago aparecendo por baixo). " +
+             "Vazio = HDRP/Lit chapado gerado em runtime.")]
+    public Material iceMaterial;
+    [Tooltip("Altura da placa acima da lâmina d'água (m). Com material transparente é " +
+             "a espessura aparente do gelo; a água continua sendo renderizada abaixo.")]
+    [SerializeField] float iceSurfaceOffset = 0.08f;
+    [Tooltip("Metros de mundo por repetição da textura de gelo (bater com o IceTextureGenerator.WorldTile).")]
+    [SerializeField] float iceTextureTile = 22f;
+    [Tooltip("Distorção do domínio da UV em metros — o antídoto para a repetição: " +
+             "o padrão nunca se repete idêntico porque a própria UV serpenteia. 0 desliga.")]
+    [SerializeField] float iceUvWarp = 2.4f;
+    [Tooltip("Amplitude do relevo da placa em metros (encurvamento + cristas de pressão). " +
+             "É ruído de MUNDO: nunca se repete e é o que impede o gelo de parecer um plano.")]
+    [SerializeField] float iceRelief = 0.07f;
+    [Tooltip("Faixa de 'frio' na qual a borda da placa MERGULHA sob a lâmina d'água — " +
+             "sem isso o corte seco do bioma vira um degrau reto no meio do lago.")]
+    [SerializeField, Range(0f, 0.3f)] float iceEdgeFade = 0.10f;
+    [Tooltip("Amortece as ondulações da WaterSurface sob o gelo (lago congelado é espelho). " +
+             "Gera uma máscara de água na CPU com a MESMA regra do mesh.")]
+    [SerializeField] bool iceCalmsWaterUnder = true;
 
     [Header("Vegetação da Floresta/Campos (ALP)")]
     [Tooltip("Cada entrada = prefab + peso relativo (o 'pincel' serializável). Peso 0 desliga sem remover.")]
@@ -400,6 +419,11 @@ public class InfiniteTerrain : MonoBehaviour
                  "e permite ficar abaixo da lâmina d'água.")]
         public bool inStreamBed = false;
 
+        [Tooltip("Coloca SOBRE a placa de gelo do lago congelado: exige bacia (chão " +
+                 "abaixo do waterLevel) + frio suficiente, e assenta a instância na " +
+                 "SUPERFÍCIE do gelo em vez de no leito. Pedras encravadas na placa.")]
+        public bool onFrozenIce = false;
+
         [NonSerialized] public int protoBase;   // offset no array de TreePrototypes
         [NonSerialized] public int protoCount;
         [NonSerialized] public float[] cumWeights;   // pesos acumulados p/ sorteio ponderado
@@ -604,11 +628,28 @@ public class InfiniteTerrain : MonoBehaviour
             var t = kv.Value;
             if (t == null) continue;
             var data = t.terrainData;
+            var iceMesh = IceMeshOf(t);
             Destroy(t.gameObject);
             Destroy(data);
+            if (iceMesh != null) Destroy(iceMesh);   // mesh de runtime: sem isso, vaza
         }
         tiles.Clear();
         tileTrees.Clear();
+
+        // o mundo mudou de seed: a máscara de água congelada não vale mais
+        frozenMaskCenter = new Vector2(float.NaN, float.NaN);
+    }
+
+    /// <summary>Mesh da placa de gelo pendurada no tile (null quando o tile não congelou).</summary>
+    static Mesh IceMeshOf(Terrain t)
+    {
+        var f = t != null ? t.GetComponentInChildren<MeshFilter>() : null;
+        return f != null ? f.sharedMesh : null;
+    }
+
+    void OnDestroy()
+    {
+        if (frozenMask != null) Destroy(frozenMask);
     }
 
     void Update()
@@ -680,8 +721,7 @@ public class InfiniteTerrain : MonoBehaviour
                     var data = t.terrainData;
                     // mesh do gelo é asset de runtime como o TerrainData: sem o
                     // Destroy explícito ele vaza a cada tile descartado
-                    var iceFilter = t.GetComponentInChildren<MeshFilter>();
-                    var iceMesh = iceFilter != null ? iceFilter.sharedMesh : null;
+                    var iceMesh = IceMeshOf(t);
                     Destroy(t.gameObject);
                     Destroy(data);
                     if (iceMesh != null) Destroy(iceMesh);
@@ -1067,6 +1107,36 @@ public class InfiniteTerrain : MonoBehaviour
                 scaleRange = new Vector2(0.35f, 1.9f), aspectJitter = 0.2f, maxSlope = 0.7f,
                 clusterStrength = 0.3f, clusterSize = 140f, clusterGroup = 3,   // espalha pelo aberto
                 clusterIrregularity = 0.5f
+            },
+            // Margem do lago congelado: a faixa de 2 m acima da lâmina. Sem ela a
+            // placa encosta na grama sem transição — e é ali que a pedra fica
+            // naturalmente (o gelo empurra o material solto para a beira todo
+            // inverno). Densidade alta, escala pequena: é orla, não afloramento.
+            new()
+            {
+                name = "Tundra — pedras da margem do gelo", biome = Biome.Tundra,
+                prefabs = winterRockPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(150 * w), minBiomeWeight = 0.35f, density = 0.85f,
+                scaleRange = new Vector2(0.3f, 1.2f), aspectJitter = 0.25f, maxSlope = 0.8f,
+                heightRange = new Vector2(waterLevel + 0.12f, waterLevel + 2.2f),
+                minSpacing = 1.6f
+            },
+            // Pedras ENCRAVADAS na placa: o marco visual que dá escala ao lago
+            // liso e prova que ele é sólido. Raras de propósito — uma a cada
+            // ~2 tentativas em 40, agrupadas, para virar "campo de pedras" em vez
+            // de pontilhado uniforme. Escala pequena: matacão em cima do gelo
+            // não convence, seixo/laje convence.
+            new()
+            {
+                name = "Tundra — pedras no gelo", biome = Biome.Tundra,
+                prefabs = winterRockPrefabs,
+                attemptsPerTile = Mathf.RoundToInt(70 * w), minBiomeWeight = 0.5f, density = 0.35f,
+                scaleRange = new Vector2(0.25f, 1.0f), aspectJitter = 0.3f,
+                maxSlope = 1f,                                  // o leito inclina; o gelo é plano
+                clusterStrength = 0.75f, clusterSize = 60f, clusterGroup = 4,
+                clusterCoverage = 0.3f, clusterEdgeSoftness = 0.6f, clusterIrregularity = 0.6f,
+                minSpacing = 2.5f,
+                onFrozenIce = true
             },
             // Bosques: pinheiros altos (Tree_B) são a espinha dorsal — manchas
             // GRANDES com borda suave; o chão sob elas vira folhas congeladas
@@ -1524,28 +1594,46 @@ public class InfiniteTerrain : MonoBehaviour
     }
 
     // -------------------------------------------------------- GELO DA TUNDRA
-    const float IceSurfaceOffset = 0.04f;   // acima da lâmina: a placa opaca esconde a água por baixo
     const float IceShoreMargin = 0.30f;     // avança na margem: borda do gelo fica enterrada no barranco
+    const float IceShoreBury = 0.22f;       // quanto a borda afunda DENTRO do barranco (m)
 
     /// <summary>
-    /// Mesh do gelo do tile: plano em waterLevel+ε cobrindo SÓ as células com
-    /// terreno submerso onde o peso do bioma frio passa do limiar (corte seco).
-    /// A máscara usa o MESMO Mathf.PerlinNoise da geração (BiomeWeights), na CPU —
-    /// nunca replicar em shader: o Perlin da GPU não bate com o da Unity. A placa
-    /// opaca acima da lâmina também resolve o visual de graça: a WaterSurface
-    /// global (que não congela por região) fica escondida por baixo dela.
+    /// PLACA DE GELO do tile — a "pista" da Tundra.
+    ///
+    /// Cobre só as células com terreno submerso onde o peso do bioma frio passa
+    /// do limiar. A máscara usa o MESMO Mathf.PerlinNoise da geração
+    /// (BiomeWeights), na CPU — nunca replicar em shader: o Perlin da GPU não
+    /// bate com o da Unity, e aí gameplay (nadar/pousar) e visual discordariam.
+    ///
+    /// A placa NÃO é mais um plano. Três coisas a tiram do "decalque chapado":
+    ///
+    ///  1. RELEVO DE MUNDO — encurvamento largo + cristas de pressão (ruído
+    ///     ridged) + rugosidade fina. Como é ruído de mundo, NUNCA se repete:
+    ///     é a única variação que nenhuma textura consegue dar.
+    ///  2. UV COM WARP — o domínio da textura serpenteia (ruído de baixa
+    ///     frequência em coordenadas de mundo). O tile de 12 m continua lá, mas
+    ///     deformado de forma diferente em cada lugar: a repetição some.
+    ///  3. BORDAS QUE SOMEM — na margem a placa afunda DENTRO do barranco; no
+    ///     limite do bioma frio ela MERGULHA sob a lâmina d'água. Nos dois casos
+    ///     a aresta serrilhada de 2 m fica escondida em vez de flutuar.
+    ///
+    /// Normal e tangente saem analiticamente do próprio relevo (RecalculateNormals
+    /// erraria nas bordas do tile, onde faltam vizinhos) — sem tangente o normal
+    /// map do gelo simplesmente não funcionaria.
     /// </summary>
     IEnumerator BuildIceMeshSteps(TileData data, float[,] heights, float ox, float oz)
     {
         int res = heightmapRes;
         float step = tileSize / (res - 1);
         float wet01 = (waterLevel + IceShoreMargin) / maxHeight;
-        float y = waterLevel + IceSurfaceOffset;    // tile fica em Y=0: local == mundo
+        float tile = Mathf.Max(0.5f, iceTextureTile);
 
         var vertIdx = new int[res * res];           // cantos compartilhados entre células
         for (int i = 0; i < vertIdx.Length; i++) vertIdx[i] = -1;
         var verts = new List<Vector3>();
         var uvs = new List<Vector2>();
+        var normals = new List<Vector3>();
+        var tangents = new List<Vector4>();
         var tris = new List<int>();
 
         int VertAt(int x, int z)
@@ -1553,9 +1641,38 @@ public class InfiniteTerrain : MonoBehaviour
             int k = z * res + x;
             if (vertIdx[k] >= 0) return vertIdx[k];
             vertIdx[k] = verts.Count;
-            verts.Add(new Vector3(x * step, y, z * step));
-            // UV em mundo (4 m por repetição): textura contínua entre tiles vizinhos
-            uvs.Add(new Vector2((ox + x * step) / 4f, (oz + z * step) / 4f));
+
+            float wx = ox + x * step, wz = oz + z * step;
+            float y = waterLevel + iceSurfaceOffset + IceRelief(wx, wz);
+
+            // borda do BIOMA: a placa mergulha sob a lâmina antes de acabar
+            BiomeWeights(wx, wz, out _, out _, out _, out float cold, out _);
+            float solid = iceEdgeFade > 0.001f
+                ? Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(frozenColdThreshold, frozenColdThreshold + iceEdgeFade, cold))
+                : 1f;
+            y -= (1f - solid) * (iceSurfaceOffset + 0.30f);
+
+            // borda da MARGEM: onde o terreno já saiu da água, enterra no barranco
+            float gh = heights[z, x] * maxHeight;
+            if (gh > waterLevel - 0.05f) y = Mathf.Min(y, gh - IceShoreBury);
+
+            verts.Add(new Vector3(x * step, y, z * step));   // tile em Y=0: local == mundo
+
+            // UV de MUNDO com warp — contínua entre tiles vizinhos e sem repetir
+            float wu = 0f, wv = 0f;
+            if (iceUvWarp > 0.001f)
+            {
+                wu = (Mathf.PerlinNoise(wx * 0.011f + 13.7f, wz * 0.011f + 91.2f) - 0.5f) * 2f * iceUvWarp;
+                wv = (Mathf.PerlinNoise(wx * 0.011f + 57.4f, wz * 0.011f + 22.9f) - 0.5f) * 2f * iceUvWarp;
+            }
+            uvs.Add(new Vector2((wx + wu) / tile, (wz + wv) / tile));
+
+            var n = IceNormal(wx, wz);
+            normals.Add(n);
+            // UV.u cresce em +X e UV.v em +Z; com w=-1 a bitangente da Unity
+            // (cross(n,t)*w) aponta para +Z, que é o que o normal map espera
+            var t = (Vector3.right - n * n.x).normalized;
+            tangents.Add(new Vector4(t.x, t.y, t.z, -1f));
             return vertIdx[k];
         }
 
@@ -1566,7 +1683,7 @@ public class InfiniteTerrain : MonoBehaviour
                 // célula entra se ALGUM canto está submerso (margem inclusa)...
                 if (heights[z, x] >= wet01 && heights[z, x + 1] >= wet01 &&
                     heights[z + 1, x] >= wet01 && heights[z + 1, x + 1] >= wet01) continue;
-                // ...e o centro dela é frio o bastante (corte seco no limiar)
+                // ...e o centro dela é frio o bastante (MESMO corte do IsWaterFrozenAt)
                 BiomeWeights(ox + (x + 0.5f) * step, oz + (z + 0.5f) * step,
                              out _, out _, out _, out float cold, out _);
                 if (cold < frozenColdThreshold) continue;
@@ -1576,25 +1693,52 @@ public class InfiniteTerrain : MonoBehaviour
                 tris.Add(a); tris.Add(c); tris.Add(b);
                 tris.Add(b); tris.Add(c); tris.Add(d);
             }
-            if ((z & 7) == 7) yield return null;    // fatia: 8 linhas (3 Perlin por célula molhada)
+            if ((z & 3) == 3) yield return null;    // fatia: 4 linhas (o vértice ficou mais caro)
         }
         if (tris.Count == 0) yield break;           // tile sem água congelada
 
-        var normals = new Vector3[verts.Count];
-        for (int i = 0; i < normals.Length; i++) normals[i] = Vector3.up;
         var mesh = new Mesh { name = $"Ice {data.coord.x},{data.coord.y}" };
         mesh.SetVertices(verts);
         mesh.SetUVs(0, uvs);
-        mesh.SetTriangles(tris, 0);
         mesh.SetNormals(normals);
+        mesh.SetTangents(tangents);
+        mesh.SetTriangles(tris, 0);
         data.ice = mesh;
+    }
+
+    /// <summary>
+    /// Relevo da placa (m). Gelo de lago nunca é um plano: a lâmina encurva com o
+    /// nível da água, as placas se comprimem e formam CRISTAS DE PRESSÃO (o ruído
+    /// ridged), e a superfície ainda tem uma ondulação fina de congelamento.
+    /// Tudo em coordenadas de mundo — contínuo entre tiles e sem repetição.
+    /// </summary>
+    float IceRelief(float wx, float wz)
+    {
+        if (iceRelief <= 0.0001f) return 0f;
+        float swell = (Mathf.PerlinNoise(wx * 0.035f + 311.2f, wz * 0.035f + 17.8f) - 0.5f) * 2f;
+        float r = Mathf.PerlinNoise(wx * 0.09f + 77.1f, wz * 0.09f + 143.6f);
+        float ridge = 1f - Mathf.Abs(r * 2f - 1f);
+        ridge = ridge * ridge * ridge;                      // afina as cristas
+        float fine = (Mathf.PerlinNoise(wx * 0.42f + 5.3f, wz * 0.42f + 88.4f) - 0.5f) * 2f;
+        return (swell * 0.55f + ridge * 0.75f + fine * 0.12f) * iceRelief;
+    }
+
+    /// <summary>Normal analítica do relevo (diferenças centrais a 0,5 m). As bordas
+    /// de margem/bioma são ignoradas de propósito: aquela geometria fica enterrada.</summary>
+    Vector3 IceNormal(float wx, float wz)
+    {
+        if (iceRelief <= 0.0001f) return Vector3.up;
+        const float d = 0.5f;
+        float hl = IceRelief(wx - d, wz), hr = IceRelief(wx + d, wz);
+        float hd = IceRelief(wx, wz - d), hu = IceRelief(wx, wz + d);
+        return new Vector3(-(hr - hl) / (2f * d), 1f, -(hu - hd) / (2f * d)).normalized;
     }
 
     Material iceRuntimeMat;
 
-    /// <summary>Material do gelo: o serializado, ou um HDRP/Lit mínimo criado em
-    /// runtime (mesmo padrão da WaterSurface, que também nasce toda em código).
-    /// Bem liso + SSR (que o WaterSetup já liga no pipeline) = reflexo de céu/cena.</summary>
+    /// <summary>Material do gelo: o serializado (Tools &gt; Everwyrm &gt; Gelo gera o
+    /// M_Ice_Lake com texturas + refração), ou um HDRP/Lit mínimo criado em runtime
+    /// como rede de segurança — sem ele um projeto sem os assets renderizaria rosa.</summary>
     Material IceMaterial => iceMaterial != null ? iceMaterial
         : iceRuntimeMat != null ? iceRuntimeMat : (iceRuntimeMat = CreateIceMaterial());
 
@@ -1646,7 +1790,9 @@ public class InfiniteTerrain : MonoBehaviour
         }
 
         // gelo da Tundra: placa visual + MeshCollider — o CharacterController do
-        // dragão (e qualquer física) pousa/anda nela como em chão comum
+        // dragão (e qualquer física) pousa/anda nela como em chão comum.
+        // Sombra desligada: a placa é transparente e a lâmina d'água por baixo é
+        // justamente o que se quer enxergar — uma sombra projetada a apagaria.
         if (data.ice != null)
         {
             var ice = new GameObject("Ice");
@@ -1655,6 +1801,7 @@ public class InfiniteTerrain : MonoBehaviour
             var mr = ice.AddComponent<MeshRenderer>();
             mr.sharedMaterial = IceMaterial;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
             ice.AddComponent<MeshCollider>().sharedMesh = data.ice;
         }
 
@@ -1719,6 +1866,77 @@ public class InfiniteTerrain : MonoBehaviour
         float sx = Mathf.Round(player.position.x / tileSize) * tileSize;
         float sz = Mathf.Round(player.position.z / tileSize) * tileSize;
         lakeSurface.transform.position = new Vector3(sx, waterLevel, sz);
+        UpdateFrozenWaterMask(sx, sz);
+    }
+
+    // ------------------------------------------- ÁGUA PARADA SOB O GELO
+    // A WaterSurface é UMA só para o mundo inteiro e não sabe onde congelou.
+    // Enquanto a placa era opaca isso não importava; com a placa TRANSPARENTE,
+    // ver marolas mexendo sob o gelo sólido estragaria a ilusão na hora.
+    // O HDRP tem a Water Mask exatamente para isso: uma textura que atenua as
+    // bandas de simulação por região. Preenchemos com a MESMA regra de bioma da
+    // CPU — sob o gelo a lâmina fica de espelho, ao lado continua ondulando.
+    const int FrozenMaskRes = 128;          // ~14 m/texel: sobra para amortecer onda
+    Texture2D frozenMask;
+    Color32[] frozenMaskPixels;
+    Vector2 frozenMaskCenter = new(float.NaN, float.NaN);
+    Coroutine frozenMaskJob;
+
+    void UpdateFrozenWaterMask(float cx, float cz)
+    {
+        if (!iceCalmsWaterUnder || !freezeTundraWater) return;
+        if (frozenMaskCenter.x == cx && frozenMaskCenter.y == cz) return;
+        frozenMaskCenter = new Vector2(cx, cz);
+        if (frozenMaskJob != null) StopCoroutine(frozenMaskJob);
+        frozenMaskJob = StartCoroutine(BuildFrozenMaskSteps(cx, cz));
+    }
+
+    IEnumerator BuildFrozenMaskSteps(float cx, float cz)
+    {
+        if (frozenMask == null)
+        {
+            frozenMask = new Texture2D(FrozenMaskRes, FrozenMaskRes, TextureFormat.RGBA32, false, true)
+            {
+                name = "Frozen Water Mask",
+                wrapMode = TextureWrapMode.Clamp,   // fora do quad: amostra a borda (branca = água normal)
+                filterMode = FilterMode.Bilinear
+            };
+            frozenMaskPixels = new Color32[FrozenMaskRes * FrozenMaskRes];
+        }
+
+        float stepM = waterQuadSize / FrozenMaskRes;
+        float x0 = cx - waterQuadSize * 0.5f + stepM * 0.5f;
+        float z0 = cz - waterQuadSize * 0.5f + stepM * 0.5f;
+
+        for (int j = 0; j < FrozenMaskRes; j++)
+        {
+            bool border = j == 0 || j == FrozenMaskRes - 1;
+            for (int i = 0; i < FrozenMaskRes; i++)
+            {
+                byte v = 255;
+                if (!border && i > 0 && i < FrozenMaskRes - 1)
+                {
+                    BiomeWeights(x0 + i * stepM, z0 + j * stepM,
+                                 out _, out _, out _, out float cold, out _);
+                    // 1 = água livre · 0 = congelada. A queda começa um pouco ANTES
+                    // do limiar: a onda morre chegando na placa, não bate nela.
+                    float open = Mathf.InverseLerp(frozenColdThreshold - 0.12f, frozenColdThreshold, cold);
+                    v = (byte)(Mathf.Clamp01(1f - open) * 255f);
+                }
+                frozenMaskPixels[j * FrozenMaskRes + i] = new Color32(v, v, v, 255);
+            }
+            if ((j & 7) == 7) yield return null;    // fatia: 8 linhas por frame
+        }
+
+        frozenMask.SetPixels32(frozenMaskPixels);
+        frozenMask.Apply(false);
+        if (lakeSurface != null)
+        {
+            lakeSurface.waterMask = frozenMask;
+            lakeSurface.waterMaskExtent = new Vector2(waterQuadSize, waterQuadSize);
+            lakeSurface.waterMaskOffset = new Vector2(cx, cz);
+        }
+        frozenMaskJob = null;
     }
 
     // ------------------------------------------------------ NEVE AMBIENTE
@@ -1843,8 +2061,22 @@ public class InfiniteTerrain : MonoBehaviour
                 if (slope < layer.minSlope || slope > layer.maxSlope) continue;
                 float h = SampleHeight01(heights, heightmapRes, nx, nz) * maxHeight;
                 if (h < layer.heightRange.x || h > layer.heightRange.y) continue;
-                if (!layer.inStreamBed &&                     // seixos PODEM ficar submersos
-                    (enableLakes || StreamsActive) && h < waterLevel + 0.12f)
+
+                // 3.5) placa de gelo: a camada onFrozenIce faz o CONTRÁRIO das
+                //      outras — ela EXIGE bacia de lago e frio, e depois é
+                //      reassentada na superfície da placa (passo 5).
+                float iceY = 0f;
+                if (layer.onFrozenIce)
+                {
+                    if (!enableLakes || !freezeTundraWater) continue;
+                    if (h > waterLevel - 0.25f) continue;        // fora da bacia
+                    // frio COM folga além do fade: na borda da placa o mesh
+                    // mergulha sob a lâmina, e a pedra ficaria boiando no ar
+                    if (bCo < frozenColdThreshold + iceEdgeFade) continue;
+                    iceY = waterLevel + iceSurfaceOffset + IceRelief(wx, wz);
+                }
+                else if ((enableLakes || StreamsActive) && !layer.inStreamBed &&
+                         h < waterLevel + 0.12f)                 // seixos PODEM ficar submersos
                     continue;   // nada dentro d'água (0.12: a grama chega até a
                                 // beira — 0.35 abria um anel de terra nua nos lagos)
 
@@ -1869,10 +2101,17 @@ public class InfiniteTerrain : MonoBehaviour
                                                  wz / layer.speciesPatchSize + cOff.y + 71.3f);
                     pickRoll = Mathf.Lerp(pickRoll, sn, layer.speciesClumping);
                 }
+                // a instância de árvore não é grudada no heightmap pela Unity — o
+                // Y sai daqui. Normalmente é o chão; na placa é a cota do gelo,
+                // e a pedra ainda AFUNDA um pouco (raio × escala) para não ficar
+                // apoiada numa lâmina como um adesivo.
+                float y = layer.onFrozenIce
+                    ? iceY - Mathf.Lerp(0.15f, 0.55f, Mathf.InverseLerp(0.3f, 1.6f, scale))
+                    : td.GetInterpolatedHeight(nx, nz);
+
                 instances.Add(new TreeInstance
                 {
-                    // altura interpolada do PRÓPRIO heightmap: cravado no chão
-                    position = new Vector3(nx, td.GetInterpolatedHeight(nx, nz) / maxHeight, nz),
+                    position = new Vector3(nx, y / maxHeight, nz),
                     prototypeIndex = layer.protoBase + layer.PickPrototype(pickRoll),
                     heightScale = scale,
                     widthScale = scale * aspect,

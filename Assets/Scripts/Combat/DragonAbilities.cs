@@ -88,10 +88,11 @@ public class DragonAbilities : MonoBehaviour
     {
         if (DragonStatsMenu.IsOpen || dragon.IsDead) return;
 
-        if (Input.GetKeyDown(KeyCode.Alpha1)) TryUse(0);
-        else if (Input.GetKeyDown(KeyCode.Alpha2)) TryUse(1);
-        else if (Input.GetKeyDown(KeyCode.Alpha3)) TryUse(2);
-        else if (Input.GetKeyDown(KeyCode.Alpha4)) TryUse(3);
+        // bindings centralizados no DragonInput (preparo p/ gamepad futuro)
+        if (DragonInput.AbilityDown(0)) TryUse(0);
+        else if (DragonInput.AbilityDown(1)) TryUse(1);
+        else if (DragonInput.AbilityDown(2)) TryUse(2);
+        else if (DragonInput.AbilityDown(3)) TryUse(3);
     }
 
     // ============================================================== EXECUÇÃO

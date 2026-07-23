@@ -61,7 +61,8 @@ public static class WildlifeSetup
     public const string ProbeMaterial =
         AssetRoot + "/Wolfes/WolfMale/Materials/WolfMale_color_1.mat";
 
-    [MenuItem("Tools/Everwyrm/Vida Selvagem — Setup Completo")]
+    // (menu removido na limpeza de jul/2026 — fauna montada e data-driven;
+    //  para rodar de novo, re-adicione o [MenuItem] aqui)
     public static void SetupMenu() => SetupAll(false);
 
     public static void SetupAll(bool quiet)
@@ -95,7 +96,7 @@ public static class WildlifeSetup
     ///   _MainTex → _BaseColorMap · _BumpMap → _NormalMap · _Color → _BaseColor
     ///   cutout (pelo em cartões) → Alpha Clipping + dupla face.
     /// </summary>
-    [MenuItem("Tools/Everwyrm/Vida Selvagem — Converter Materiais HDRP")]
+    // (menu removido na limpeza de jul/2026 — materiais já convertidos)
     public static void ConvertMaterials()
     {
         var hdrpLit = Shader.Find("HDRP/Lit");

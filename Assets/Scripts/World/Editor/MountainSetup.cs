@@ -81,7 +81,8 @@ public static class MountainSetup
         AssetDatabase.LoadAssetAtPath<Shader>(NM + "/Foliage Shaders/NM_Bark.shader") != null;
 
     // ------------------------------------------------------------- CONVERSÃO
-    [MenuItem("Tools/Everwyrm/Mountain — (Re)converter pack")]
+    // (menu removido na limpeza de jul/2026 — pack já convertido e calibrado;
+    //  para rodar de novo, re-adicione o [MenuItem] aqui)
     public static void ConvertMenu() => Convert();
 
     public static void Convert()

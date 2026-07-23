@@ -249,10 +249,20 @@ public class AnimalAgent : MonoBehaviour
 
     /// <summary>
     /// Quão perceptível o dragão é para a fauna: fração do raio nominal.
-    /// No chão ~1/3; voando ainda menos (uma sombra lá no alto não é ameaça).
+    /// No chão ~1/3; voando ainda menos (uma sombra lá no alto não é ameaça);
+    /// em STEALTH (Shift, passo de caçada) quase nada — dá pra tocaiar de perto.
+    /// Filhote é pequeno e discreto; um colossal é impossível de não notar.
     /// </summary>
-    static float DragonPerceptionMul =>
-        WildlifeSpawner.DragonFlying ? 0.22f : 0.35f;
+    static float DragonPerceptionMul
+    {
+        get
+        {
+            float mul = WildlifeSpawner.DragonFlying ? 0.22f
+                      : WildlifeSpawner.DragonStealth ? 0.12f
+                      : 0.35f;
+            return mul * Mathf.Lerp(0.85f, 1f, WildlifeSpawner.DragonGrowth01);
+        }
+    }
 
     // ------------------------------------------------------------- AMEAÇAS
     /// <summary>Dragão e predadores. true = a ameaça tomou a decisão do frame.</summary>
