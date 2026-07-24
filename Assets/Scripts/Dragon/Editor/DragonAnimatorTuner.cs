@@ -29,7 +29,7 @@ public static class DragonAnimatorTuner
 {
     const string ControllerPath = "Assets/Dragao/Dragon Player.controller";
     const string PrefabPath = "Assets/Prefabs/Unka Realistic.prefab";
-    const string ProfilePath = "Assets/Scriptables/Resources/FlightProfile.asset";
+    const string ProfilePath = "Assets/Scriptables/Resources/Balance/FlightProfile.asset";
     const string StealthClipName = "Unka Idle Attack Mode";
     const string FallDeathClipName = "UPFly Fall Death";
     const string AnimDir = "Assets/Malbers Animations/Dragons/4 - Unka the Dragon/Animations";

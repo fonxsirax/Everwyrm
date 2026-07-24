@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6d887101ba3829cf975d46643ee60f99, type: 3}
+  m_Name: DragonGrowth
+  m_EditorClassIdentifier: 
+  hatchlingScale: 0.45
+  colossalScale: 1.7
+  fullGrowthMinutes: 25
+  startGrowth: 0
+  adultAt: 0.4
+  colossalAt: 0.85
+  mealGrowthBonus: 0.0012
+  startCondition: 0.5
+  gainKgPerMinute: 1
+  lossKgPerMinute: 1
+  starvingLossKgPerMinute: 3
+  mealWeightNudgeKg: 2
+  adultHealthyWeightKg: 950
+  liftWhenLean: 1.1
+  liftWhenFat: 0.85
+  liftSizeInfluence: 0.15
+  oldAgeMinutes: 40
+  lifespanMinutes: 55
+  elderPenalty: 0.25
+  vigorGrowthPerPoint: 0.02
+  vigorLifespanPerPoint: 0.03
+  starveBelowHunger: 0.25

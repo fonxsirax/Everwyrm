@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2c9175a9e2b330b92c94604d9e9bb93, type: 3}
+  m_Name: DragonFeedback
+  m_EditorClassIdentifier: 
+  discreteHitMin: 1
+  dotPulseEvery: 2.5
+  shakePerHit: 0.35
+  refDamage: 15
+  vignetteColor: {r: 0.3, g: 0.015, b: 0.01, a: 1}
+  pulseMax: 0.28
+  pulseFade: 0.55
+  lowHealthMax: 0.17
+  desatMax: 16
+  hurtCooldown: 1.1
+  hurtMinDamage: 2
+  dissolveDuration: 2
+  dissolveProps:
+  - _DissolveAmount
+  - _Dissolve
+  - _DissolveValue

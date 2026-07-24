@@ -25,55 +25,32 @@ public class DragonGrowth : MonoBehaviour
     /// serialização (enum grava como índice) — só acrescente no fim.</summary>
     public enum LifeStage { Hatchling, Adult, Colossal, Elder }
 
-    [Header("Tamanho")]
-    [SerializeField] float hatchlingScale = 0.45f;
-    [SerializeField] float colossalScale = 1.7f;
-    [SerializeField] float fullGrowthMinutes = 25f;  // filhote→colossal sempre alimentado
-    [SerializeField, Range(0f, 1f)] float startGrowth = 0f;
-    [SerializeField] float adultAt = 0.4f;
-    [SerializeField] float colossalAt = 0.85f;
-    [SerializeField] float mealGrowthBonus = 0.0012f; // por ponto de nutrição
+    [Header("Balanceamento")]
+    [Tooltip("O balanceamento de crescimento, peso e expectativa de vida vive no asset " +
+             "Assets/Scriptables/Resources/Balance/DragonGrowth.asset. Vazio = esse " +
+             "padrão; arraste outro DragonGrowthProfile para variar por espécie.")]
+    [SerializeField] DragonGrowthProfile growthProfile;
 
-    [Header("Condição Corporal — taxas em KG (sutil)")]
-    [SerializeField, Range(0f, 1f)] float startCondition = 0.5f;
-    [SerializeField] float gainKgPerMinute = 1f;          // satisfeito (fome > 65%), sem comer
-    [SerializeField] float lossKgPerMinute = 1f;          // fome abaixo de 50%
-    [SerializeField] float starvingLossKgPerMinute = 3f;  // fome abaixo de 20% (~1 kg/20 s)
-    [SerializeField] float mealWeightNudgeKg = 2f;        // kg ganhos na hora por refeição
+    /// <summary>O perfil resolvido, sob demanda: o campo acima quando preenchido,
+    /// senão o asset padrão. PREGUIÇOSO de propósito — a janela de balanceamento
+    /// (Tools > Everwyrm > Balanço do Dragão) lê estes números direto no PREFAB,
+    /// fora do Play, onde nenhum Awake rodou.</summary>
+    DragonGrowthProfile cfgCache;
+    DragonGrowthProfile cfg => cfgCache != null ? cfgCache : (cfgCache = Balance.Resolve(growthProfile));
 
-    [Header("Peso")]
-    [SerializeField] float adultHealthyWeightKg = 950f;
+    /// <summary>Modo balanceamento (opcional): quando ligado, o CORPO consumido é um de
+    /// referência fixo, e a Velhice/IV de Vigor podem ser neutralizados — sem tocar na
+    /// simulação de verdade (idade/crescimento/condição seguem correndo nos campos
+    /// privados; só o que os OUTROS sistemas leem é substituído). Ausente = normal.</summary>
+    DragonBalanceOverride Ov => Balance.TryDefault<DragonBalanceOverride>();
 
-    [Header("Voo — sustentação por PESO (batida de asa)")]
-    [Tooltip("Subida por batida com o corpo ESQUELÉTICO (condição 0). O peso é o " +
-             "que manda no quanto o Space sobe — não a fase da vida.\n" +
-             "NERF jul/2026: faixa Lean↔Fat estreitada (era 1.3↔0.5, ~2.6×) — o " +
-             "impulso de voo não deve variar muito de dragão pra dragão.")]
-    [SerializeField] float liftWhenLean = 1.1f;
-    [Tooltip("Subida por batida com o corpo GORDO (condição 1): carregar banha custa altitude.")]
-    [SerializeField] float liftWhenFat = 0.85f;
-    [Tooltip("Quanto o TAMANHO ainda influi (0 = filhote e colossal sobem os mesmos metros). " +
-             "NERF jul/2026: reduzido (era 0.25) — mesma lógica de variar pouco.")]
-    [SerializeField, Range(0f, 1f)] float liftSizeInfluence = 0.15f;
-
-    [Header("Velhice e morte natural (linhagem)")]
-    [Tooltip("Idade (min) em que o dragão entra na Velhice — declínio gradual.")]
-    [SerializeField] float oldAgeMinutes = 40f;
-    [Tooltip("Idade (min) da morte natural. O dragão NÃO some: fica com 0 de vida e a " +
-             "Base possui o próximo (sem recarregar a cena).")]
-    [SerializeField] float lifespanMinutes = 55f;
-    [Tooltip("Perda de agilidade/velocidade no auge da Velhice (0.25 = -25%).")]
-    [SerializeField, Range(0f, 0.9f)] float elderPenalty = 0.25f;
-
-    [Header("Vigor (IV) — sobrevivência")]
-    [Tooltip("Cada ponto de Vigor acelera o crescimento.")]
-    [SerializeField] float vigorGrowthPerPoint = 0.02f;
-    [Tooltip("Cada ponto de Vigor alonga a expectativa de vida.")]
-    [SerializeField] float vigorLifespanPerPoint = 0.03f;
-
-    [Header("Definhamento (starving)")]
-    [Tooltip("Abaixo desta fome (0..1) o corpo começa a definhar visualmente.")]
-    [SerializeField, Range(0f, 1f)] float starveBelowHunger = 0.25f;
+    /// <summary>Crescimento EFETIVO (o que os multiplicadores/escala consomem): o de
+    /// referência quando o corpo está congelado, senão o real.</summary>
+    float EffGrowth { get { var ov = Ov; return ov != null && ov.BodyFrozen ? Mathf.Clamp01(ov.growth01) : growth01; } }
+    /// <summary>Condição corporal EFETIVA (idem).</summary>
+    float EffCondition { get { var ov = Ov; return ov != null && ov.BodyFrozen ? Mathf.Clamp01(ov.condition01) : condition; } }
+    /// <summary>Vigor (IV) EFETIVO: 0 quando o modo neutraliza IVs.</summary>
+    int EffIvVigor { get { var ov = Ov; return ov != null && ov.IvsNeutralized ? 0 : ivVigor; } }
 
     DragonVitals vitals;
     SkinnedMeshRenderer[] renderers;
@@ -88,76 +65,87 @@ public class DragonGrowth : MonoBehaviour
     LifeStage stage;
 
     public LifeStage Stage => stage;
-    public float Growth01 => growth01;
-    public float Condition01 => condition;
+    // Growth/Condition/Scale/Weight EFETIVOS: no modo balanceamento reportam o dragão de
+    // referência (corpo congelado). A simulação real continua nos campos privados.
+    public float Growth01 => EffGrowth;
+    public float Condition01 => EffCondition;
     public float AgeSeconds { get; private set; }
-    public float Scale => ScaleAt(growth01);
-    public float WeightKg => WeightAt(growth01, condition);
+    public float Scale => ScaleAt(EffGrowth);
+    public float WeightKg => WeightAt(EffGrowth, EffCondition);
 
     // ---- Limiares de fase, expostos para a ficha e a janela de balanceamento
-    public float AdultAt => adultAt;
-    public float ColossalAt => colossalAt;
+    public float AdultAt => cfg.adultAt;
+    public float ColossalAt => cfg.colossalAt;
 
     // ---- Consultas PURAS (só campos serializados): a janela de balanceamento
     //      chama isto direto no componente do PREFAB, sem entrar em Play.
-    public float ScaleAt(float growth) => Mathf.Lerp(hatchlingScale, colossalScale, Mathf.Clamp01(growth));
+    public float ScaleAt(float growth) => Mathf.Lerp(cfg.hatchlingScale, cfg.colossalScale, Mathf.Clamp01(growth));
     public float WeightAt(float growth, float cond) =>
-        adultHealthyWeightKg * Mathf.Pow(ScaleAt(growth), 3f) * (0.65f + 0.7f * Mathf.Clamp01(cond));
-    public float LifespanMulFor(int vigor) => 1f + vigor * vigorLifespanPerPoint;
-    public float OldAgeSecondsFor(int vigor) => oldAgeMinutes * 60f * LifespanMulFor(vigor);
-    public float LifespanSecondsFor(int vigor) => lifespanMinutes * 60f * LifespanMulFor(vigor);
+        cfg.adultHealthyWeightKg * Mathf.Pow(ScaleAt(growth), 3f) * (0.65f + 0.7f * Mathf.Clamp01(cond));
+    public float LifespanMulFor(int vigor) => 1f + vigor * cfg.vigorLifespanPerPoint;
+    public float OldAgeSecondsFor(int vigor) => cfg.oldAgeMinutes * 60f * LifespanMulFor(vigor);
+    public float LifespanSecondsFor(int vigor) => cfg.lifespanMinutes * 60f * LifespanMulFor(vigor);
 
     // ---- Velhice / expectativa de vida (Vigor alonga; a natureza fica com o atributo)
-    public float GrowthSpeedMul => 1f + ivVigor * vigorGrowthPerPoint;
-    public float LifespanMul => LifespanMulFor(ivVigor);
-    public float OldAgeSeconds => OldAgeSecondsFor(ivVigor);
-    public float LifespanSeconds => LifespanSecondsFor(ivVigor);
-    /// <summary>0 fora da velhice → 1 no fim da vida (ramp linear oldAge→lifespan).</summary>
-    public float ElderProgress => Mathf.Clamp01(Mathf.InverseLerp(OldAgeSeconds, LifespanSeconds, AgeSeconds));
+    public float GrowthSpeedMul => 1f + EffIvVigor * cfg.vigorGrowthPerPoint;
+    public float LifespanMul => LifespanMulFor(EffIvVigor);
+    public float OldAgeSeconds => OldAgeSecondsFor(EffIvVigor);
+    public float LifespanSeconds => LifespanSecondsFor(EffIvVigor);
+    /// <summary>0 fora da velhice → 1 no fim da vida (ramp linear oldAge→lifespan).
+    /// No modo balanceamento com a Velhice desligada, fica sempre 0 — nada se corrói.</summary>
+    public float ElderProgress
+    {
+        get
+        {
+            var ov = Ov;
+            if (ov != null && ov.ElderDisabled) return 0f;
+            return Mathf.Clamp01(Mathf.InverseLerp(OldAgeSeconds, LifespanSeconds, AgeSeconds));
+        }
+    }
     /// <summary>Vitalidade da velhice: 1 no auge, cai até (1-elderPenalty) no fim.</summary>
     public float ElderMul => ElderMulFor(ElderProgress);
     /// <summary>Versão PURA (janela de balanceamento).</summary>
     public float ElderMulFor(float elderProgress01) =>
-        Mathf.Lerp(1f, 1f - elderPenalty, Mathf.Clamp01(elderProgress01));
+        Mathf.Lerp(1f, 1f - cfg.elderPenalty, Mathf.Clamp01(elderProgress01));
     public bool IsElder => stage == LifeStage.Elder;
 
     // ---- Multiplicadores consumidos pelo DragonController
     /// <summary>Escala geral de velocidades (dragão maior anda/voa mais rápido em absoluto).</summary>
     public float SpeedScale => Scale;
     /// <summary>Segundos andando até atingir corrida plena. Gordo/grande demora mais.</summary>
-    public float AccelTime => Mathf.Lerp(2.0f, 5.5f, condition) * Mathf.Lerp(0.85f, 1.25f, growth01);
+    public float AccelTime => Mathf.Lerp(2.0f, 5.5f, EffCondition) * Mathf.Lerp(0.85f, 1.25f, EffGrowth);
     /// <summary>Velocidade máxima de corrida. Gordo corre menos; ancião perde fôlego.</summary>
-    public float RunSpeedMul => RunSpeedMulAt(condition) * ElderMul;
+    public float RunSpeedMul => RunSpeedMulAt(EffCondition) * ElderMul;
     /// <summary>Versão PURA, só pela condição corporal (janela de balanceamento).</summary>
     public float RunSpeedMulAt(float cond) => Mathf.Lerp(1.08f, 0.82f, Mathf.Clamp01(cond));
     /// <summary>Subida no voo. Gordo sobe muito pior.</summary>
-    public float ClimbMul => Mathf.Lerp(1.15f, 0.6f, condition);
+    public float ClimbMul => Mathf.Lerp(1.15f, 0.6f, EffCondition);
     /// <summary>SUSTENTAÇÃO DA BATIDA DE ASA — o quanto o Space levanta o dragão.
     /// Quem manda é o PESO ATUAL (condição corporal), não a fase da vida: um
     /// colossal magro sobe quase os mesmos metros que um filhote magro, e é
     /// engordar que rouba altitude. `liftSizeInfluence` regula o resíduo de
     /// tamanho que ainda pesa. A Velhice tira vigor da batida como tira do resto.</summary>
-    public float FlapLiftMul => FlapLiftMulAt(growth01, condition) * ElderMul;
+    public float FlapLiftMul => FlapLiftMulAt(EffGrowth, EffCondition) * ElderMul;
     /// <summary>Versão PURA (sem velhice) para a janela de balanceamento.</summary>
     public float FlapLiftMulAt(float growth, float cond) =>
-        Mathf.Lerp(liftWhenLean, liftWhenFat, Mathf.Clamp01(cond)) *
-        Mathf.Lerp(1f, Mathf.Lerp(1.12f, 0.82f, Mathf.Clamp01(growth)), liftSizeInfluence);
+        Mathf.Lerp(cfg.liftWhenLean, cfg.liftWhenFat, Mathf.Clamp01(cond)) *
+        Mathf.Lerp(1f, Mathf.Lerp(1.12f, 0.82f, Mathf.Clamp01(growth)), cfg.liftSizeInfluence);
     /// <summary>Afundamento no planeio. Gordo afunda mais; grande plana melhor (GDD).</summary>
-    public float SinkMul => Mathf.Lerp(0.85f, 1.6f, condition) * Mathf.Lerp(1.2f, 0.75f, growth01);
+    public float SinkMul => Mathf.Lerp(0.85f, 1.6f, EffCondition) * Mathf.Lerp(1.2f, 0.75f, EffGrowth);
     /// <summary>Custo de energia. Gordo e grande gastam mais.</summary>
-    public float EnergyCostMul => Mathf.Lerp(0.9f, 1.4f, condition) * Mathf.Lerp(0.85f, 1.25f, growth01);
+    public float EnergyCostMul => Mathf.Lerp(0.9f, 1.4f, EffCondition) * Mathf.Lerp(0.85f, 1.25f, EffGrowth);
 
     // ---- Agilidade por idade (rework hack and slash): o peso modula a
     //      EXPLOSÃO e o giro, nunca cria espera. Filhote = ágil e furtivo;
     //      colossal = ariete que conserva velocidade.
     /// <summary>Velocidade de giro (chão e voo). Filhote vira no lugar; ancião enrijece.</summary>
-    public float TurnAgilityMul => Mathf.Lerp(1.25f, 0.85f, growth01) * ElderMul;
+    public float TurnAgilityMul => Mathf.Lerp(1.25f, 0.85f, EffGrowth) * ElderMul;
     /// <summary>Aceleração terrestre: filhote arranca; gordo/ancião empurram mais devagar.</summary>
-    public float AccelAgilityMul => Mathf.Lerp(1.3f, 0.9f, growth01) * Mathf.Lerp(1.15f, 0.75f, condition) * ElderMul;
+    public float AccelAgilityMul => Mathf.Lerp(1.3f, 0.9f, EffGrowth) * Mathf.Lerp(1.15f, 0.75f, EffCondition) * ElderMul;
     /// <summary>Cooldown do dash (filhote ~0.45 s · adulto 0.6 · colossal 0.75).</summary>
-    public float DashCooldownMul => Mathf.Lerp(0.75f, 1.25f, growth01);
+    public float DashCooldownMul => Mathf.Lerp(0.75f, 1.25f, EffGrowth);
     /// <summary>Força do Wing Boost — a batida do colossal é um aríete (o ancião perde vigor).</summary>
-    public float BoostMul => Mathf.Lerp(0.7f, 1.15f, growth01) * ElderMul;
+    public float BoostMul => Mathf.Lerp(0.7f, 1.15f, EffGrowth) * ElderMul;
 
     // ---- Observer
     public event Action<DragonGrowth> OnGrowthChanged;   // tamanho/condição/peso
@@ -170,8 +158,8 @@ public class DragonGrowth : MonoBehaviour
     {
         vitals = GetComponent<DragonVitals>();
         RebuildRig();
-        growth01 = startGrowth;
-        condition = startCondition;
+        growth01 = cfg.startGrowth;
+        condition = cfg.startCondition;
         stage = StageFor(growth01);
         ApplyScale();
         ApplyBlendShapes();
@@ -185,7 +173,10 @@ public class DragonGrowth : MonoBehaviour
 
         // ---- morte natural: cruzou a expectativa de vida (Vigor a alonga). O dragão
         //      não some — a possessão o deixa com 0 de vida e a Base assume o próximo.
-        if (!naturalDeathFired && AgeSeconds >= LifespanSeconds)
+        //      No modo balanceamento com a Velhice desligada, ninguém morre de velho.
+        var ovDeath = Ov;
+        bool elderOff = ovDeath != null && ovDeath.ElderDisabled;
+        if (!naturalDeathFired && !elderOff && AgeSeconds >= LifespanSeconds)
         {
             naturalDeathFired = true;
             OnNaturalDeath?.Invoke();
@@ -198,15 +189,15 @@ public class DragonGrowth : MonoBehaviour
         // corpo saudável cresce melhor que esquelético ou obeso
         float healthFactor = 1f - Mathf.Abs(condition - 0.5f) * 0.8f;
         growth01 = Mathf.Min(1f, growth01 +
-            fedFactor * healthFactor * GrowthSpeedMul * dt / (fullGrowthMinutes * 60f));
+            fedFactor * healthFactor * GrowthSpeedMul * dt / (cfg.fullGrowthMinutes * 60f));
 
         // ---- condição corporal em KG por minuto (bem sutil):
         //      satisfeito sem comer = engorda devagar · fome < 50% = emagrece
         //      fome < 20% = emagrece mais rápido (pior caso ~1 kg a cada 20 s)
-        float kgPerMin = vitals.Hunger01 > 0.65f ? gainKgPerMinute
+        float kgPerMin = vitals.Hunger01 > 0.65f ? cfg.gainKgPerMinute
                        : vitals.Hunger01 > 0.5f ? 0f
-                       : vitals.Hunger01 > 0.2f ? -lossKgPerMinute
-                       : -starvingLossKgPerMinute;
+                       : vitals.Hunger01 > 0.2f ? -cfg.lossKgPerMinute
+                       : -cfg.starvingLossKgPerMinute;
         condition = Mathf.Clamp01(condition + kgPerMin / KgPerFullCondition / 60f * dt);
 
         ApplyScale();
@@ -241,21 +232,21 @@ public class DragonGrowth : MonoBehaviour
 
     /// <summary>0 = saciado · 1 = definhando de fome. Ramp abaixo de starveBelowHunger.</summary>
     float Starve01 => vitals == null ? 0f
-        : Mathf.Clamp01((starveBelowHunger - vitals.Hunger01) / Mathf.Max(0.01f, starveBelowHunger));
+        : Mathf.Clamp01((cfg.starveBelowHunger - vitals.Hunger01) / Mathf.Max(0.01f, cfg.starveBelowHunger));
 
     /// <summary>Quantos kg equivalem à faixa toda de condição (magro→gordo) no tamanho atual.</summary>
-    float KgPerFullCondition => Mathf.Max(1f, adultHealthyWeightKg * Mathf.Pow(Scale, 3f) * 0.7f);
+    float KgPerFullCondition => Mathf.Max(1f, cfg.adultHealthyWeightKg * Mathf.Pow(Scale, 3f) * 0.7f);
 
     /// <summary>Chamado ao comer: nutrição acelera crescimento e engorda um pouquinho.</summary>
     public void NotifyAte(float nutrition)
     {
-        growth01 = Mathf.Min(1f, growth01 + nutrition * mealGrowthBonus);
-        condition = Mathf.Clamp01(condition + mealWeightNudgeKg / KgPerFullCondition);
+        growth01 = Mathf.Min(1f, growth01 + nutrition * cfg.mealGrowthBonus);
+        condition = Mathf.Clamp01(condition + cfg.mealWeightNudgeKg / KgPerFullCondition);
     }
 
     LifeStage StageFor(float g) =>
-        g >= colossalAt ? LifeStage.Colossal :
-        g >= adultAt ? LifeStage.Adult : LifeStage.Hatchling;
+        g >= cfg.colossalAt ? LifeStage.Colossal :
+        g >= cfg.adultAt ? LifeStage.Adult : LifeStage.Hatchling;
 
     // ============================================================ POSSESSÃO
     /// <summary>Resolve o catálogo de blend shapes contra os renderers atuais. Refeito

@@ -30,6 +30,9 @@ public static class DragonSetup
         Debug.Log("<b>Dragão pronto!</b> WASD anda · Space decola · LMB/Q/E ataca · F fogo · T ruge · R dorme · Alt esquiva.");
     }
 
+    [MenuItem("Tools/Everwyrm/Regenerar Animator do Dragão")]
+    public static void RegenerateAnimatorMenu() => RegenerateAnimatorAndPrefab();
+
     /// <summary>Regenera animator + prefab sem tocar na cena aberta (auto-setup).</summary>
     public static void RegenerateAnimatorAndPrefab()
     {
@@ -44,9 +47,14 @@ public static class DragonSetup
         cache.Clear();
         if (!AssetDatabase.IsValidFolder(OutDir))
             AssetDatabase.CreateFolder("Assets", "Dragao");
-        AssetDatabase.DeleteAsset(ControllerPath);
 
-        var c = AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
+        // Reusa o controller EXISTENTE (preserva o GUID) e só zera o conteúdo — as
+        // referências ao controller (Animator do dragão na cena, no prefab) continuam
+        // válidas. Antes: DeleteAsset + Create gerava um GUID NOVO a cada regeneração
+        // e deixava o Animator "Missing". Só cria do zero se o asset não existir.
+        var c = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
+        if (c == null) c = AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
+        else ClearController(c);
         foreach (var p in new[] { "Speed", "Turn", "Vertical", "IdleVar", "DodgeDir", "HitVar", "DeathVar" })
             c.AddParameter(p, AnimatorControllerParameterType.Float);
         foreach (var p in new[] { "Flying", "Glide", "Rest", "Falling", "Swimming" })
@@ -152,8 +160,18 @@ public static class DragonSetup
         // ---- Esquivas (chão e ar)
         var dodgeL = State(sm, "Dodge L", Clip("Unka Dodge.FBX", "UGround Dodge Left"));
         var dodgeR = State(sm, "Dodge R", Clip("Unka Dodge.FBX", "UGround Dodge Right"));
+        dodgeL.speed = dodgeR.speed = 2f;   // esquiva de chão SNAPPY: dobra a velocidade do clipe
         var flyDodgeL = State(sm, "Fly Dodge L", Clip("Unka Fly InPlace.FBX", "UPFly Dodge L"));
         var flyDodgeR = State(sm, "Fly Dodge R", Clip("Unka Fly InPlace.FBX", "UPFly Dodge R"));
+        // Esquiva SIMPLES de ar (Shift+A/D sem Space): a anim é só a POSE do deslize
+        // lateral — o movimento em si vem do código (DragonController.AirDodge). Antes
+        // reusava os clipes de CHÃO (Dodge L/R), que não encaixam no voo.
+        // Usa o MESMO clipe da esquiva COMPLETA (UPFly Dodge L/R) — o clipe de
+        // esquiva "de verdade". A mecânica dos dois modos continua distinta no
+        // código (AirDodge = deslize lateral; FlyDodge = vira o rumo); só a pose
+        // visual é compartilhada. (Banked flap, Strafe e Closed Wings descartados.)
+        var airDodgeL = State(sm, "Air Dodge L", Clip("Unka Fly InPlace.FBX", "UPFly Dodge L"));
+        var airDodgeR = State(sm, "Air Dodge R", Clip("Unka Fly InPlace.FBX", "UPFly Dodge R"));
 
         // ---- Reação de dano (blend das 4 direções)
         var hit = sm.AddState("Get Hit");
@@ -231,8 +249,10 @@ public static class DragonSetup
             (AnimatorConditionMode.If, "Dodge"), (AnimatorConditionMode.Less, "DodgeDir"));
         Cond(loco.AddTransition(dodgeR), 0.08f,
             (AnimatorConditionMode.If, "Dodge"), (AnimatorConditionMode.Greater, "DodgeDir"));
-        ExitTime(dodgeL.AddTransition(loco), 0.8f, 0.15f);
-        ExitTime(dodgeR.AddTransition(loco), 0.8f, 0.15f);
+        // SEM exit time na esquiva de CHÃO: ela é cancelável a qualquer momento e a
+        // volta pra Locomotion é feita pelo código (DragonController.GroundUpdate,
+        // via wasGroundDashing) — assim um comando novo interrompe na hora, sem
+        // esperar a transição do Animator. (A esquiva de VOO mantém o exit time.)
         foreach (var src in new[] { fly, glide })
         {
             Cond(src.AddTransition(flyDodgeL), 0.1f,
@@ -242,6 +262,10 @@ public static class DragonSetup
         }
         ExitTime(flyDodgeL.AddTransition(fly), 0.85f, 0.2f);
         ExitTime(flyDodgeR.AddTransition(fly), 0.85f, 0.2f);
+        // esquiva simples de ar: volta cedo pro voo (o deslize é curto, ~0.3 s) —
+        // o CrossFade imperativo do AirDodge entra, a pose segura e retorna
+        ExitTime(airDodgeL.AddTransition(fly), 0.5f, 0.2f);
+        ExitTime(airDodgeR.AddTransition(fly), 0.5f, 0.2f);
 
         // morte (de qualquer estado)
         var dieT = sm.AddAnyStateTransition(death);
@@ -403,6 +427,26 @@ public static class DragonSetup
         var s = sm.AddState(name);
         s.motion = motion;
         return s;
+    }
+
+    /// <summary>Zera o controller SEM deletar o asset — preserva o GUID, então o
+    /// Animator do dragão (cena/prefab) não vira "Missing" a cada regeneração.
+    /// Remove parâmetros, estados/transições da layer 0 e as BlendTrees anexadas
+    /// como sub-assets (senão sobram órfãs inchando o .controller a cada rebuild).</summary>
+    static void ClearController(AnimatorController c)
+    {
+        for (int i = c.parameters.Length - 1; i >= 0; i--)
+            c.RemoveParameter(i);
+
+        var sm = c.layers[0].stateMachine;
+        sm.entryTransitions = new AnimatorTransition[0];
+        sm.anyStateTransitions = new AnimatorStateTransition[0];
+        foreach (var s in sm.states) sm.RemoveState(s.state);
+        foreach (var m in sm.stateMachines) sm.RemoveStateMachine(m.stateMachine);
+
+        // BlendTrees entram via AddObjectToAsset; RemoveState não as apaga do asset
+        foreach (var o in AssetDatabase.LoadAllAssetsAtPath(ControllerPath))
+            if (o is BlendTree bt) Object.DestroyImmediate(bt, true);
     }
 
     static BlendTree Tree2D(AnimatorController c, string name, string px, string py,

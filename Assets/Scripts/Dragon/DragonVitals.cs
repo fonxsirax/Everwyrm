@@ -14,27 +14,18 @@ using UnityEngine;
 [RequireComponent(typeof(DragonController))]
 public class DragonVitals : MonoBehaviour
 {
-    [Header("Fome")]
-    [SerializeField] float maxHunger = 100f;
-    [SerializeField] float hungerDecay = 0.09f;      // ~18 min até zerar
-    [SerializeField] float criticalHunger = 25f;
-    [SerializeField] float starvationDamage = 2f;    // vida/s com fome zerada
+    [Header("Balanceamento")]
+    [Tooltip("O balanceamento de fome/energia/vida vive no asset " +
+             "Assets/Scriptables/Resources/Balance/DragonVitals.asset. Vazio = esse " +
+             "padrão; arraste outro DragonVitalsProfile para variar por espécie.")]
+    [SerializeField] DragonVitalsProfile vitalsProfile;
 
-    [Header("Energia")]
-    [SerializeField] float maxEnergy = 100f;
-    [SerializeField] float regenIdle = 3f;           // parado no chão
-    [SerializeField] float regenResting = 10f;       // descansando (R)
-    [SerializeField] float criticalEnergyCap = 60f;  // teto de energia com fome crítica
-    [SerializeField] float regenMultiplier = 5f;     // recuperação global de energia
-    [SerializeField] float drainMultiplier = 0.1f;   // consumo global de energia
-
-    [Header("Vida")]
-    [SerializeField] float maxHealth = 100f;
-    [SerializeField] float regenSlow = 0.35f;        // fome > 50
-    [SerializeField] float regenRestingWellFed = 2.5f;
-
-    [Header("HUD")]
-    [SerializeField] bool autoCreateHud = true;
+    /// <summary>O perfil resolvido, sob demanda: o campo acima quando preenchido,
+    /// senão o asset padrão. PREGUIÇOSO de propósito — a janela de balanceamento
+    /// (Tools > Everwyrm > Balanço do Dragão) lê estes números direto no PREFAB,
+    /// fora do Play, onde nenhum Awake rodou.</summary>
+    DragonVitalsProfile vitCache;
+    DragonVitalsProfile vit => vitCache != null ? vitCache : (vitCache = Balance.Resolve(vitalsProfile));
 
     DragonController dragon;
     DragonAttributes attrs;                          // opcional
@@ -48,23 +39,23 @@ public class DragonVitals : MonoBehaviour
 
     // bases cruas — a janela de balanceamento (Tools > Everwyrm > Balanço do
     // Dragão) simula os máximos por fase da vida a partir daqui
-    public float BaseMaxHealth => maxHealth;
-    public float BaseMaxEnergy => maxEnergy;
-    public float BaseHungerDecay => hungerDecay;
+    public float BaseMaxHealth => vit.maxHealth;
+    public float BaseMaxEnergy => vit.maxEnergy;
+    public float BaseHungerDecay => vit.hungerDecay;
 
     // máximos efetivos: Vigor aumenta a vida, Fôlego a energia; os traços cobram
     // sua parte (Ossos Ocos/Fôlego de Forja tiram vida; Insone acelera a fome)
-    public float MaxHealthEff => maxHealth * (attrs != null ? attrs.MaxHealthMul : 1f)
+    public float MaxHealthEff => vit.maxHealth * (attrs != null ? attrs.MaxHealthMul : 1f)
                                           * (Traits != null ? Traits.HealthMul : 1f);
-    public float MaxEnergyEff => maxEnergy * (attrs != null ? attrs.MaxEnergyMul : 1f);
-    public float HungerDecayEff => hungerDecay * (attrs != null ? attrs.HungerDecayMul : 1f)
+    public float MaxEnergyEff => vit.maxEnergy * (attrs != null ? attrs.MaxEnergyMul : 1f);
+    public float HungerDecayEff => vit.hungerDecay * (attrs != null ? attrs.HungerDecayMul : 1f)
                                               * (Traits != null ? Traits.HungerDecayMul : 1f);
     public float TotalEaten { get; private set; }    // carne comida na vida
 
     public float Hunger { get; private set; }
     public float Energy { get; private set; }
     public float Health { get; private set; }
-    public float Hunger01 => Hunger / maxHunger;
+    public float Hunger01 => Hunger / vit.maxHunger;
     public float Energy01 => Energy / MaxEnergyEff;
     public float Health01 => Health / MaxHealthEff;
 
@@ -73,7 +64,7 @@ public class DragonVitals : MonoBehaviour
     /// <summary>i-frames do dash/boost: dano é ignorado até aqui.</summary>
     public bool IsInvulnerable => Time.time < invulnUntil;
     public bool IsStarving => Hunger <= 0.5f;
-    public bool IsHungerCritical => Hunger < criticalHunger;
+    public bool IsHungerCritical => Hunger < vit.criticalHunger;
 
     // ---- Observer
     public event Action<DragonVitals> OnStatsChanged;
@@ -87,14 +78,14 @@ public class DragonVitals : MonoBehaviour
     {
         dragon = GetComponent<DragonController>();
         attrs = GetComponent<DragonAttributes>();
-        Hunger = maxHunger * 0.85f;
-        Energy = maxEnergy;
-        Health = maxHealth;
+        Hunger = vit.maxHunger * 0.85f;
+        Energy = vit.maxEnergy;
+        Health = vit.maxHealth;
     }
 
     void Start()
     {
-        if (autoCreateHud && FindFirstObjectByType<DragonHUD>() == null)
+        if (Balance.Default<DragonHudProfile>().autoCreateVitalsHud && FindFirstObjectByType<DragonHUD>() == null)
             new GameObject("Dragon HUD").AddComponent<DragonHUD>().Bind(this, dragon);
         EmitStats(); // estado inicial para os assinantes
     }
@@ -108,20 +99,20 @@ public class DragonVitals : MonoBehaviour
         Hunger = Mathf.Max(0f, Hunger - HungerDecayEff * dt);
 
         // ---- Energia (drenos vêm do DragonController via Drain/TrySpend)
-        float cap = IsHungerCritical ? criticalEnergyCap * (MaxEnergyEff / maxEnergy)
+        float cap = IsHungerCritical ? vit.criticalEnergyCap * (MaxEnergyEff / vit.maxEnergy)
                                      : MaxEnergyEff;
         bool idleGround = !dragon.IsFlying && dragon.Speed01 < 0.05f;
         float hungerFactor = IsHungerCritical ? 0.4f : 1f; // recuperação lenta com fome
         // Insone repõe energia parado bem mais rápido — dispensa parar para o R
         float idleMul = Traits != null ? Traits.IdleRegenMul : 1f;
-        if (dragon.IsResting) Energy += regenResting * regenMultiplier * hungerFactor * dt;
-        else if (idleGround) Energy += regenIdle * regenMultiplier * hungerFactor * idleMul * dt;
+        if (dragon.IsResting) Energy += vit.regenResting * vit.regenMultiplier * hungerFactor * dt;
+        else if (idleGround) Energy += vit.regenIdle * vit.regenMultiplier * hungerFactor * idleMul * dt;
         Energy = Mathf.Clamp(Energy, 0f, cap);
 
         // ---- Vida
-        if (IsStarving) Damage(starvationDamage * dt);
-        else if (dragon.IsResting && Hunger > 60f) Heal(regenRestingWellFed * dt);
-        else if (Hunger > 50f) Heal(regenSlow * dt);
+        if (IsStarving) Damage(vit.starvationDamage * dt);
+        else if (dragon.IsResting && Hunger > 60f) Heal(vit.regenRestingWellFed * dt);
+        else if (Hunger > 50f) Heal(vit.regenSlow * dt);
     }
 
     void LateUpdate()
@@ -143,14 +134,14 @@ public class DragonVitals : MonoBehaviour
     public bool Drain(float perSecond)
     {
         if (IsDead) return false;
-        Energy = Mathf.Max(0f, Energy - perSecond * drainMultiplier * Time.deltaTime);
+        Energy = Mathf.Max(0f, Energy - perSecond * vit.drainMultiplier * Time.deltaTime);
         return !IsExhausted;
     }
 
     /// <summary>Custo instantâneo (decolagem, batida de asas). Só gasta se tiver o suficiente.</summary>
     public bool TrySpend(float amount)
     {
-        float cost = amount * drainMultiplier;
+        float cost = amount * vit.drainMultiplier;
         if (IsDead || Energy < cost) return false;
         Energy -= cost;
         return true;
@@ -159,7 +150,7 @@ public class DragonVitals : MonoBehaviour
     /// <summary>Comer: recupera fome e um pouco de vida.</summary>
     public void Eat(float food)
     {
-        Hunger = Mathf.Min(maxHunger, Hunger + food);
+        Hunger = Mathf.Min(vit.maxHunger, Hunger + food);
         TotalEaten += food;
         Heal(food * 0.25f);
         EmitStats();
@@ -196,7 +187,7 @@ public class DragonVitals : MonoBehaviour
     public void LoadFrom(DragonRecord record)
     {
         var s = record.state;
-        Hunger = Mathf.Clamp01(s.hunger01) * maxHunger;
+        Hunger = Mathf.Clamp01(s.hunger01) * vit.maxHunger;
         Energy = Mathf.Clamp01(s.energy01) * MaxEnergyEff;
         Health = Mathf.Clamp01(s.health01) * MaxHealthEff;
         TotalEaten = s.totalEaten;

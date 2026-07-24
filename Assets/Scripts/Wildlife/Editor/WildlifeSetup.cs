@@ -21,14 +21,14 @@ using Social = AnimalDefinition.SocialModel;
 ///  2. Autodetecta o "vocabulário" de clipes da variante (lobo uiva, lebre se
 ///     esconde, urso levanta, javali fuça...) e grava no AnimalAnimSet.
 ///  3. Cria as AnimalDefinition (as espécies) em
-///     Assets/Scriptables/Resources/Wildlife — o WildlifeSpawner as carrega
+///     Assets/Scriptables/Resources/Entities/Wildlife — o WildlifeSpawner as carrega
 ///     sozinho em runtime; nenhuma cena precisa ser editada.
 /// </summary>
 public static class WildlifeSetup
 {
     const string AssetRoot = "Assets/Red_Deer/Wild_Animals";
     const string OutControllers = "Assets/Everwyrm/Wildlife";
-    const string OutDefs = "Assets/Scriptables/Resources/Wildlife";
+    const string OutDefs = "Assets/Scriptables/Resources/Entities/Wildlife";
 
     /// <summary>Sentinela do EverwyrmAutoSetup: se faltar, o setup roda de novo.
     /// Aponta sempre para a definição MAIS RECENTE — mudou o pacote de espécies,
@@ -84,7 +84,7 @@ public static class WildlifeSetup
         AssetDatabase.SaveAssets();
         if (!quiet)
             Debug.Log($"<b>Vida selvagem pronta!</b> {built.Count} variantes com Animator próprio, " +
-                      "espécies em Assets/Scriptables/Resources/Wildlife. Dê Play e explore — " +
+                      "espécies em Assets/Scriptables/Resources/Entities/Wildlife. Dê Play e explore — " +
                       "o ecossistema se povoa sozinho.");
     }
 

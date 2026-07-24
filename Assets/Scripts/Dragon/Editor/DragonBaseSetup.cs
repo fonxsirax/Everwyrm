@@ -7,7 +7,8 @@ using UnityEngine;
 /// O laboratório de genética da linhagem. Três ferramentas:
 ///
 ///  · <b>Base de Dragões (aleatórios)</b> — gera uma leva de DragonRecord com genoma
-///    sorteado em Assets/Data/Dragons e coloca os 4 primeiros na Base da cena.
+///    sorteado em Assets/Scriptables/Resources/Entities/Dragons e coloca os 4
+///    primeiros na Base da cena.
 ///  · <b>Mais Dragões Aleatórios</b> — só gera assets novos, sem mexer na cena.
 ///  · <b>Salvar Dragão Atual</b> — funciona em Play: pega o dragão que a Base está
 ///    possuindo (inclusive um improvisado aleatório) e o grava como asset. É assim que
@@ -22,9 +23,10 @@ using UnityEngine;
 /// </summary>
 public static class DragonBaseSetup
 {
-    const string DataDir = "Assets/Data";
+    const string DataDir = "Assets/Scriptables/Resources/Entities";
     const string OutDir = DataDir + "/Dragons";
-    const string SkinPath = OutDir + "/Skin_Unka.asset";
+    const string SkinDir = DataDir + "/Skins";
+    const string SkinPath = SkinDir + "/Skin_Unka.asset";
     const string MatDir = "Assets/Malbers Animations/Dragons/4 - Unka the Dragon/Materials/Realistic";
 
     /// <summary>Quantos assets a leva inicial gera e quantos vão para a cena.</summary>
@@ -237,10 +239,18 @@ public static class DragonBaseSetup
         return found.ToArray();
     }
 
+    /// <summary>Garante a árvore Assets/Scriptables/Resources/Entities/{Dragons,Skins}
+    /// nível a nível — o AssetDatabase não cria pastas aninhadas de uma vez.</summary>
     static void EnsureFolders()
     {
-        if (!AssetDatabase.IsValidFolder(DataDir)) AssetDatabase.CreateFolder("Assets", "Data");
-        if (!AssetDatabase.IsValidFolder(OutDir)) AssetDatabase.CreateFolder(DataDir, "Dragons");
+        string acc = "Assets";
+        foreach (var part in new[] { "Scriptables", "Resources", "Entities", "Dragons" })
+        {
+            string next = acc + "/" + part;
+            if (!AssetDatabase.IsValidFolder(next)) AssetDatabase.CreateFolder(acc, part);
+            acc = next;
+        }
+        if (!AssetDatabase.IsValidFolder(SkinDir)) AssetDatabase.CreateFolder(DataDir, "Skins");
     }
 
     static string Sanitize(string name)

@@ -5,8 +5,9 @@ using UnityEngine;
 ///
 ///  BINDINGS (rework hack and slash):
 ///   WASD mover (relativo à câmera no chão) · Ctrl SEGURADO = Stealth
-///   Space = asa/decolar · Shift = Wing Boost/mergulho (ar) — no CHÃO, dash
-///   lateral é Shift + A ou Shift + D (ver ChordDashLeft/Right)
+///   Space = asa/decolar · Shift SEGURADO (ar) = mergulho · Wing Boost = Shift + W
+///   (chord fresco, ver ConsumeBoost) · esquiva lateral = Shift + A/D (chão e ar,
+///   ver ConsumeDashLeft/Right) — Shift PURO não acelera mais
 ///   LMB combo físico · RMB (ou F) fogo · Q cauda · E asas · T rugir
 ///   R descansar · G comer · 1-4 habilidades · Tab ficha
 ///
@@ -23,7 +24,7 @@ public static class DragonInput
     /// <summary>Janela padrão do buffer (s) — padrão de action games: 0.15–0.25.</summary>
     public const float BufferWindow = 0.2f;
 
-    /// <summary>Janela do CHORD do dash lateral (Shift+A/D): as duas teclas
+    /// <summary>Janela do CHORD da esquiva lateral (Shift+A/D): as duas teclas
     /// precisam ter sido apertadas (KeyDown FRESCO, não segurado de antes)
     /// dentro desse intervalo uma da outra.</summary>
     const float ChordWindow = 0.15f;
@@ -32,6 +33,7 @@ public static class DragonInput
     static int sampledFrame = -1;
 
     static float shiftDownTime = -99f, leftDownTime = -99f, rightDownTime = -99f;
+    static float forwardDownTime = -99f;   // W/↑ fresco — p/ o chord do Wing Boost
 
     static DragonInput()
     {
@@ -63,6 +65,7 @@ public static class DragonInput
 
         if (Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.LeftArrow)) leftDownTime = now;
         if (Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow)) rightDownTime = now;
+        if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow)) forwardDownTime = now;
     }
 
     /// <summary>true 1× se a ação foi apertada dentro da janela — e a gasta.
@@ -74,8 +77,36 @@ public static class DragonInput
         return true;
     }
 
+    /// <summary>Peek: há um comando 'a' bufferizado AGORA (sem gastá-lo)? Usado
+    /// para detectar interrupção (cancelar a esquiva) antes de quem consome agir.</summary>
+    public static bool Pending(Act a, float window = BufferWindow) =>
+        Time.time - pressTime[(int)a] <= window;
+
     /// <summary>Descarta um comando enfileirado (ex.: trocar de estado invalida o buffer).</summary>
     public static void Clear(Act a) => pressTime[(int)a] = -99f;
+
+    /// <summary>Zera os comandos de AÇÃO bufferizados (golpe/fogo/rugido/comer/asa/
+    /// cauda/decolar). A esquiva chama ao começar: só um toque NOVO durante ela a
+    /// cancela — um comando enfileirado de ANTES não a "come" no primeiro frame.</summary>
+    public static void ClearActionBuffers()
+    {
+        Clear(Act.Flap); Clear(Act.Melee); Clear(Act.Fire); Clear(Act.Tail);
+        Clear(Act.Wing); Clear(Act.Roar); Clear(Act.Eat);
+    }
+
+    /// <summary>Alguma tecla de MOVIMENTO (WASD/setas) foi apertada NESTE frame?
+    /// KeyDown = fresco: segurar de antes não conta (cancela a esquiva só com um
+    /// toque novo, como o usuário pediu).</summary>
+    public static bool MovePressedFresh() =>
+        Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.A) ||
+        Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.D) ||
+        Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.DownArrow) ||
+        Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.RightArrow);
+
+    /// <summary>Alguma habilidade (1-4) foi apertada NESTE frame?</summary>
+    public static bool AbilityAnyDown() =>
+        Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Alpha2) ||
+        Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Alpha4);
 
     public static bool Held(Act a) => a switch
     {
@@ -90,12 +121,18 @@ public static class DragonInput
     public static bool StealthHeld =>
         Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
 
-    /// <summary>Dash lateral no chão: Shift + A/D precisam ser um CHORD —
+    /// <summary>Esquiva lateral no chão: Shift + A/D precisam ser um CHORD —
     /// ambas as teclas com KeyDown fresco, próximas no tempo. Se a direcional
     /// já estava segurada de antes (parte de andar), o timestamp dela é velho
     /// e não conta: precisa soltar e apertar de novo perto do Shift.</summary>
     public static bool ConsumeDashRight() => ConsumeChord(ref rightDownTime);
     public static bool ConsumeDashLeft() => ConsumeChord(ref leftDownTime);
+
+    /// <summary>Wing Boost em voo: Shift + W precisam ser um CHORD FRESCO (ambos
+    /// KeyDown recentes, próximos no tempo) — mesma regra da esquiva. Shift puro,
+    /// ou W já segurado quando o Shift chega, NÃO conta: some o boost fantasma que
+    /// se misturava com a esquiva lateral (Shift+A/D).</summary>
+    public static bool ConsumeBoost() => ConsumeChord(ref forwardDownTime);
 
     static bool ConsumeChord(ref float dirDownTime)
     {

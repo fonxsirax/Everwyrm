@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c5b1fe36dcf9994198773842b611cdb, type: 3}
+  m_Name: GreatFireBall
+  m_EditorClassIdentifier: 
+  attackName: Grande Bola de Fogo
+  description: Bola de fogo lenta que EXPLODE no impacto, queimando todos na área.
+  icon: {fileID: 0}
+  unlockLevel: 4
+  energyCost: 25
+  baseDamage: 30
+  cooldown: 6
+  castTime: 0.7
+  animationLock: 1.5
+  animation: 8
+  usableInFlight: 1
+  isPhysical: 0
+  isFire: 1
+  range: 70
+  areaDamage: 1
+  areaRadius: 7
+  appliesBurn: 1
+  burnDamagePerSecond: 4
+  burnDuration: 5
+  spawnsFireArea: 0
+  fireAreaDuration: 8
+  usesProjectile: 1
+  projectileSpeed: 24
+  projectileLifetime: 0
+  explodesOnImpact: 1
+  projectileHitRadius: 1.5
+  projectilePrefab: {fileID: 0}
+  vfxPrefab: {fileID: 0}

@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c5b1fe36dcf9994198773842b611cdb, type: 3}
+  m_Name: GarrasSelvagens
+  m_EditorClassIdentifier: 
+  attackName: Garras Selvagens
+  description: Golpe físico pesado de garras — um alvo à frente.
+  icon: {fileID: 0}
+  unlockLevel: 3
+  energyCost: 6
+  baseDamage: 26
+  cooldown: 1.6
+  castTime: 0.35
+  animationLock: 1.0
+  animation: 2
+  usableInFlight: 0
+  isPhysical: 1
+  isFire: 0
+  range: 5
+  areaDamage: 0
+  areaRadius: 6
+  appliesBurn: 0
+  burnDamagePerSecond: 4
+  burnDuration: 5
+  spawnsFireArea: 0
+  fireAreaDuration: 8
+  usesProjectile: 0
+  projectileSpeed: 30
+  projectileLifetime: 0
+  explodesOnImpact: 0
+  projectileHitRadius: 1.2
+  projectilePrefab: {fileID: 0}
+  vfxPrefab: {fileID: 0}

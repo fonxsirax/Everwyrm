@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5dbb6b0fd6a2a2316d7553336b9e679, type: 3}
+  m_Name: DragonMovement
+  m_EditorClassIdentifier: 
+  walkSpeed: 5
+  runSpeed: 10
+  reverseSpeed: 1.7
+  groundAccel: 35
+  groundDecel: 25
+  turnRateIdle: 540
+  turnRateRun: 240
+  gravity: 28
+  groundDodgeTurn: 90
+  dashDuration: 0.45
+  dashCooldown: 0.6
+  dashIFrames: 0.3
+  dodgeCamCatchup: 0.2
+  attackCancelWindow: 0.4
+  safeFallTreeFraction: 0.7
+  safeFallFallback: 18
+  fallDamageAtDouble: 35
+  swimSpeed: 3.4
+  swimBackSpeed: 1.2
+  swimTurnSpeed: 85
+  swimAccel: 4.5
+  buoyDepth: 0.85
+  minSwimDepth: 1.1
+  swimCost: 2
+  eatRange: 4.5
+  runCost: 3.5
+  dodgeCost: 8
+  fireCost: 15
+  attackCost: 3

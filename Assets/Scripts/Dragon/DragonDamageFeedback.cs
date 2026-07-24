@@ -16,24 +16,18 @@ using UnityEngine.Rendering.HighDefinition;
 /// </summary>
 public class DragonDamageFeedback : MonoBehaviour
 {
-    [Header("Classificação do dano")]
-    [SerializeField] float discreteHitMin = 1f;   // abaixo disso é DoT: acumula
-    [SerializeField] float dotPulseEvery = 2.5f;  // vida acumulada p/ pulso suave
+    [Header("Balanceamento")]
+    [Tooltip("O game feel de dano (classificação, shake, vinheta, grunhido) vive no " +
+             "asset Assets/Scriptables/Resources/Balance/DragonFeedback.asset. Vazio = " +
+             "esse padrão; arraste outro DragonFeedbackProfile para variar por espécie.")]
+    [SerializeField] DragonFeedbackProfile feedbackProfile;
 
-    [Header("Câmera")]
-    [SerializeField] float shakePerHit = 0.35f;   // trauma no dano de referência
-    [SerializeField] float refDamage = 15f;       // dano que calibra shake/vinheta
-
-    [Header("Vinheta (HDRP)")]
-    [SerializeField] Color vignetteColor = new(0.30f, 0.015f, 0.01f);
-    [SerializeField] float pulseMax = 0.28f;      // intensidade no pico do pulso
-    [SerializeField] float pulseFade = 0.55f;     // s até o pulso sumir
-    [SerializeField] float lowHealthMax = 0.17f;  // residual no limiar da morte
-    [SerializeField] float desatMax = 16f;        // dessaturação no pico (0-100)
-
-    [Header("Som")]
-    [SerializeField] float hurtCooldown = 1.1f;   // não metralhar o grunhido
-    [SerializeField] float hurtMinDamage = 2f;
+    /// <summary>O perfil resolvido, sob demanda: o campo acima quando preenchido,
+    /// senão o asset padrão. PREGUIÇOSO de propósito — a janela de balanceamento
+    /// (Tools > Everwyrm > Balanço do Dragão) lê estes números direto no PREFAB,
+    /// fora do Play, onde nenhum Awake rodou.</summary>
+    DragonFeedbackProfile cfgCache;
+    DragonFeedbackProfile cfg => cfgCache != null ? cfgCache : (cfgCache = Balance.Resolve(feedbackProfile));
 
     DragonVitals vitals;
     DragonSounds sounds;
@@ -74,26 +68,26 @@ public class DragonDamageFeedback : MonoBehaviour
     void Update()
     {
         if (vignette == null) return;
-        pulse = Mathf.MoveTowards(pulse, 0f, Time.deltaTime / pulseFade);
+        pulse = Mathf.MoveTowards(pulse, 0f, Time.deltaTime / cfg.pulseFade);
 
         // residual de vida crítica: quase subliminar, "respirando" devagar
         float low01 = dead ? 1f : Mathf.InverseLerp(0.28f, 0.07f, vitals.Health01);
         float breath = 0.8f + 0.2f * Mathf.Sin(Time.time * 2.2f);
-        float baseV = dead ? 0.34f : lowHealthMax * low01 * breath;
+        float baseV = dead ? 0.34f : cfg.lowHealthMax * low01 * breath;
 
-        vignette.intensity.value = Mathf.Min(0.45f, baseV + pulse * pulseMax);
-        colorAdj.saturation.value = -desatMax * Mathf.Clamp01(pulse + low01 * 0.4f);
+        vignette.intensity.value = Mathf.Min(0.45f, baseV + pulse * cfg.pulseMax);
+        colorAdj.saturation.value = -cfg.desatMax * Mathf.Clamp01(pulse + low01 * 0.4f);
     }
 
     void OnDamaged(float amount, Vector3? source)
     {
         if (dead) return;
 
-        if (amount < discreteHitMin)
+        if (amount < cfg.discreteHitMin)
         {
             // dano contínuo: acumula e pulsa só a vinheta, de leve
             dotBucket += amount;
-            if (dotBucket >= dotPulseEvery)
+            if (dotBucket >= cfg.dotPulseEvery)
             {
                 dotBucket = 0f;
                 pulse = Mathf.Max(pulse, 0.45f);
@@ -101,14 +95,14 @@ public class DragonDamageFeedback : MonoBehaviour
             return;
         }
 
-        float k = Mathf.Clamp01(amount / refDamage);
+        float k = Mathf.Clamp01(amount / cfg.refDamage);
         pulse = Mathf.Max(pulse, Mathf.Lerp(0.5f, 1f, k));
 
         if (cam == null && Camera.main != null)
             cam = Camera.main.GetComponent<DragonCamera>();
-        cam?.AddShake(shakePerHit * Mathf.Lerp(0.6f, 1.6f, k));
+        cam?.AddShake(cfg.shakePerHit * Mathf.Lerp(0.6f, 1.6f, k));
 
-        if (amount >= hurtMinDamage && Time.time - lastHurtTime >= hurtCooldown)
+        if (amount >= cfg.hurtMinDamage && Time.time - lastHurtTime >= cfg.hurtCooldown)
         {
             lastHurtTime = Time.time;
             sounds?.PlaySound("Hurt");   // silencioso até o clip ser atribuído
@@ -129,7 +123,7 @@ public class DragonDamageFeedback : MonoBehaviour
 
         var profile = volume.profile;   // instância própria de runtime
         vignette = profile.Add<Vignette>();
-        vignette.color.Override(vignetteColor);
+        vignette.color.Override(cfg.vignetteColor);
         vignette.intensity.Override(0f);
         vignette.smoothness.Override(1f);
         vignette.rounded.Override(false);

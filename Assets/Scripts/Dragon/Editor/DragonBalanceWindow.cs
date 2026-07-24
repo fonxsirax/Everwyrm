@@ -20,7 +20,7 @@ using Attr = DragonAttributes.Attribute;
 public class DragonBalanceWindow : EditorWindow
 {
     const string PrefabPath = "Assets/Prefabs/Unka Realistic.prefab";
-    const string ProfilePath = "Assets/Scriptables/Resources/FlightProfile.asset";
+    const string ProfilePath = "Assets/Scriptables/Resources/Balance/FlightProfile.asset";
 
     GameObject prefab;
     DragonAttributes attrs;

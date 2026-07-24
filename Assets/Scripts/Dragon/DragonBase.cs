@@ -33,21 +33,18 @@ public class DragonBase : MonoBehaviour
              "Sem ela o aleatório sai com o material atual do avatar.")]
     [SerializeField] DragonSkin fallbackSkin;
 
-    [Header("Balanceamento da criação")]
-    [Tooltip("Teto do talento bruto sorteado no nascimento (os IVs).")]
-    [SerializeField] int maxIV = 31;
+    [Header("Balanceamento")]
+    [Tooltip("O talento sorteado no nascimento e as chances de mutação vivem no " +
+             "asset Assets/Scriptables/Resources/Balance/Lineage.asset. Vazio = " +
+             "esse padrão.")]
+    [SerializeField] LineageProfile lineageProfile;
 
-    [Header("Balanceamento da MUTAÇÃO (DragonRecord.Breed)")]
-    [Tooltip("Chance de natureza sortear de novo e o genoma visual mutar (por ninhada).")]
-    [SerializeField, Range(0f, 1f)] float traitMutationChance = 0.08f;
-    [Tooltip("Chance de UM atributo virar outlier (acima do teto) — 1 rolagem por " +
-             "ninhada, não mais uma por IV.")]
-    [SerializeField, Range(0f, 1f)] float statMutationChance = 0.05f;
-    [Tooltip("Chance do prêmio PREFERIDO: +1 slot de ataque (DragonAbilities). Mais " +
-             "raro que o outlier de stat — é o que faz a linhagem valer a pena criar.")]
-    [SerializeField, Range(0f, 1f)] float extraSlotMutationChance = 0.02f;
-    [Tooltip("Quanto o outlier de stat ultrapassa o teto normal do IV (1..isto).")]
-    [SerializeField] int ivOutlierBonus = 4;
+    /// <summary>O perfil resolvido, sob demanda: o campo acima quando preenchido,
+    /// senão o asset padrão. PREGUIÇOSO de propósito — a janela de balanceamento
+    /// (Tools > Everwyrm > Balanço do Dragão) lê estes números direto no PREFAB,
+    /// fora do Play, onde nenhum Awake rodou.</summary>
+    LineageProfile cfgCache;
+    LineageProfile cfg => cfgCache != null ? cfgCache : (cfgCache = Balance.Resolve(lineageProfile));
 
     int currentIndex = -1;
 
@@ -56,7 +53,7 @@ public class DragonBase : MonoBehaviour
     public DragonRecord Current =>
         currentIndex >= 0 && currentIndex < dragons.Count ? dragons[currentIndex] : null;
     public DragonPossession Avatar => avatar;
-    public int MaxIV => maxIV;
+    public int MaxIV => cfg.maxIV;
 
     void Awake()
     {
@@ -91,18 +88,19 @@ public class DragonBase : MonoBehaviour
     ///    de travar sem avatar.
     ///
     /// O record vive só em memória (sem AssetDatabase): morre ao sair do Play, a menos
-    /// que Tools > Everwyrm > Salvar Dragão Atual o grave em Assets/Data/Dragons.</summary>
+    /// que Tools > Everwyrm > Salvar Dragão Atual o grave em
+    /// Assets/Scriptables/Resources/Entities/Dragons.</summary>
     public DragonRecord PossessRandom(string errorReason = null)
     {
         string howToKeep = "Gostou? Tools > Everwyrm > Salvar Dragão Atual grava " +
-                           "este genoma em Assets/Data/Dragons.";
+                           "este genoma em Assets/Scriptables/Resources/Entities/Dragons.";
         if (errorReason != null)
             Debug.LogError($"<b>DragonBase:</b> {errorReason} — improvisando um dragão " +
                            $"ALEATÓRIO para não ficar sem avatar. {howToKeep}");
         else
             Debug.Log($"<b>DragonBase:</b> sorteando um dragão inédito (randomEveryPlay). {howToKeep}");
 
-        var record = DragonRecord.CreateRandom(DragonNames.Random(), fallbackSkin, maxIV);
+        var record = DragonRecord.CreateRandom(DragonNames.Random(), fallbackSkin, cfg.maxIV);
         record.name = record.dragonName;
         dragons.Add(record);
         Possess(dragons.Count - 1);
@@ -114,8 +112,8 @@ public class DragonBase : MonoBehaviour
     /// (ninho/ovo, feature posterior) chamar isto. NÃO possui o filhote sozinho.</summary>
     public DragonRecord BreedNew(string dragonName, DragonRecord parentA, DragonRecord parentB)
     {
-        var child = DragonRecord.Breed(dragonName, parentA, parentB, fallbackSkin, maxIV,
-            traitMutationChance, statMutationChance, extraSlotMutationChance, ivOutlierBonus);
+        var child = DragonRecord.Breed(dragonName, parentA, parentB, fallbackSkin, cfg.maxIV,
+            cfg.traitMutationChance, cfg.statMutationChance, cfg.extraSlotMutationChance, cfg.ivOutlierBonus);
         child.name = child.dragonName;
         dragons.Add(child);
         return child;

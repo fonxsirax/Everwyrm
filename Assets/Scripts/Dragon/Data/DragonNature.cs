@@ -13,7 +13,8 @@ using UnityEngine;
 /// <remarks>
 /// A ORDEM é o contrato de serialização: os DragonRecord gravam a natureza como
 /// índice (`nature: 3`), não como texto. Inserir ou reordenar aqui muda o
-/// temperamento de todo dragão já salvo em Assets/Data/Dragons — só ACRESCENTE no
+/// temperamento de todo dragão já salvo em
+/// Assets/Scriptables/Resources/Entities/Dragons — só ACRESCENTE no
 /// fim. Os índices 0..8 são os do sistema antigo de 3 atributos; só o EFEITO deles
 /// foi remapeado para os 6 novos (Velocidade→Agilidade, Poder→Força,
 /// Resistência→Vigor). Os índices 9+ são as naturezas novas dos atributos que o

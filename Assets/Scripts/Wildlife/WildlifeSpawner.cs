@@ -18,6 +18,10 @@ public class WildlifeSpawner : MonoBehaviour
 {
     public static WildlifeSpawner Instance { get; private set; }
 
+    /// <summary>Onde as espécies vivem, relativo a uma pasta Resources. Um
+    /// AnimalDefinition novo aqui = uma espécie nova no jogo, sem tocar em código.</summary>
+    public const string WildlifeFolder = "Entities/Wildlife";
+
     [Header("Anel de População")]
     [SerializeField] float spawnRadiusMin = 70f;
     [SerializeField] float spawnRadiusMax = 320f;
@@ -93,14 +97,14 @@ public class WildlifeSpawner : MonoBehaviour
     {
         if (FindFirstObjectByType<WildlifeSpawner>() != null) return;
         if (GameObject.FindGameObjectWithTag("Player") == null) return;
-        if (Resources.LoadAll<AnimalDefinition>("Wildlife").Length == 0) return;
+        if (Resources.LoadAll<AnimalDefinition>(WildlifeFolder).Length == 0) return;
         new GameObject("Wildlife (Ecossistema)").AddComponent<WildlifeSpawner>();
     }
 
     void Awake()
     {
         Instance = this;
-        defs = Resources.LoadAll<AnimalDefinition>("Wildlife");
+        defs = Resources.LoadAll<AnimalDefinition>(WildlifeFolder);
         WildlifePool.Ensure(gameObject);
 
         var p = GameObject.FindGameObjectWithTag("Player");

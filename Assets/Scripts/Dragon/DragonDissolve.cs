@@ -14,8 +14,18 @@ using UnityEngine;
 /// </summary>
 public class DragonDissolve : MonoBehaviour
 {
-    [SerializeField] float duration = 2f;
-    [SerializeField] string[] dissolveProps = { "_DissolveAmount", "_Dissolve", "_DissolveValue" };
+    [Header("Balanceamento")]
+    [Tooltip("A duração do dissolve e as propriedades de shader tentadas vivem no asset " +
+             "Assets/Scriptables/Resources/Balance/DragonFeedback.asset (o mesmo do " +
+             "feedback de dano). Vazio = esse padrão.")]
+    [SerializeField] DragonFeedbackProfile feedbackProfile;
+
+    /// <summary>O perfil resolvido, sob demanda: o campo acima quando preenchido,
+    /// senão o asset padrão. PREGUIÇOSO de propósito — a janela de balanceamento
+    /// (Tools > Everwyrm > Balanço do Dragão) lê estes números direto no PREFAB,
+    /// fora do Play, onde nenhum Awake rodou.</summary>
+    DragonFeedbackProfile cfgCache;
+    DragonFeedbackProfile cfg => cfgCache != null ? cfgCache : (cfgCache = Balance.Resolve(feedbackProfile));
 
     SkinnedMeshRenderer[] renderers;
     readonly List<(Material mat, int prop)> targets = new();
@@ -23,7 +33,10 @@ public class DragonDissolve : MonoBehaviour
     float t;
     Action onComplete;
 
-    void Awake() => renderers = GetComponentsInChildren<SkinnedMeshRenderer>(true);
+    void Awake()
+    {
+        renderers = GetComponentsInChildren<SkinnedMeshRenderer>(true);
+    }
 
     /// <summary>Começa a dissolver; chama `onComplete` ao terminar (a Base possui o próximo).</summary>
     public void Play(Action onComplete)
@@ -53,7 +66,7 @@ public class DragonDissolve : MonoBehaviour
             foreach (var m in r.materials)          // instâncias — não toca o asset da skin
             {
                 if (m == null) continue;
-                foreach (var pn in dissolveProps)
+                foreach (var pn in cfg.dissolveProps)
                     if (m.HasProperty(pn)) { targets.Add((m, Shader.PropertyToID(pn))); break; }
             }
         }
@@ -63,7 +76,7 @@ public class DragonDissolve : MonoBehaviour
     {
         if (!dissolving) return;
         t += Time.deltaTime;
-        float k = duration <= 0f ? 1f : Mathf.Clamp01(t / duration);
+        float k = cfg.dissolveDuration <= 0f ? 1f : Mathf.Clamp01(t / cfg.dissolveDuration);
         foreach (var (mat, prop) in targets) if (mat != null) mat.SetFloat(prop, k);
         if (k >= 1f)
         {

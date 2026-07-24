@@ -6,7 +6,7 @@ using UnityEngine;
 /// <summary>
 /// Habilidades desbloqueáveis do dragão — teclas 1/2/3/4 disparam os ataques
 /// EQUIPADOS nos 4 slots. O jogo pode ter quantos ataques quiser (assets
-/// DragonAttackData em Resources/Attacks); os slots são só o loadout atual.
+/// DragonAttackData em Resources/Entities/Attacks); os slots são só o loadout atual.
 ///
 /// Fluxo de um ataque: tecla → checagens (voo/cooldown/energia/lock) →
 /// CrossFade da animação + trava de ações → após castTime o efeito dispara
@@ -25,16 +25,26 @@ public class DragonAbilities : MonoBehaviour
     /// exige subir este número também.</summary>
     public const int MaxSlotCount = 5;
 
-    [Header("Loadout inicial (vazio — tudo vem por desbloqueio)")]
-    [Tooltip("Slots ativos por padrão, sem mutação (balanceamento).")]
-    [SerializeField] int baseSlotCount = 4;
-    [SerializeField] DragonAttackData[] slots = new DragonAttackData[MaxSlotCount];
+    /// <summary>Onde o catálogo de ataques vive, relativo a uma pasta Resources.
+    /// Um asset novo aqui = um golpe novo no jogo, sem tocar em código.</summary>
+    public const string AttacksFolder = "Entities/Attacks";
 
-    [Tooltip("Ataques extras além dos carregados de Resources/Attacks.")]
-    [SerializeField] List<DragonAttackData> extraAttacks = new();
+    [Header("Balanceamento")]
+    [Tooltip("Os slots e o loadout inicial vivem no asset " +
+             "Assets/Scriptables/Resources/Balance/DragonCombat.asset. Vazio = esse " +
+             "padrão; arraste outro DragonCombatProfile para variar por espécie.")]
+    [SerializeField] DragonCombatProfile combatProfile;
 
-    [SerializeField] bool autoCreateHud = true;
+    /// <summary>O perfil resolvido, sob demanda: o campo acima quando preenchido,
+    /// senão o asset padrão. PREGUIÇOSO de propósito — a janela de balanceamento
+    /// (Tools > Everwyrm > Balanço do Dragão) lê estes números direto no PREFAB,
+    /// fora do Play, onde nenhum Awake rodou.</summary>
+    DragonCombatProfile cfgCache;
+    DragonCombatProfile cfg => cfgCache != null ? cfgCache : (cfgCache = Balance.Resolve(combatProfile));
 
+    /// <summary>O loadout ATUAL — muda em jogo (desbloqueio, Equip, possessão), então
+    /// é estado de runtime, não dado: nasce de `cfg.startingSlots` e vive aqui.</summary>
+    readonly DragonAttackData[] slots = new DragonAttackData[MaxSlotCount];
     readonly List<DragonAttackData> known = new();     // todos os ataques do jogo
     readonly List<DragonAttackData> unlocked = new();
     readonly Dictionary<DragonAttackData, float> cooldownUntil = new();
@@ -42,7 +52,7 @@ public class DragonAbilities : MonoBehaviour
 
     /// <summary>Slots realmente ativos AGORA: base + bônus de mutação, sempre travado
     /// no teto rígido. HUD e input consultam isto, não MaxSlotCount.</summary>
-    public int ActiveSlotCount => Mathf.Clamp(baseSlotCount + bonusSlots, 1, MaxSlotCount);
+    public int ActiveSlotCount => Mathf.Clamp(cfg.baseSlotCount + bonusSlots, 1, MaxSlotCount);
 
     DragonController dragon;
     DragonVitals vitals;          // opcional (padrão do projeto)
@@ -62,6 +72,8 @@ public class DragonAbilities : MonoBehaviour
 
     void Awake()
     {
+        for (int i = 0; i < cfg.startingSlots.Length && i < MaxSlotCount; i++)
+            slots[i] = cfg.startingSlots[i];
         dragon = GetComponent<DragonController>();
         vitals = GetComponent<DragonVitals>();
         attrs = GetComponent<DragonAttributes>();
@@ -89,17 +101,18 @@ public class DragonAbilities : MonoBehaviour
 
         CheckUnlocks(attrs != null ? attrs.Tier : 1, announce: false);
 
-        if (autoCreateHud && FindFirstObjectByType<DragonAttackHUD>() == null)
+        if (Balance.Default<DragonHudProfile>().autoCreateAttackHud && FindFirstObjectByType<DragonAttackHUD>() == null)
             new GameObject("Attack HUD").AddComponent<DragonAttackHUD>().Bind(this, dragon, vitals);
     }
 
     /// <summary>Popula o catálogo de ataques (idempotente): todo asset em
-    /// Resources/Attacks + os extras. Chamado no Start e na possessão (LoadFrom).</summary>
+    /// Resources/Entities/Attacks + os extras do profile de combate. Chamado no Start
+    /// e na possessão (LoadFrom).</summary>
     void EnsureKnown()
     {
         if (known.Count > 0) return;
-        known.AddRange(Resources.LoadAll<DragonAttackData>("Attacks"));
-        foreach (var a in extraAttacks)
+        known.AddRange(Resources.LoadAll<DragonAttackData>(AttacksFolder));
+        foreach (var a in cfg.extraAttacks)
             if (a != null && !known.Contains(a)) known.Add(a);
         known.Sort((a, b) => a.unlockLevel.CompareTo(b.unlockLevel));
     }

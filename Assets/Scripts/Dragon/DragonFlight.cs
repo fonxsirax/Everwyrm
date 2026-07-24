@@ -22,7 +22,7 @@ using UnityEngine;
 /// </summary>
 public class DragonFlight : MonoBehaviour
 {
-    [SerializeField] FlightProfile profile;   // vazio = Resources/FlightProfile
+    [SerializeField] FlightProfile profile;   // vazio = Resources/Balance/FlightProfile
 
     DragonVitals vitals;
     DragonGrowth growth;
@@ -91,7 +91,7 @@ public class DragonFlight : MonoBehaviour
         vitals = GetComponent<DragonVitals>();
         growth = GetComponent<DragonGrowth>();
         attrs = GetComponent<DragonAttributes>();
-        if (profile == null) profile = Resources.Load<FlightProfile>("FlightProfile");
+        if (profile == null) profile = Balance.Default<FlightProfile>();
         if (profile == null) profile = ScriptableObject.CreateInstance<FlightProfile>();
     }
 

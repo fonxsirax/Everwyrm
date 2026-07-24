@@ -1,0 +1,87 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0b7e2d4a91c845f3b8a6e5d90c31f7a4, type: 3}
+  m_Name: FlightProfile
+  m_EditorClassIdentifier: 
+  takeoffClimbTime: 2
+  takeoffClimbRate: 3
+  takeoffClimbEnergyPerSec: 4
+  flapsPerCycle: 2
+  flapMinInterval: 0.22
+  cycleRecovery: 0.3
+  flapAnimDuration: 1
+  flapBonusLift: 3.25
+  flapBonusForward: 0.8
+  flapBonusPower: 2
+  flapLift: 12
+  flapForwardBoost: 2
+  maxRiseSpeed: 10
+  sinkAtSpeed: 0.7
+  sinkAtStall: 3
+  slownessPower: 1.8
+  verticalResponse: 9
+  glideAnimDelay: 1
+  diveSink: 5
+  diveOverspeed: 1.3
+  swoopConversion: 0.35
+  energyPerFlap: 3
+  windInfluence: 1
+  ceilingSoftBand: 40
+  runningTakeoffFraction: 0.5
+  takeoffLockMinimum: 0.15
+  takeoffHopClimb: 6
+  takeoffLaunchClimb: 12
+  takeoffLaunchForward: 3
+  takeoffMaxLock: 2.5
+  takeoffGrace: 0.8
+  boostImpulse: 8
+  boostMaxOverspeed: 1.25
+  boostCooldown: 1
+  boostIFrames: 0.25
+  boostCost: 6
+  airDodgeSpeed: 14
+  airDodgeDuration: 0.4
+  flyDodgeTurn: 90
+  flyDodgeDuration: 0.45
+  flyDodgeIFrames: 0.4
+  flyDodgeCost: 8
+  minFlySpeed: 6
+  cruiseSpeed: 14
+  maxFlySpeed: 26
+  flyAccel: 22
+  turnSpeedAir: 95
+  bankAngle: 48
+  pitchAngle: 28
+  climbRate: 7.5
+  diveRate: 14
+  glideSink: 1.6
+  stallSink: 9
+  landProbeDistance: 3.5
+  landMaxSpeed: 11
+  landApproachProbe: 16
+  landDescendRate: 16
+  landFlareRate: 3
+  autoLandHeight: 1.6
+  autoLandMaxSlope: 0.7
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 0
+  waterSkimHeight: 1.8
+  impactLight: 0.2
+  impactHeavy: 0.5
+  impactSpeedLoss: 0.6
+  impactKnockDown: 6
+  staggerTime: 1.2
+  impactCooldown: 0.4
+  impactEnergyCost: 6
+  glideCost: 0.3
+  takeoffCost: 6

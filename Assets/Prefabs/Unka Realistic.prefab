@@ -1389,6 +1389,7 @@ GameObject:
   - component: {fileID: 7831661525013470528}
   - component: {fileID: 7515630652582555693}
   - component: {fileID: 5730309087826222179}
+  - component: {fileID: 2069928974615473969}
   m_Layer: 20
   m_Name: Unka Realistic
   m_TagString: Player
@@ -1472,85 +1473,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e9a4c4d05867e8f469931d4fb99e1c98, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  walkSpeed: 5
-  runSpeed: 10
-  reverseSpeed: 1.7
-  groundAccel: 35
-  groundDecel: 25
-  turnRateIdle: 540
-  turnRateRun: 240
-  gravity: 28
-  runningTakeoffFraction: 0.5
-  takeoffLockMinimum: 0.15
-  takeoffHopClimb: 6
-  takeoffLaunchClimb: 12
-  takeoffLaunchForward: 3
-  takeoffMaxLock: 2.5
-  takeoffGrace: 0.8
-  dashSpeedMul: 1.7
-  dashDuration: 0.35
-  dashCooldown: 0.6
-  dashIFrames: 0.3
-  boostImpulse: 8
-  boostMaxOverspeed: 1.25
-  boostCooldown: 1
-  boostIFrames: 0.25
-  boostCost: 6
-  airDodgeYaw: 18.2
-  flyDodgeTurn: 90
-  flyDodgeDuration: 0.45
-  flyDodgeIFrames: 0.4
-  flyDodgeCost: 8
-  attackCancelWindow: 0.4
-  minFlySpeed: 6
-  cruiseSpeed: 14
-  maxFlySpeed: 26
-  flyAccel: 22
-  turnSpeedAir: 95
-  bankAngle: 48
-  pitchAngle: 28
-  climbRate: 7.5
-  diveRate: 14
-  glideSink: 1.6
-  glideDelay: 1.1
-  stallSink: 9
-  landProbeDistance: 3.5
-  landMaxSpeed: 11
-  landApproachProbe: 16
-  landDescendRate: 16
-  landFlareRate: 3
-  autoLandHeight: 1.6
-  autoLandMaxSlope: 0.7
-  groundMask:
-    serializedVersion: 2
-    m_Bits: 0
-  safeFallTreeFraction: 0.7
-  safeFallFallback: 18
-  fallDamageAtDouble: 35
-  waterSkimHeight: 1.8
-  impactLight: 0.2
-  impactHeavy: 0.5
-  impactSpeedLoss: 0.6
-  impactKnockDown: 6
-  staggerTime: 1.2
-  impactCooldown: 0.4
-  impactEnergyCost: 6
-  swimSpeed: 3.4
-  swimBackSpeed: 1.2
-  swimTurnSpeed: 85
-  swimAccel: 4.5
-  buoyDepth: 0.85
-  minSwimDepth: 1.1
-  swimCost: 2
-  eatRange: 4.5
-  runCost: 3.5
-  flapCost: 3.5
-  climbCost: 7
-  glideCost: 0.3
-  takeoffCost: 6
-  dodgeCost: 8
-  fireCost: 15
-  attackCost: 3
+  movementProfile: {fileID: 0}
+  flightProfile: {fileID: 0}
 --- !u!114 &5542634034661111272
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1563,20 +1487,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 61ca10139207b8a4f8cd0e0795d80bf7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHunger: 100
-  hungerDecay: 0.01
-  criticalHunger: 25
-  starvationDamage: 2
-  maxEnergy: 100
-  regenIdle: 3
-  regenResting: 10
-  criticalEnergyCap: 60
-  regenMultiplier: 5
-  drainMultiplier: 0.1
-  maxHealth: 100
-  regenSlow: 0.35
-  regenRestingWellFed: 2.5
-  autoCreateHud: 1
+  vitalsProfile: {fileID: 0}
 --- !u!114 &343648079753751361
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1589,25 +1500,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b24a47d61fa2bd540a8d998577e9f4c8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  hatchlingScale: 0.45
-  colossalScale: 1.7
-  fullGrowthMinutes: 25
-  startGrowth: 0
-  adultAt: 0.4
-  colossalAt: 0.85
-  mealGrowthBonus: 0.0012
-  startCondition: 0.5
-  gainKgPerMinute: 1
-  lossKgPerMinute: 1
-  starvingLossKgPerMinute: 3
-  mealWeightNudgeKg: 2
-  adultHealthyWeightKg: 950
-  oldAgeMinutes: 40
-  lifespanMinutes: 55
-  elderPenalty: 0.25
-  vigorGrowthPerPoint: 0.02
-  vigorLifespanPerPoint: 0.03
-  starveBelowHunger: 0.25
+  growthProfile: {fileID: 0}
 --- !u!114 &7383170009394333558
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1620,24 +1513,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f330a964f2be05b4cac73ea1e5c4e245, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxLevel: 10
-  startingPoints: 5
-  speedPerPoint: 0.06
-  accelSpeedPerPoint: 0.08
-  accelResistPerPoint: 0.03
-  damagePerPoint: 0.1
-  flamePerPoint: 0.08
-  dominanceBase: 30
-  dominancePerPoint: 12
-  healthPerPoint: 0.08
-  energyPerPoint: 0.1
-  hungerResistPerPoint: 0.04
-  takeoffClimbPerPoint: 0.12
-  ceilingBase: 150
-  ceilingPerPoint: 15
-  ceilingMaxPoints: 10
-  natureModifier: 0.1
-  ivBonusPerPoint: 0.1
+  attributeProfile: {fileID: 0}
 --- !u!114 &2878444471970049892
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1696,11 +1572,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 63b5c914d547b51429c6cd1e513064aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  duration: 2
-  dissolveProps:
-  - _DissolveAmount
-  - _Dissolve
-  - _DissolveValue
+  feedbackProfile: {fileID: 0}
+--- !u!114 &2069928974615473969
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1328021928562530}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: da4598b94708492409f3ed2b265802f1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  combatProfile: {fileID: 0}
 --- !u!1 &1334724701867080
 GameObject:
   m_ObjectHideFlags: 0

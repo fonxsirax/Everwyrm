@@ -28,8 +28,10 @@ using UnityEngine;
 ///  · NATUREZA favorece um atributo e prejudica outro (±natureModifier);
 ///  · IV (talento bruto 0..maxIV) por atributo, soma até `ivInfluence` × maxAttribute.
 ///
-/// BALANCEAMENTO: tudo é [SerializeField]. Simule fora do Play em
-/// <b>Tools > Everwyrm > Balanço do Dragão</b>, ou abra a ficha em jogo com Tab.
+/// BALANCEAMENTO: todos os números vivem no DragonAttributeProfile
+/// (Assets/Scriptables/Resources/Balance/DragonAttributes.asset) — este script só faz
+/// a conta. Simule fora do Play em <b>Tools > Everwyrm > Balanço do Dragão</b>, ou abra
+/// a ficha em jogo com Tab.
 ///
 /// A ANATOMIA de qual atributo dirige qual sistema está documentada no GDD
 /// (seção "Atributos do Dragão").
@@ -46,86 +48,26 @@ public class DragonAttributes : MonoBehaviour
     public enum Attribute { Agility, Might, Vigor, Ardor, Wind, Instinct }
     public const int Count = 6;
 
-    [Header("Escala dos atributos")]
-    [Tooltip("Valor de um atributo no auge da vida. A escala inteira do balanceamento.")]
-    [SerializeField] float maxAttribute = 10f;
+    [Header("Balanceamento")]
+    [Tooltip("As curvas de maturação e os ganhos por ponto vivem no asset " +
+             "Assets/Scriptables/Resources/Balance/DragonAttributes.asset. Vazio = " +
+             "esse padrão; arraste outro DragonAttributeProfile para variar por espécie.")]
+    [SerializeField] DragonAttributeProfile attributeProfile;
 
-    [Header("Maturidade (o motor dos atributos)")]
-    [Tooltip("Peso do CRESCIMENTO (tamanho, depende de comer bem) contra a IDADE pura. " +
-             "1 = só o tamanho manda; 0 = só a idade.")]
-    [SerializeField, Range(0f, 1f)] float growthWeight = 0.65f;
-    [Tooltip("Molda a maturidade crua (X) na efetiva (Y). Reta = amadurecer acompanha " +
-             "o crescimento; curva em S = infância longa e explosão na adolescência.")]
-    [SerializeField] AnimationCurve maturityCurve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
-    [Tooltip("Quanto a Velhice corrói os atributos no último suspiro (0.25 = -25%).")]
-    [SerializeField, Range(0f, 0.9f)] float elderDecline = 0.25f;
+    /// <summary>O perfil resolvido, sob demanda: o campo acima quando preenchido,
+    /// senão o asset padrão. PREGUIÇOSO de propósito — a janela de balanceamento
+    /// (Tools > Everwyrm > Balanço do Dragão) lê estes números direto no PREFAB,
+    /// fora do Play, onde nenhum Awake rodou.</summary>
+    DragonAttributeProfile cfgCache;
+    DragonAttributeProfile cfg => cfgCache != null ? cfgCache : (cfgCache = Balance.Resolve(attributeProfile));
 
-    [Header("Curvas por atributo (X = maturidade · Y = fração do máximo)")]
-    [Tooltip("Agilidade amadurece CEDO — o filhote já é ligeiro.")]
-    [SerializeField] AnimationCurve agilityCurve = Smooth(0f, 0.15f, 0.4f, 0.7f, 1f, 1f);
-    [Tooltip("Força vem com a MASSA — quase toda no fim.")]
-    [SerializeField] AnimationCurve mightCurve = Smooth(0f, 0f, 0.4f, 0.22f, 1f, 1f);
-    [Tooltip("Vigor sobe parelho com a vida inteira.")]
-    [SerializeField] AnimationCurve vigorCurve = Smooth(0f, 0.1f, 0.4f, 0.45f, 1f, 1f);
-    [Tooltip("Chama desperta na adolescência — nada no filhote, forte no adulto.")]
-    [SerializeField] AnimationCurve ardorCurve = Smooth(0f, 0f, 0.4f, 0.3f, 1f, 1f);
-    [Tooltip("Fôlego (energia/teto) acompanha a vida.")]
-    [SerializeField] AnimationCurve windCurve = Smooth(0f, 0.05f, 0.4f, 0.45f, 1f, 1f);
-    [Tooltip("Instinto é quase inato — o filhote já fareja, e refina com a idade.")]
-    [SerializeField] AnimationCurve instinctCurve = Smooth(0f, 0.2f, 0.4f, 0.6f, 1f, 1f);
+    /// <summary>Modo balanceamento (opcional): quando ligado, ignora IVs/natureza/idade e
+    /// usa um dragão de referência fixo. Resolvido silenciosamente — ausente = normal.
+    /// Lido a cada Refresh para responder a ajustes ao vivo no asset.</summary>
+    DragonBalanceOverride Ov => Balance.TryDefault<DragonBalanceOverride>();
 
-    [Header("Identidade (linhagem)")]
-    [Tooltip("Quanto a natureza favorece/prejudica um atributo (0.1 = ±10%, estilo Pokémon).")]
-    [SerializeField, Range(0f, 0.5f)] float natureModifier = 0.1f;
-    [Tooltip("IV máximo sorteado no nascimento (o teto do talento bruto de cada atributo).")]
-    [SerializeField] int maxIV = 31;
-    [Tooltip("Quanto o IV cheio vale em fração de maxAttribute (0.25 = +2.5 pontos).")]
-    [SerializeField, Range(0f, 1f)] float ivInfluence = 0.25f;
-
-    [Header("Ganhos por PONTO — Agilidade")]
-    [SerializeField] float speedGain = 0.04f;        // +4% vel. máxima por ponto
-    [SerializeField] float accelAgilityGain = 0.05f; // aceleração (Agilidade)
-    [SerializeField] float turnGain = 0.03f;         // giro (chão e voo)
-
-    [Header("Ganhos por PONTO — Força")]
-    [SerializeField] float damageGain = 0.09f;
-    [SerializeField] float boostGain = 0.05f;        // força do Wing Boost
-
-    [Header("Ganhos por PONTO — Vigor")]
-    [SerializeField] float healthGain = 0.10f;
-    [SerializeField] float accelVigorGain = 0.02f;   // aceleração (o empurrão do corpo)
-    [SerializeField] float hungerResistGain = 0.03f; // fome cai mais devagar
-
-    [Header("Ganhos por PONTO — Chama")]
-    [SerializeField] float flameGain = 0.06f;
-
-    [Header("Ganhos por PONTO — Fôlego")]
-    [SerializeField] float energyGain = 0.09f;            // duração do voo
-    [Tooltip("Reduz o CUSTO de energia de tudo (voar, correr, atacar) — o dragão " +
-             "de longa distância. Saturado em 0.5× de custo.")]
-    [SerializeField] float energyEfficiencyGain = 0.03f;
-    [SerializeField] float takeoffClimbGain = 0.06f;     // duração da subida de decolagem
-
-    [Header("Ganhos por PONTO — Instinto")]
-    [SerializeField] float dominanceBase = 30f;      // raio base do faro (m)
-    [SerializeField] float dominanceGain = 12f;
-    [Tooltip("Estica as janelas de invulnerabilidade (dash/boost/esquiva) — o dragão " +
-             "que atravessa o golpe.")]
-    [SerializeField] float iframeGain = 0.05f;
-    [Tooltip("Lê melhor as correntes de ar: updrafts/térmicas rendem mais sustentação.")]
-    [SerializeField] float windReadGain = 0.05f;
-
-    [Header("Teto de voo (Fôlego)")]
-    [Tooltip("Teto com 0 de Fôlego (m) — o filhote voa baixo.")]
-    [SerializeField] float ceilingBase = 150f;
-    [SerializeField] float ceilingGain = 15f;
-    [Tooltip("Pontos de Fôlego até o teto cheio (satura aqui).")]
-    [SerializeField] float ceilingCap = 10f;
-
-    [Header("Degraus de maturidade (desbloqueio de ataques)")]
-    [Tooltip("Em quantos degraus a maturidade é fatiada. É o número que o " +
-             "DragonAttackData.unlockLevel compara — não é um 'nível' de RPG.")]
-    [SerializeField] int maxTier = 10;
+    /// <summary>IVs zerados reutilizáveis para o modo balanceamento (nunca mutar).</summary>
+    static readonly int[] ZeroIvs = new int[Count];
 
     DragonGrowth growth;
 
@@ -145,15 +87,15 @@ public class DragonAttributes : MonoBehaviour
     public float PeakMaturity01 => peakMaturity;
     /// <summary>Quantos degraus de maturidade existem no total (o que
     /// DragonAttackData.unlockLevel compara). HUD/ficha usam para desenhar o progresso.</summary>
-    public int MaxTier => maxTier;
+    public int MaxTier => cfg.maxTier;
     /// <summary>0..1 dentro do degrau ATUAL — quanto falta para o próximo desbloqueio.
     /// 1 quando já está no degrau máximo (nada mais a desbloquear por maturidade).</summary>
     public float TierProgress01
     {
         get
         {
-            if (maxTier <= 1 || Tier >= maxTier) return 1f;
-            float span = 1f / (maxTier - 1);
+            if (cfg.maxTier <= 1 || Tier >= cfg.maxTier) return 1f;
+            float span = 1f / (cfg.maxTier - 1);
             float from = (Tier - 1) * span, to = Tier * span;
             return Mathf.Clamp01((peakMaturity - from) / Mathf.Max(0.0001f, to - from));
         }
@@ -169,11 +111,11 @@ public class DragonAttributes : MonoBehaviour
     public float Vigor => snap.vigor;
     public float Wind => snap.wind;
     public float Instinct => snap.instinct;
-    public float MaxAttribute => maxAttribute;
+    public float MaxAttribute => cfg.maxAttribute;
 
     // ---- Identidade exposta (HUD/ficha/balanço)
     public DragonNature Nature => nature;
-    public int MaxIV => maxIV;
+    public int MaxIV => cfg.maxIV;
     public int Iv(Attribute a) => ivs[(int)a];
 
     // ---- Multiplicadores consumidos pelos outros sistemas. Os NOMES herdados
@@ -232,13 +174,20 @@ public class DragonAttributes : MonoBehaviour
     {
         if (growth == null) return;
 
-        float m = MaturityFor(growth.Growth01, AgeProgress01, growth.ElderProgress);
-        snap = SnapshotAt(m, nature, ivs);
+        // Modo balanceamento: um dragão de REFERÊNCIA no lugar da linhagem deste dragão.
+        // Cada eixo respeita sua própria flag, então dá para religar um por um.
+        var ov = Ov;
+        DragonNature n = ov != null && ov.NatureNeutralized ? DragonNature.Balanced : nature;
+        int[] iv = ov != null && ov.IvsNeutralized ? ZeroIvs : ivs;
+        float m = ov != null && ov.MaturityFrozen
+            ? Mathf.Clamp01(ov.maturity01)
+            : MaturityFor(growth.Growth01, AgeProgress01, growth.ElderProgress);
+        snap = SnapshotAt(m, n, iv);
 
         // o Tier é MONOTÔNICO: envelhecer enfraquece o corpo, mas ninguém
         // desaprende um golpe já destravado
         if (m > peakMaturity) peakMaturity = m;
-        int tier = Mathf.Clamp(1 + Mathf.FloorToInt(peakMaturity * (maxTier - 1) + 0.0001f), 1, maxTier);
+        int tier = Mathf.Clamp(1 + Mathf.FloorToInt(peakMaturity * (cfg.maxTier - 1) + 0.0001f), 1, cfg.maxTier);
         bool tierUp = tier > Tier;
         Tier = tier;
 
@@ -261,10 +210,10 @@ public class DragonAttributes : MonoBehaviour
     /// balanceamento chama isto com valores hipotéticos.</summary>
     public float MaturityFor(float growth01, float ageProgress01, float elderProgress01)
     {
-        float raw = Mathf.Clamp01(growthWeight * Mathf.Clamp01(growth01) +
-                                  (1f - growthWeight) * Mathf.Clamp01(ageProgress01));
-        float m = Mathf.Clamp01(maturityCurve.Evaluate(raw));
-        return m * (1f - elderDecline * Mathf.Clamp01(elderProgress01));
+        float raw = Mathf.Clamp01(cfg.growthWeight * Mathf.Clamp01(growth01) +
+                                  (1f - cfg.growthWeight) * Mathf.Clamp01(ageProgress01));
+        float m = Mathf.Clamp01(cfg.maturityCurve.Evaluate(raw));
+        return m * (1f - cfg.elderDecline * Mathf.Clamp01(elderProgress01));
     }
 
     /// <summary>Os seis atributos e TODOS os derivados numa maturidade qualquer, com
@@ -277,29 +226,29 @@ public class DragonAttributes : MonoBehaviour
         var s = new AttributeSnapshot
         {
             maturity01 = m,
-            agility = Value(agilityCurve, m, iv, Attribute.Agility, n),
-            might = Value(mightCurve, m, iv, Attribute.Might, n),
-            vigor = Value(vigorCurve, m, iv, Attribute.Vigor, n),
-            ardor = Value(ardorCurve, m, iv, Attribute.Ardor, n),
-            wind = Value(windCurve, m, iv, Attribute.Wind, n),
-            instinct = Value(instinctCurve, m, iv, Attribute.Instinct, n),
+            agility = Value(cfg.agilityCurve, m, iv, Attribute.Agility, n),
+            might = Value(cfg.mightCurve, m, iv, Attribute.Might, n),
+            vigor = Value(cfg.vigorCurve, m, iv, Attribute.Vigor, n),
+            ardor = Value(cfg.ardorCurve, m, iv, Attribute.Ardor, n),
+            wind = Value(cfg.windCurve, m, iv, Attribute.Wind, n),
+            instinct = Value(cfg.instinctCurve, m, iv, Attribute.Instinct, n),
         };
 
-        s.speedMul = 1f + s.agility * speedGain;
-        s.accelMul = 1f + s.agility * accelAgilityGain + s.vigor * accelVigorGain;
-        s.turnMul = 1f + s.agility * turnGain;
-        s.damageMul = 1f + s.might * damageGain;
-        s.boostMul = 1f + s.might * boostGain;
-        s.flameMul = 1f + s.ardor * flameGain;
-        s.dominanceRadius = dominanceBase + s.instinct * dominanceGain;
-        s.healthMul = 1f + s.vigor * healthGain;
-        s.energyMul = 1f + s.wind * energyGain;
-        s.energyCostMul = Mathf.Max(0.5f, 1f - s.wind * energyEfficiencyGain);
-        s.hungerDecayMul = Mathf.Max(0.4f, 1f - s.vigor * hungerResistGain);
-        s.takeoffClimbMul = 1f + s.wind * takeoffClimbGain;
-        s.maxAltitude = ceilingBase + Mathf.Min(s.wind, ceilingCap) * ceilingGain;
-        s.iframeMul = 1f + s.instinct * iframeGain;
-        s.windReadMul = 1f + s.instinct * windReadGain;
+        s.speedMul = 1f + s.agility * cfg.speedGain;
+        s.accelMul = 1f + s.agility * cfg.accelAgilityGain + s.vigor * cfg.accelVigorGain;
+        s.turnMul = 1f + s.agility * cfg.turnGain;
+        s.damageMul = 1f + s.might * cfg.damageGain;
+        s.boostMul = 1f + s.might * cfg.boostGain;
+        s.flameMul = 1f + s.ardor * cfg.flameGain;
+        s.dominanceRadius = cfg.dominanceBase + s.instinct * cfg.dominanceGain;
+        s.healthMul = 1f + s.vigor * cfg.healthGain;
+        s.energyMul = 1f + s.wind * cfg.energyGain;
+        s.energyCostMul = Mathf.Max(0.5f, 1f - s.wind * cfg.energyEfficiencyGain);
+        s.hungerDecayMul = Mathf.Max(0.4f, 1f - s.vigor * cfg.hungerResistGain);
+        s.takeoffClimbMul = 1f + s.wind * cfg.takeoffClimbGain;
+        s.maxAltitude = cfg.ceilingBase + Mathf.Min(s.wind, cfg.ceilingCap) * cfg.ceilingGain;
+        s.iframeMul = 1f + s.instinct * cfg.iframeGain;
+        s.windReadMul = 1f + s.instinct * cfg.windReadGain;
         return s;
     }
 
@@ -307,19 +256,12 @@ public class DragonAttributes : MonoBehaviour
     /// tudo modulado pela natureza.</summary>
     float Value(AnimationCurve curve, float maturity01, int[] iv, Attribute a, DragonNature n)
     {
-        float baseValue = Mathf.Max(0f, curve.Evaluate(maturity01)) * maxAttribute;
+        float baseValue = Mathf.Max(0f, curve.Evaluate(maturity01)) * cfg.maxAttribute;
         int talentIv = iv != null && (int)a < iv.Length ? iv[(int)a] : 0;
-        float talent = maxIV > 0 ? (float)talentIv / maxIV * maxAttribute * ivInfluence : 0f;
-        return (baseValue + talent) * DragonNatureTable.Multiplier(n, a, natureModifier);
+        float talent = cfg.maxIV > 0 ? (float)talentIv / cfg.maxIV * cfg.maxAttribute * cfg.ivInfluence : 0f;
+        return (baseValue + talent) * DragonNatureTable.Multiplier(n, a, cfg.natureModifier);
     }
 
-    /// <summary>Curva suave por 3 pontos — os defaults das curvas de maturação.</summary>
-    static AnimationCurve Smooth(float x0, float y0, float x1, float y1, float x2, float y2)
-    {
-        var c = new AnimationCurve(new Keyframe(x0, y0), new Keyframe(x1, y1), new Keyframe(x2, y2));
-        for (int i = 0; i < 3; i++) c.SmoothTangents(i, 0f);
-        return c;
-    }
 
     // ============================================================ POSSESSÃO
     /// <summary>Carrega a IDENTIDADE (natureza/IVs) de um DragonRecord. Não há

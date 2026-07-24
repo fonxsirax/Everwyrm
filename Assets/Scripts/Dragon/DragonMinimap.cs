@@ -14,13 +14,19 @@ using UnityEngine.UI;
 /// </summary>
 public class DragonMinimap : MonoBehaviour
 {
-    [Header("Config")]
-    [SerializeField] float size = 220f;
-    [SerializeField] float margin = 30f;
-    [SerializeField] float rangeOverride = 0f;     // 0 = usa o faro (Dominância do Poder)
-    [SerializeField] float updateInterval = 0.1f;
+    [Header("Balanceamento")]
+    [Tooltip("O layout e a cadência do minimapa vivem no asset " +
+             "Assets/Scriptables/Resources/Balance/DragonHud.asset. Vazio = esse padrão.")]
+    [SerializeField] DragonHudProfile hudProfile;
 
-    // Ícones vêm do asset Assets/Scriptables/Resources/MinimapIcons.asset
+    /// <summary>O perfil resolvido, sob demanda: o campo acima quando preenchido,
+    /// senão o asset padrão. PREGUIÇOSO de propósito — a janela de balanceamento
+    /// (Tools > Everwyrm > Balanço do Dragão) lê estes números direto no PREFAB,
+    /// fora do Play, onde nenhum Awake rodou.</summary>
+    DragonHudProfile cfgCache;
+    DragonHudProfile cfg => cfgCache != null ? cfgCache : (cfgCache = Balance.Resolve(hudProfile));
+
+    // Ícones vêm do asset Assets/Scriptables/Resources/UI/MinimapIcons.asset
     // (MinimapIconSet) — configure sprites/cores/tamanhos lá, sem tocar na cena.
     Sprite dragonSprite, foodSprite, animalSprite, sunSprite, moonSprite;
     Color dragonColor = Color.white;
@@ -47,7 +53,7 @@ public class DragonMinimap : MonoBehaviour
         dragon = d.transform;
         attrs = a;
 
-        var icons = Resources.Load<MinimapIconSet>("MinimapIcons");
+        var icons = Resources.Load<MinimapIconSet>(MinimapIconSet.ResourcePath);
         if (icons != null)
         {
             dragonSprite = icons.dragonSprite;
@@ -71,11 +77,11 @@ public class DragonMinimap : MonoBehaviour
     void Update()
     {
         if (dragon == null || Time.unscaledTime < nextUpdate) return;
-        nextUpdate = Time.unscaledTime + updateInterval;
+        nextUpdate = Time.unscaledTime + cfg.updateInterval;
 
-        float range = rangeOverride > 0f ? rangeOverride
+        float range = cfg.rangeOverride > 0f ? cfg.rangeOverride
                     : attrs != null ? attrs.DominanceRadius : 120f;
-        float uiRadius = size * 0.5f - 14f;
+        float uiRadius = cfg.size * 0.5f - 14f;
 
         // seta central gira com o dragão (mapa fixo, norte pra cima)
         arrow.localEulerAngles = new Vector3(0f, 0f, -dragon.eulerAngles.y);
@@ -121,8 +127,8 @@ public class DragonMinimap : MonoBehaviour
         var root = (RectTransform)transform;
         root.anchorMin = root.anchorMax = new Vector2(1f, 0f);   // canto inferior DIREITO
         root.pivot = new Vector2(1f, 0f);
-        root.anchoredPosition = new Vector2(-margin, margin);
-        root.sizeDelta = new Vector2(size, size);
+        root.anchoredPosition = new Vector2(-cfg.margin, cfg.margin);
+        root.sizeDelta = new Vector2(cfg.size, cfg.size);
 
         var bg = new GameObject("BG", typeof(Image)).GetComponent<Image>();
         bg.transform.SetParent(root, false);
@@ -163,7 +169,7 @@ public class DragonMinimap : MonoBehaviour
         row.anchorMin = row.anchorMax = new Vector2(0.5f, 1f);   // topo do minimapa
         row.pivot = new Vector2(0.5f, 0f);
         row.anchoredPosition = new Vector2(0f, 4f);
-        row.sizeDelta = new Vector2(size, 26f);
+        row.sizeDelta = new Vector2(cfg.size, 26f);
 
         clockIcon = new GameObject("Icon", typeof(Image)).GetComponent<Image>();
         clockIcon.transform.SetParent(row, false);

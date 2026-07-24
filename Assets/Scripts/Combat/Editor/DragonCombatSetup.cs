@@ -4,7 +4,7 @@ using UnityEngine;
 /// <summary>
 /// Setup do sistema de combate por habilidades (teclas 1-4).
 /// Menu: Tools > Dragão > Combate — Habilidades (1-4)
-///  1. Cria a pasta Resources/Attacks e os ataques de exemplo
+///  1. Cria a pasta Resources/Entities/Attacks e os ataques de exemplo
 ///     (FireBall, Great Fire Ball, Incinerate + um melee físico);
 ///  2. Regenera o Animator (transições de saída p/ voo) e o prefab do dragão
 ///     (agora com DragonAbilities).
@@ -12,10 +12,10 @@ using UnityEngine;
 /// </summary>
 public static class DragonCombatSetup
 {
-    const string Dir = "Assets/Resources/Attacks";
+    const string Dir = "Assets/Scriptables/Resources/Entities/Attacks";
 
     // (menu removido na limpeza de jul/2026 — assets de ataque já criados em
-    //  Resources/Attacks; para rodar de novo, re-adicione o [MenuItem] aqui)
+    //  Resources/Entities/Attacks; para rodar de novo, re-adicione o [MenuItem] aqui)
     public static void Setup()
     {
         if (!AssetDatabase.IsValidFolder("Assets/Resources"))
