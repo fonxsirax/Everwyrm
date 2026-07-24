@@ -444,6 +444,7 @@ Ideias aprovadas em espírito, fora do escopo até a espinha ser jogável:
 - Rede de segurança de linhagem (ovo selvagem garantido).
 - Eventos dramáticos de acasalamento (rival, disputa).
 - Defesa de base (eventos que ameaçam construções).
+- Disputas PvP (1×1) com seu dragão — duelo entre dragões de jogadores; depende do multiplayer (F4).
 - Mapa de tamanho fixo (configurável na criação do save), ainda procedural — permite garantir
   biomas em posições coerentes (gelo e deserto em extremos opostos, sem transições
   "impossíveis") e simplifica muita coisa. Mais coerente que o modelo Minecraft (sandbox
