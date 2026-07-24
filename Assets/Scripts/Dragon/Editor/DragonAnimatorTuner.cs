@@ -267,8 +267,16 @@ public static class DragonAnimatorTuner
         }
 
         int n = 0;
-        n += SetIf(ref p.takeoffClimbRate, 9f);   // era 6.5: MENOR que o impulso de
-                                                  // entrada, então subir puxava pra baixo
+        // subida por batida do sistema de atributos automáticos: a força vem do
+        // PESO (DragonGrowth.FlapLiftMul), não mais do tamanho do corpo (ver
+        // DragonFlight). NERF jul/2026: a 1ª calibração (12/17/21/13) ficou apelona —
+        // quase um flap já saturava o teto de subida. Reduzidos (flapLift/flapBonusLift
+        // a 1/4) para exigir RITMO (batidas + planeio), não um único flap perfeito.
+        n += SetIf(ref p.takeoffClimbRate, 6f);
+        n += SetIf(ref p.flapLift, 4.25f);
+        n += SetIf(ref p.maxRiseSpeed, 10f);
+        n += SetIf(ref p.flapBonusLift, 3.25f);
+        n += SetIf(ref p.energyPerFlap, 3f);
         n += SetIf(ref p.flapMinInterval, 0.22f);
         n += SetIf(ref p.cycleRecovery, 0.3f);
         n += SetIf(ref p.sinkAtStall, 3f);

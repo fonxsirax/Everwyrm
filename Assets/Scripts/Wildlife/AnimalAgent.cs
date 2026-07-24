@@ -29,7 +29,7 @@ public class AnimalAgent : MonoBehaviour
     public AnimalAgent Mother { get; internal set; }   // filhotes nunca andam sós
     public Carcass Corpse { get; private set; }
     public bool IsDead => behaviour == B.Dead;
-    public bool IsYoung => Role != null && Role.kind == AnimalDefinition.RoleKind.Filhote;
+    public bool IsYoung => Role != null && Role.kind == AnimalDefinition.RoleKind.Young;
     public bool IsLeader => Group != null && Group.Leader == this;
 
     enum B

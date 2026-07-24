@@ -12,17 +12,23 @@ using UnityEngine;
 /// CrossFade da animação + trava de ações → após castTime o efeito dispara
 /// (projétil, área ou melee) → cooldown.
 ///
-/// Desbloqueio: assina DragonAttributes.OnLevelUp; ataques com unlockLevel
-/// alcançado destravam e entram sozinhos no primeiro slot livre.
+/// Desbloqueio: assina DragonAttributes.OnTierUp — o dragão destrava golpes ao
+/// AMADURECER (crescer e envelhecer), não por gastar pontos. Ataques com
+/// unlockLevel alcançado entram sozinhos no primeiro slot livre.
 /// Observer: OnLoadoutChanged / OnAttackUnlocked / OnAttackFired para o HUD.
 /// </summary>
 [RequireComponent(typeof(DragonController))]
 public class DragonAbilities : MonoBehaviour
 {
-    public const int SlotCount = 4;
+    /// <summary>Teto RÍGIDO de slots (dimensiona os arrays) — 4 padrão + 1 de mutação
+    /// (DragonRecord.bonusAttackSlots). Acrescentar mais slots de mutação no futuro
+    /// exige subir este número também.</summary>
+    public const int MaxSlotCount = 5;
 
     [Header("Loadout inicial (vazio — tudo vem por desbloqueio)")]
-    [SerializeField] DragonAttackData[] slots = new DragonAttackData[SlotCount];
+    [Tooltip("Slots ativos por padrão, sem mutação (balanceamento).")]
+    [SerializeField] int baseSlotCount = 4;
+    [SerializeField] DragonAttackData[] slots = new DragonAttackData[MaxSlotCount];
 
     [Tooltip("Ataques extras além dos carregados de Resources/Attacks.")]
     [SerializeField] List<DragonAttackData> extraAttacks = new();
@@ -32,11 +38,18 @@ public class DragonAbilities : MonoBehaviour
     readonly List<DragonAttackData> known = new();     // todos os ataques do jogo
     readonly List<DragonAttackData> unlocked = new();
     readonly Dictionary<DragonAttackData, float> cooldownUntil = new();
+    int bonusSlots;   // de DragonRecord.bonusAttackSlots (mutação — ver LoadFrom)
+
+    /// <summary>Slots realmente ativos AGORA: base + bônus de mutação, sempre travado
+    /// no teto rígido. HUD e input consultam isto, não MaxSlotCount.</summary>
+    public int ActiveSlotCount => Mathf.Clamp(baseSlotCount + bonusSlots, 1, MaxSlotCount);
 
     DragonController dragon;
     DragonVitals vitals;          // opcional (padrão do projeto)
     DragonAttributes attrs;       // opcional
     DragonGrowth growth;          // opcional
+    DragonTraits traitsCache;     // opcional (adicionado em runtime pelo Controller)
+    DragonTraits Traits => traitsCache != null ? traitsCache : (traitsCache = GetComponent<DragonTraits>());
     Animator anim;
 
     // ---- Observer
@@ -58,56 +71,67 @@ public class DragonAbilities : MonoBehaviour
 
     void OnEnable()
     {
-        if (attrs != null) attrs.OnLevelUp += OnLevelUp;
+        if (attrs != null) attrs.OnTierUp += OnTierUp;
     }
 
     void OnDisable()
     {
-        if (attrs != null) attrs.OnLevelUp -= OnLevelUp;
+        if (attrs != null) attrs.OnTierUp -= OnTierUp;
     }
 
     void Start()
     {
-        // data-driven: todo asset em Resources/Attacks entra no jogo sozinho
-        known.AddRange(Resources.LoadAll<DragonAttackData>("Attacks"));
-        foreach (var a in extraAttacks)
-            if (a != null && !known.Contains(a)) known.Add(a);
-        known.Sort((a, b) => a.unlockLevel.CompareTo(b.unlockLevel));
+        EnsureKnown();
 
         // slots pré-preenchidos no Inspector contam como desbloqueados
         foreach (var s in slots)
             if (s != null && !unlocked.Contains(s)) unlocked.Add(s);
 
-        CheckUnlocks(attrs != null ? attrs.Level : 1, announce: false);
+        CheckUnlocks(attrs != null ? attrs.Tier : 1, announce: false);
 
         if (autoCreateHud && FindFirstObjectByType<DragonAttackHUD>() == null)
             new GameObject("Attack HUD").AddComponent<DragonAttackHUD>().Bind(this, dragon, vitals);
+    }
+
+    /// <summary>Popula o catálogo de ataques (idempotente): todo asset em
+    /// Resources/Attacks + os extras. Chamado no Start e na possessão (LoadFrom).</summary>
+    void EnsureKnown()
+    {
+        if (known.Count > 0) return;
+        known.AddRange(Resources.LoadAll<DragonAttackData>("Attacks"));
+        foreach (var a in extraAttacks)
+            if (a != null && !known.Contains(a)) known.Add(a);
+        known.Sort((a, b) => a.unlockLevel.CompareTo(b.unlockLevel));
     }
 
     void Update()
     {
         if (DragonStatsMenu.IsOpen || dragon.IsDead) return;
 
-        // bindings centralizados no DragonInput (preparo p/ gamepad futuro)
-        if (DragonInput.AbilityDown(0)) TryUse(0);
-        else if (DragonInput.AbilityDown(1)) TryUse(1);
-        else if (DragonInput.AbilityDown(2)) TryUse(2);
-        else if (DragonInput.AbilityDown(3)) TryUse(3);
+        // bindings centralizados no DragonInput (preparo p/ gamepad futuro).
+        // Só até ActiveSlotCount — o slot de mutação (5) só responde a quem o tem.
+        for (int i = 0; i < ActiveSlotCount; i++)
+            if (DragonInput.AbilityDown(i)) { TryUse(i); break; }
     }
 
     // ============================================================== EXECUÇÃO
     public void TryUse(int slot)
     {
+        if (slot >= ActiveSlotCount) return;   // slot de mutação sem o bônus: nada
         var a = GetSlot(slot);
         if (a == null) return;
         if (dragon.ActionsLocked || dragon.IsResting || dragon.IsSwimming) return;
         if (Time.time < CooldownEnd(a)) return;
         if (dragon.IsFlying && !a.usableInFlight) return;
 
-        float costMul = growth != null ? growth.EnergyCostMul : 1f;
+        // custo: peso (growth) × EFICIÊNCIA do Fôlego (attrs)
+        float costMul = (growth != null ? growth.EnergyCostMul : 1f)
+                      * (attrs != null ? attrs.EnergyCostMul : 1f);
         if (vitals != null && !vitals.TrySpend(a.energyCost * costMul)) return;
 
-        cooldownUntil[a] = Time.time + a.cooldown;
+        // Fôlego de Forja: o sopro (isFire) ignora o cooldown
+        float cdMul = a.isFire && Traits != null ? Traits.FireCooldownMul : 1f;
+        cooldownUntil[a] = Time.time + a.cooldown * cdMul;
 
         // CrossFade direto para o estado (mesmo padrão do AnimalAgent): funciona
         // do chão E do voo — as transições de saída do Animator devolvem para
@@ -168,14 +192,14 @@ public class DragonAbilities : MonoBehaviour
     }
 
     // ============================================================ DESBLOQUEIO
-    void OnLevelUp(int level) => CheckUnlocks(level, announce: true);
+    void OnTierUp(int tier) => CheckUnlocks(tier, announce: true);
 
-    void CheckUnlocks(int level, bool announce)
+    void CheckUnlocks(int tier, bool announce)
     {
         bool changed = false;
         foreach (var a in known)
         {
-            if (unlocked.Contains(a) || a.unlockLevel > level) continue;
+            if (unlocked.Contains(a) || a.unlockLevel > tier) continue;
             unlocked.Add(a);
             int slot = AutoEquip(a);
             changed = true;
@@ -187,18 +211,19 @@ public class DragonAbilities : MonoBehaviour
         if (changed) OnLoadoutChanged?.Invoke();
     }
 
-    /// <summary>Coloca no primeiro slot livre. -1 = todos ocupados.</summary>
+    /// <summary>Coloca no primeiro slot ATIVO livre. -1 = todos ocupados (ou sem
+    /// slot extra de mutação — o ataque fica desbloqueado, só não equipado).</summary>
     int AutoEquip(DragonAttackData a)
     {
-        for (int i = 0; i < SlotCount; i++)
+        for (int i = 0; i < ActiveSlotCount; i++)
             if (slots[i] == null) { slots[i] = a; return i; }
         return -1;
     }
 
-    /// <summary>Equipa um ataque JÁ desbloqueado num slot (troca o que estiver lá).</summary>
+    /// <summary>Equipa um ataque JÁ desbloqueado num slot ATIVO (troca o que estiver lá).</summary>
     public bool Equip(DragonAttackData a, int slot)
     {
-        if (slot < 0 || slot >= SlotCount) return false;
+        if (slot < 0 || slot >= ActiveSlotCount) return false;
         if (a != null && !unlocked.Contains(a)) return false;
         slots[slot] = a;
         OnLoadoutChanged?.Invoke();
@@ -218,7 +243,7 @@ public class DragonAbilities : MonoBehaviour
 
     // ============================================================= CONSULTAS
     public DragonAttackData GetSlot(int i) =>
-        i >= 0 && i < SlotCount ? slots[i] : null;
+        i >= 0 && i < MaxSlotCount ? slots[i] : null;
 
     float CooldownEnd(DragonAttackData a) =>
         cooldownUntil.TryGetValue(a, out float t) ? t : 0f;
@@ -232,6 +257,50 @@ public class DragonAbilities : MonoBehaviour
         var a = GetSlot(slot);
         return a == null || a.cooldown <= 0f ? 0f
              : Mathf.Clamp01(CooldownLeft(a) / a.cooldown);
+    }
+
+    // ============================================================ POSSESSÃO
+    /// <summary>Restaura o BÔNUS DE SLOT (mutação) e o loadout salvo (por nome de
+    /// ataque) de um DragonRecord, depois reavalia desbloqueios e preenche qualquer
+    /// slot ATIVO ainda vazio com algo já desbloqueado. Essa última parte cobre a
+    /// ordem de Awake/Start entre componentes NÃO ser garantida: se o bônus de slot
+    /// só chegar depois do Start (que já rodou CheckUnlocks com ActiveSlotCount
+    /// menor), o 5º slot apareceria vazio até o próximo degrau sem este passe.</summary>
+    public void LoadFrom(DragonRecord record)
+    {
+        bonusSlots = record.bonusAttackSlots;
+        EnsureKnown();
+
+        var names = record.state.equippedAttackNames;
+        if (names != null && names.Length > 0)
+        {
+            for (int i = 0; i < MaxSlotCount; i++)
+            {
+                string n = i < names.Length ? names[i] : null;
+                var a = string.IsNullOrEmpty(n) ? null : known.Find(k => k.attackName == n);
+                slots[i] = a;
+                if (a != null && !unlocked.Contains(a)) unlocked.Add(a);
+            }
+        }
+
+        CheckUnlocks(attrs != null ? attrs.Tier : 1, announce: false);
+        for (int i = 0; i < ActiveSlotCount; i++)
+        {
+            if (slots[i] != null) continue;
+            var candidate = unlocked.Find(a => Array.IndexOf(slots, a) < 0);
+            if (candidate == null) break;
+            slots[i] = candidate;
+        }
+
+        OnLoadoutChanged?.Invoke();
+    }
+
+    public void WriteTo(DragonState s)
+    {
+        var names = new string[MaxSlotCount];
+        for (int i = 0; i < MaxSlotCount; i++)
+            names[i] = slots[i] != null ? slots[i].attackName : null;
+        s.equippedAttackNames = names;
     }
 
     /// <summary>Nome do estado no Animator para cada animação do enum.</summary>

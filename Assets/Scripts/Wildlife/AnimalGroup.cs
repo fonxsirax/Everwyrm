@@ -59,8 +59,8 @@ public class AnimalGroup
     public void Register(AnimalAgent a)
     {
         Members.Add(a);
-        if (Leader == null || a.Role.kind == AnimalDefinition.RoleKind.Lider)
-            if (Leader == null || Leader.Role.kind != AnimalDefinition.RoleKind.Lider)
+        if (Leader == null || a.Role.kind == AnimalDefinition.RoleKind.Leader)
+            if (Leader == null || Leader.Role.kind != AnimalDefinition.RoleKind.Leader)
                 Leader = a;
     }
 
@@ -78,7 +78,7 @@ public class AnimalGroup
     {
         Leader = null;
         foreach (var m in Members)
-            if (m.Role.kind != AnimalDefinition.RoleKind.Filhote) { Leader = m; break; }
+            if (m.Role.kind != AnimalDefinition.RoleKind.Young) { Leader = m; break; }
         if (Leader == null && Members.Count > 0) Leader = Members[0];
     }
 

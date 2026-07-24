@@ -390,10 +390,10 @@ public class WildlifeSpawner : MonoBehaviour
         foreach (var role in def.roles)
         {
             if (role == null) continue;
-            if (spawned >= budget && role.kind != AnimalDefinition.RoleKind.Lider) continue;
+            if (spawned >= budget && role.kind != AnimalDefinition.RoleKind.Leader) continue;
             if (Random.value > role.chance) continue;
 
-            if (role.kind == AnimalDefinition.RoleKind.Filhote)
+            if (role.kind == AnimalDefinition.RoleKind.Young)
             {
                 // filhotes só existem se houver adultos — guardamos para o fim
                 youngRoles.Add(role);
@@ -402,7 +402,7 @@ public class WildlifeSpawner : MonoBehaviour
 
             int count = solo ? (spawned == 0 ? 1 : 0)
                              : Random.Range(role.count.x, role.count.y + 1);
-            for (int i = 0; i < count && (spawned < budget || role.kind == AnimalDefinition.RoleKind.Lider); i++)
+            for (int i = 0; i < count && (spawned < budget || role.kind == AnimalDefinition.RoleKind.Leader); i++)
             {
                 var a = SpawnOne(def, role, group, origin, slot++);
                 if (a != null) { adults.Add(a); spawned++; }

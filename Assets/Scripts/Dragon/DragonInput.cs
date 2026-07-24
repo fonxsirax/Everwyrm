@@ -116,6 +116,7 @@ public static class DragonInput
         1 => Input.GetKeyDown(KeyCode.Alpha2),
         2 => Input.GetKeyDown(KeyCode.Alpha3),
         3 => Input.GetKeyDown(KeyCode.Alpha4),
+        4 => Input.GetKeyDown(KeyCode.Alpha5),   // slot extra (mutação — raro)
         _ => false,
     };
 

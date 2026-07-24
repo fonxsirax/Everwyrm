@@ -172,35 +172,140 @@ Sem game over dedicado por enquanto: o jogo suporta **múltiplos saves e voltar 
 salvo**. Se a linhagem acabar, o jogador recarrega. (Rede de segurança adicional — ovo
 selvagem garantido — fica como opção futura.)
 
-## Atributos (proposta v2)
+## Atributos do Dragão (rework de 6 atributos — jul/2026) **[IMPL]**
 
-Valor final de cada atributo:
+> Esta seção é o **mapa de ajuste** do sistema de atributos: onde cada número vive e
+> quem ele governa. Todos os campos citados são `[SerializeField]` no componente
+> `DragonAttributes` do prefab `Unka Realistic` (ajuste no Inspector) e podem ser
+> simulados sem jogar em **Tools > Everwyrm > Balanço do Dragão**.
+
+### Como os atributos sobem — SEM pontos
+
+Não existe "level up com distribuição de pontos". Os atributos crescem **sozinhos**
+com a **MATURIDADE** do dragão. Cada atributo tem sua própria **curva** (`AnimationCurve`
+no Inspector), então uns chegam cedo e outros só no fim.
 
 ```
-Atributo = Base da fase de vida
-         × CurvaDeIdade (sobe até o Colossal, declina na velhice)
-         × Natureza (±10% em 2 atributos)
-         × (1 + IV)                  ← genético, oculto
-         + Treino (pontos por nível) ← escolha do jogador [IMPL]
-         + Nutrição (bônus por alimentação, com teto)
+Maturidade = Curva( growthWeight·Crescimento + (1−growthWeight)·Idade )   [0..1]
+             × (1 − elderDecline·Velhice)          ← a velhice corrói
+
+Atributo   = CurvaDoAtributo(Maturidade) × maxAttribute       ← base pela idade
+           + (IV / maxIV) × maxAttribute × ivInfluence        ← talento genético
+           , tudo × Natureza (±natureModifier)
 ```
 
-Cinco atributos (era 3 — Dominância sai de Poder e vira Instinto; Vitalidade é nova):
+Campos de tuning (em `DragonAttributes`): `maxAttribute` (escala, default 10),
+`growthWeight` (peso do tamanho vs. idade), `maturityCurve`, `elderDecline`,
+`natureModifier`, `maxIV`, `ivInfluence`, `maxTier`, e uma `AnimationCurve` por
+atributo (`agilityCurve`, `mightCurve`, `vigorCurve`, `ardorCurve`, `windCurve`,
+`instinctCurve`).
 
-| Atributo | Governa |
-|---|---|
-| **Velocidade** | Corrida, aceleração, voo, mergulho, nado |
-| **Poder** | Dano físico, dano/tamanho/alcance da chama |
-| **Resistência** | Vida, energia, teto de voo, resistência à fome, decolagem |
-| **Vitalidade** *(novo)* | **Tempo de vida** (dragões com Vitalidade alta vivem mais dias), velocidade de crescimento, regeneração, início mais tardio da velhice |
-| **Instinto** *(novo)* | Faro/Dominância Territorial (detecção de comida, fauna, eventos, tesouros no minimapa) **[IMPL como Poder]**, eficiência de tocaia/caça |
+### Os 6 atributos e o que cada um governa
 
-Naturezas propostas (**[ABERTO]** aprovar/expandir): Dócil (+Vit −Pod) · Agressivo
-(+Pod −Inst) · Arisco (+Vel −Vit) · Estoico (+Res −Vel) · Astuto (+Inst −Res) ·
-Voraz (+Res −Inst) · Imponente (+Pod −Vel) · Sereno (+Vit −Pod). Neutras possíveis.
+Migração do sistema de 3 (Velocidade→**Agilidade**, Poder→**Força**,
+Resistência→**Vigor**), mais 3 novos (Chama, Fôlego, Instinto):
 
-Treino: 1 ponto por nível, nível deriva do crescimento (sem XP tradicional) **[IMPL]**.
-Velhice reduz **todos** os atributos via CurvaDeIdade.
+| Atributo | Governa (multiplicador → onde é consumido) | Campo do ganho |
+|---|---|---|
+| **Força** (Might) | dano físico (`DamageMul`→DragonAbilities) · força do Wing Boost (`BoostMul`→DragonController) | `damageGain`, `boostGain` |
+| **Chama** (Ardor) | tamanho/dano da chama e queimadura (`FlameSizeMul`→ataques `isFire`) | `flameGain` |
+| **Agilidade** (Agility) | velocidade máx. (`SpeedMul`) · aceleração (`AccelMul`) · giro chão/voo (`TurnMul`) | `speedGain`, `accelAgilityGain`, `turnGain` |
+| **Vigor** (Vigor) | vida (`MaxHealthMul`) · aguenta a fome (`HungerDecayMul`) · empurrão do corpo (`AccelMul`). O **IV de Vigor** também acelera o crescimento e alonga a vida (DragonGrowth) | `healthGain`, `hungerResistGain`, `accelVigorGain` |
+| **Fôlego** (Wind) | energia máx. (`MaxEnergyMul`) · **eficiência** de energia — custo de tudo (`EnergyCostMul`) · subida de decolagem (`TakeoffClimbMul`) · **teto de voo** (`MaxAltitude`) | `energyGain`, `energyEfficiencyGain`, `takeoffClimbGain`, `ceilingBase/Gain/Cap` |
+| **Instinto** (Instinct) | faro/dominância no minimapa (`DominanceRadius`) · **janelas de i-frame** dash/boost/esquiva (`IFrameMul`) · **leitura das correntes de ar** (`WindReadMul`) | `dominanceBase/Gain`, `iframeGain`, `windReadGain` |
+
+Os **nomes** dos multiplicadores herdados (`SpeedMul`, `DamageMul`, etc.) foram
+mantidos apontando para os novos atributos, então os consumidores não mudaram — só a
+fonte por trás. Os multiplicadores **novos** do rework: `TurnMul`, `BoostMul`,
+`EnergyCostMul`, `IFrameMul`, `WindReadMul`.
+
+### Natureza (temperamento) — 15 no total
+
+Cada natureza sobe um atributo e baixa outro (±`natureModifier`, default 10%). Três
+são neutras. As 9 antigas mantiveram o índice de serialização (efeito remapeado); 6
+novas cobrem Chama/Fôlego/Instinto. Tabela em `DragonNature.cs`
+(`DragonNatureTable.Effect`): Fierce (+Força −Vigor) · Brutal (+Força −Agi) · Agile
+(+Agi −Força) · Stealthy (+Agi −Vigor) · Sturdy (+Vigor −Agi) · Tenacious (+Vigor
+−Força) · Fiery (+Chama −Fôlego) · Smoldering (+Chama −Vigor) · Tireless (+Fôlego
+−Força) · Windborne (+Fôlego −Agi) · Cunning (+Instinto −Força) · Feral (+Instinto
+−Fôlego). **[ABERTO]**: renomear para PT no futuro (identificadores ficam EN).
+
+### IVs (talento por atributo) e a Maturidade → Degrau
+
+- **6 IVs** (um por atributo), 0..`maxIV` (31), sorteados no nascimento. Migração:
+  dragões salvos herdam Velocidade→Agilidade, Poder→Força, Resistência→Fôlego (via
+  `FormerlySerializedAs`); Chama e Instinto nascem 0 em dragões antigos. O IV de Vigor
+  manteve o nome (era o talento de vida longa, agora também é o atributo Vigor).
+- **Degrau de maturidade** (`Tier`, 1..`maxTier`): fatia a maturidade em degraus. É o
+  que `DragonAttackData.unlockLevel` compara para desbloquear ataques. O Tier é
+  **monotônico** — envelhecer enfraquece o corpo, mas não se desaprende um golpe.
+- **Serialização**: a ordem do enum `Attribute` (Agility, Might, Vigor, Ardor, Wind,
+  Instinct) e do enum `DragonNature` são contrato — só **acrescente no fim**.
+
+> ⚠️ **Nota de re-serialização do prefab**: o rework renomeou/adicionou campos em
+> `DragonAttributes`. Ao abrir o Unity, os campos NOVOS assumem os defaults do código
+> (curvas e ganhos acima); valores de curva tunados na refatoração anterior de 3
+> atributos se perdem. **Reabra o Balanço do Dragão e retune as 6 curvas** — é rápido.
+
+## Traços herdáveis **[IMPL]**
+
+A camada qualitativa da linhagem (inspiração: passivas do Palworld). Cada dragão nasce
+com **0..3 traços** sorteados (`DragonRecord.MaxTraitSlots`), herdados na reprodução
+(`Breed`, ~55% por traço + chance de mutação). Todo traço tem efeito nomeado e um
+trade-off. Dados em `DragonTrait.cs`; **números e fiação em `DragonTraits.cs`** (é lá
+que se balanceia). Sem record, a lista fica vazia e tudo é neutro.
+
+| Traço | Efeito (número) | Onde é aplicado |
+|---|---|---|
+| **Sangue Frio** | −30% custo de energia no frio (Tundra/Montanha), +30% no calor (Deserto) | `EnergyCostBiomeMul` → DragonController.CostMul |
+| **Ossos Ocos** | −15% peso · plana melhor (−20% afundamento) · −15% vida · +25% dano de queda | DragonFlight.SinkMul, DragonVitals.MaxHealthEff, DragonController.ResolveFall |
+| **Estômago de Ferro** | +25% de nutrição por refeição | DragonController (comer) |
+| **Termonauta** | 2× aproveitamento das correntes de ar | DragonFlight.WindReadMul |
+| **Insone** | +60% regen de energia parado (dispensa o R) · +20% fome | DragonVitals |
+| **Fôlego de Forja** | sopro (isFire) sem cooldown · −30% vida | DragonAbilities.cooldown, DragonVitals |
+| **Guelras Vestigiais** | +50% nado · respira submerso (nado sem custo) · −15% teto de voo | DragonController (nado), DragonFlight.Ceiling |
+| **Couraça** | −20% dano recebido · −10% giro | DragonVitals.Damage, DragonController.TurnMul |
+
+**[ABERTO]** — traços fáceis de acrescentar depois (só entrar no fim do enum
+`DragonTrait` e dar um acessor em `DragonTraits`): visão noturna, olfato aguçado
+(compõe com Instinto), pele ígnea (imune a fogo), etc.
+
+## Mutação (o motor da linhagem) **[IMPL]** — revisado jul/2026
+
+**UMA rolagem por ninhada**, não mais uma por IV. A versão original rolava
+`mutationChance` (8%) **6 vezes independentes** (uma por atributo) — na prática quase
+toda ninhada saía com "algum" outlier, virou ruído (número subindo sem graça) em vez de
+prêmio raro. `DragonRecord.Breed` agora faz UM sorteio (`RollMutation`) com dois
+resultados possíveis, e o resto da ninhada nasce sem mutação nenhuma:
+
+| Resultado | Chance (knob) | Efeito |
+|---|---|---|
+| **Slot de ataque extra** *(preferido)* | `extraSlotMutationChance` (2%) | `record.bonusAttackSlots = 1` — um 5º slot de golpe (tecla 5), acima dos 4 padrão. Ver DragonAbilities abaixo |
+| Outlier de stat | `statMutationChance` (5%) | UM atributo aleatório parte do melhor pai e **ultrapassa o teto** normal (até +`ivOutlierBonus`=4) |
+| Nada | ~93% | ninhada normal — os 6 IVs só herdam (mid/melhor pai ± desvio), sem overshoot |
+
+Por quê preferir o slot: um golpe a mais no loadout **muda o jogo** de um jeito que
+mais uns pontos num atributo que já satura não muda. `record.mutations` (0 ou 1) e
+`bonusAttackSlots` aparecem na ficha e no log de possessão.
+
+**Knobs de balanceamento** (`[SerializeField]` em `DragonBase`, seção "Balanceamento da
+MUTAÇÃO"): `traitMutationChance` (natureza/genes/traços, 8%), `statMutationChance` (5%),
+`extraSlotMutationChance` (2%), `ivOutlierBonus` (4). `DragonBase.BreedNew(...)` é o
+ponto de entrada pronto para quando a reprodução em jogo (ninho/ovo) existir — hoje
+nada chama Breed() ainda (F0 placeholder), mas os knobs já estão no Inspector.
+
+### Slot de ataque extra (DragonAbilities)
+
+`MaxSlotCount` = 5 é o teto rígido (dimensiona os arrays); `baseSlotCount` = 4
+(`[SerializeField]`, balanceável) é o padrão sem mutação. `ActiveSlotCount = base +
+bonusAttackSlots`, sempre travado no teto. O 5º slot só aparece na HUD
+(`DragonAttackHUD`) e só responde à tecla `5` (`DragonInput.AbilityDown`) para quem
+nasceu com o bônus — a maioria dos dragões nunca o vê.
+
+> Os **genes visuais** (espinhos, cor) NÃO recebem outlier por ora: empurrar uma blend
+> shape além de 100 arrisca deformar o modelo, e isso precisa de validação visual no
+> Unity. A mutação vive no domínio dos **stats/slots**. **[ABERTO]** estender a genes
+> depois de testar o alcance seguro das morphs.
 
 ## Alimentação 2.0
 
@@ -221,9 +326,10 @@ Substitui o modelo v1 ("carne genérica enche a fome"):
 
 ## Combate, Skills e Pergaminhos
 
-- **[IMPL]** 4 slots de habilidade (teclas 1–4), ataques como assets data-driven
-  (projétil/área/melee, queimadura, área de fogo), desbloqueio por nível, dano/chama
-  escalam com Poder e tamanho do corpo.
+- **[IMPL]** 4 slots de habilidade (teclas 1–4; **5º slot raro** por mutação — ver
+  "Mutação"), ataques como assets data-driven (projétil/área/melee, queimadura, área de
+  fogo), desbloqueio por **degrau de maturidade** (não por pontos), dano escala com
+  **Força** e o raio da chama com **Chama**, ambos × tamanho do corpo.
 - **Pergaminhos** *(novo)*: bosses derrotados liberam pergaminhos que ensinam **novas
   skills** — e skills aprendidas **podem ser herdadas** pelos filhotes. É a ponte
   boss → genética: o desafio de hoje vira o enxoval da próxima geração.
@@ -265,8 +371,17 @@ podem voltar como megafauna de evento. **[ABERTO]**.
 **[IMPL]** — voo como habilidade: ciclo de batidas com bônus de timing, planeio sustentado
 por velocidade, mergulho, estol por exaustão, colisão física sem dano (o chão machuca,
 via queda), pouso automático rente ao chão, updrafts nas montanhas, **teto de voo por
-Resistência** (ar rarefeito, sem parede invisível), natação e voo rasante com spray.
+Fôlego** (ar rarefeito, sem parede invisível), natação e voo rasante com spray.
 Números centralizados em FlightProfile (asset) — pronto para variações por idade/fase.
+
+> **NERF jul/2026**: a calibração anterior do impulso de voo (`flapLift` 17,
+> `flapBonusLift` 13, `maxRiseSpeed` 21, `takeoffClimbRate` 12) ficou apelona — quase
+> um flap já quase saturava o teto de subida. `flapLift`/`flapBonusLift` caíram para
+> **1/4** (4.25 / 3.25); `maxRiseSpeed` e `takeoffClimbRate` também baixaram (10 / 6).
+> Junto, a variação de sustentação por PESO (`DragonGrowth.liftWhenLean/Fat`) foi
+> estreitada (era 1.3↔0.5 = ~2.6× de diferença entre magro e gordo; agora 1.1↔0.85,
+> ~1.3×) — o impulso não deve variar muito de dragão pra dragão. Voar de verdade agora
+> pede RITMO (batidas + planeio), não um único flap quase-perfeito.
 
 **Rework hack and slash (jul/2026) [IMPL]** — o voo virou o brinquedo do predador:
 
@@ -349,10 +464,14 @@ fauna **[IMPL]**).
   `R` descansar · `G` comer · `Tab` ficha. Bindings centralizados em
   `DragonInput` (preparo p/ gamepad).
 - Esquema final ainda converge para mouse-driven. **[ABERTO]** gamepad.
-- UI: barras de vida/energia/fome/crescimento, pips de batida de asa, minimapa com faro +
-  relógio **[IMPL]** · **ficha do dragão** com fase de vida, idade, expectativa,
-  atributos (IVs ocultos — mas dá pra "sentir" que estão ruins) · **UI de linhagem/base**
-  *(novo)*: lista de dragões vivos, ovos incubando, troca de dragão ativo.
+- UI: barras de vida/energia/fome/crescimento, pips de batida de asa, **pips de degrau de
+  maturidade** (ao lado de Crescimento — dourado = conquistado, o atual pisca com o
+  progresso) **[IMPL]**, minimapa com faro + relógio **[IMPL]** · **ficha do dragão**
+  (Tab, `DragonStatsMenu`) com fase de vida, idade, expectativa, os **6 atributos** em
+  barras, natureza, **6 IVs**, **traços**, **mutações**, degrau + próximo golpe, stats
+  derivados e projeção por fase **[IMPL]** · aviso de **ar rarefeito** perto do teto de
+  voo **[IMPL]** · **UI de linhagem/base** *(novo)*: lista de dragões vivos, ovos
+  incubando, troca de dragão ativo.
 
 ## Save System
 
@@ -365,7 +484,7 @@ com chave própria); o GDD mantém a tabela do contrato:
 | Claims de base (posição, raio, tier) | ✅ | novo — extensão do WorldGenState |
 | Construções da base (tipo, posição, completa/incompleta, itens entregues) | ✅ | novo |
 | Recursos armazenados na base | ✅ | novo |
-| DragonRecords (genética, natureza, IVs, idade, fome, vida, golpes, base) | ✅ | novo — o coração do save |
+| DragonRecords (genética, natureza, 6 IVs, traços, mutações, idade, fome, vida, golpes, base) | ✅ | novo — o coração do save |
 | Ovos (pais, genética rolada, progresso de incubação) | ✅ | novo |
 | Relógio do mundo (hora, dia) | ✅ | DayNightCycle já expõe SetTime **[IMPL]** |
 | Pergaminhos/skills desbloqueadas | ✅ | novo |

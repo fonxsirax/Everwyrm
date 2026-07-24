@@ -16,12 +16,12 @@ public class DragonAttackHUD : MonoBehaviour
     DragonController dragon;
     DragonVitals vitals;
 
-    readonly Image[] bg = new Image[DragonAbilities.SlotCount];
-    readonly Image[] iconImg = new Image[DragonAbilities.SlotCount];
-    readonly Text[] abbrev = new Text[DragonAbilities.SlotCount];
-    readonly Text[] keyLabel = new Text[DragonAbilities.SlotCount];
-    readonly RectTransform[] cdOverlay = new RectTransform[DragonAbilities.SlotCount];
-    readonly Text[] nameLabel = new Text[DragonAbilities.SlotCount];
+    readonly Image[] bg = new Image[DragonAbilities.MaxSlotCount];
+    readonly Image[] iconImg = new Image[DragonAbilities.MaxSlotCount];
+    readonly Text[] abbrev = new Text[DragonAbilities.MaxSlotCount];
+    readonly Text[] keyLabel = new Text[DragonAbilities.MaxSlotCount];
+    readonly RectTransform[] cdOverlay = new RectTransform[DragonAbilities.MaxSlotCount];
+    readonly Text[] nameLabel = new Text[DragonAbilities.MaxSlotCount];
 
     Text notifyText;
     Coroutine notifyFade;
@@ -56,11 +56,21 @@ public class DragonAttackHUD : MonoBehaviour
     }
 
     // ------------------------------------------------------------- REFRESH
-    /// <summary>Estático (ícones/nomes) — só quando o loadout muda.</summary>
+    /// <summary>Estático (ícones/nomes/visibilidade) — só quando o loadout muda.
+    /// O 5º slot (mutação) só aparece se o dragão tiver o bônus — a maioria nunca
+    /// o vê. Recalculado aqui (não só no Build) porque LoadFrom pode carregar o
+    /// bônus DEPOIS da HUD já ter sido construída (ordem de Start entre componentes
+    /// não é garantida).</summary>
     void Refresh()
     {
-        for (int i = 0; i < DragonAbilities.SlotCount; i++)
+        int active = abilities.ActiveSlotCount;
+        for (int i = 0; i < DragonAbilities.MaxSlotCount; i++)
         {
+            bool visible = i < active;
+            bg[i].gameObject.SetActive(visible);
+            nameLabel[i].gameObject.SetActive(visible);
+            if (!visible) continue;
+
             var a = abilities.GetSlot(i);
             bool has = a != null;
             iconImg[i].enabled = has && a.icon != null;
@@ -76,7 +86,8 @@ public class DragonAttackHUD : MonoBehaviour
     void Update()
     {
         if (abilities == null) return;
-        for (int i = 0; i < DragonAbilities.SlotCount; i++)
+        int active = abilities.ActiveSlotCount;
+        for (int i = 0; i < active; i++)
         {
             var a = abilities.GetSlot(i);
             if (a == null)
@@ -137,10 +148,13 @@ public class DragonAttackHUD : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
 
-        float total = DragonAbilities.SlotCount * SlotSize +
-                      (DragonAbilities.SlotCount - 1) * Gap;
+        // largura sempre para o TETO (5 slots): dragões sem o bônus de mutação
+        // ficam com a fileira de 4 levemente à esquerda do centro — troca aceitável
+        // por não ter que realinhar a barra toda quando o 5º slot aparece/some
+        float total = DragonAbilities.MaxSlotCount * SlotSize +
+                      (DragonAbilities.MaxSlotCount - 1) * Gap;
 
-        for (int i = 0; i < DragonAbilities.SlotCount; i++)
+        for (int i = 0; i < DragonAbilities.MaxSlotCount; i++)
         {
             float x = -total * 0.5f + i * (SlotSize + Gap);
 

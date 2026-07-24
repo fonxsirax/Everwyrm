@@ -10,7 +10,9 @@ using UnityEngine;
 ///  - Esgotou? Segurar não faz nada: solte e aguarde `cycleRecovery` para renovar.
 ///  - Entre batidas o dragão plana: voar RÁPIDO conserva altitude, voar lento
 ///    afunda (sustentação pela velocidade). Mergulhar troca altitude por speed.
-///  - Peso importa: gordo/grande sobe menos por batida e afunda mais.
+///  - A SUBIDA por batida é generosa e quem a modula é o PESO ATUAL, não a fase
+///    da vida (DragonGrowth.FlapLiftMul): magro sobe muito, gordo mal decola.
+///    Filhote e colossal ganham praticamente os mesmos metros por batida.
 ///  - Correntes de ar (AirflowField, ex.: updrafts de montanha) devolvem altitude.
 ///  - TETO DE VOO (Resistência): perto do teto o ar rarefeito rende cada vez
 ///    menos sustentação; acima dele nada segura o dragão. Sem parede invisível.
@@ -25,6 +27,9 @@ public class DragonFlight : MonoBehaviour
     DragonVitals vitals;
     DragonGrowth growth;
     DragonAttributes attrs;
+    DragonTraits traitsCache;
+    /// <summary>Getter preguiçoso — o DragonTraits nasce no Awake do Controller.</summary>
+    DragonTraits Traits => traitsCache != null ? traitsCache : (traitsCache = GetComponent<DragonTraits>());
 
     float vy;                 // velocidade vertical atual
     int flapsLeft;
@@ -43,8 +48,11 @@ public class DragonFlight : MonoBehaviour
     public Vector3 CurrentWind { get; private set; }
     /// <summary>0 = ar pleno · 1 = no teto (sem sustentação). HUD pode avisar.</summary>
     public float ThinAir01 { get; private set; }
-    /// <summary>Teto de voo atual (m, altura do mundo) — vem da Resistência.</summary>
-    public float Ceiling => attrs != null ? attrs.MaxAltitude : float.PositiveInfinity;
+    /// <summary>Teto de voo atual (m, altura do mundo) — vem do Fôlego; Guelras o
+    /// abaixam (o dragão aquático troca ar por água).</summary>
+    public float Ceiling => attrs != null
+        ? attrs.MaxAltitude * (Traits != null ? Traits.CeilingMul : 1f)
+        : float.PositiveInfinity;
     /// <summary>Mergulhando a velocidade fura o máximo (× maxFlySpeed).</summary>
     public float DiveOverspeed => profile.diveOverspeed;
 
@@ -54,13 +62,29 @@ public class DragonFlight : MonoBehaviour
     /// <summary>Observer: qualidade (0..1) do bônus de soltura — feedback no HUD.</summary>
     public event Action<float> OnFlapBonus;
 
-    float ClimbMul => growth != null ? growth.ClimbMul : 1f;
-    float SinkMul => growth != null ? growth.SinkMul : 1f;
-    float CostMul => growth != null ? growth.EnergyCostMul : 1f;
+    /// <summary>Sustentação da batida: vem do PESO atual (ver DragonGrowth.FlapLiftMul).
+    /// É de propósito que ela NÃO multiplica o tamanho do corpo — a altura ganhada
+    /// por batida quase não muda ao longo da vida, só com o peso.</summary>
+    float LiftMul => growth != null ? growth.FlapLiftMul : 1f;
+    /// <summary>Afundamento no planeio: peso (growth) × Ossos Ocos (plana melhor).</summary>
+    float SinkMul => (growth != null ? growth.SinkMul : 1f)
+                   * (Traits != null ? Traits.GlideSinkMul : 1f);
+    /// <summary>Custo de energia: peso (growth) × EFICIÊNCIA do Fôlego (attrs).</summary>
+    float CostMul => (growth != null ? growth.EnergyCostMul : 1f)
+                   * (attrs != null ? attrs.EnergyCostMul : 1f);
     float TakeoffMul => attrs != null ? attrs.TakeoffClimbMul : 1f;
+    /// <summary>Aproveitamento das correntes de ar: Instinto (attrs) × Termonauta (traço).</summary>
+    float WindReadMul => (attrs != null ? attrs.WindReadMul : 1f)
+                       * (Traits != null ? Traits.WindReadMul : 1f);
 
     /// <summary>Duração efetiva da fase de subida de decolagem (Resistência estica).</summary>
     public float TakeoffClimbTime => profile.takeoffClimbTime * TakeoffMul;
+
+    /// <summary>Subida (m/s) que UMA batida acrescenta AGORA — o número que o peso
+    /// atual manda. Ficha e janela de balanceamento mostram este valor.</summary>
+    public float FlapLift => profile.flapLift * LiftMul;
+    /// <summary>Velocidade de subida máxima acumulável no peso atual (m/s).</summary>
+    public float MaxRiseSpeed => profile.maxRiseSpeed * LiftMul;
 
     void Awake()
     {
@@ -143,7 +167,7 @@ public class DragonFlight : MonoBehaviour
             {
                 if (!scripted) vitals?.Drain(p.takeoffClimbEnergyPerSec * CostMul);
                 lastFlapTime = Time.time;   // sem anim de glide, ciclo renova depois
-                vy = Mathf.MoveTowards(vy, p.takeoffClimbRate * ClimbMul * sizeScale * airLift,
+                vy = Mathf.MoveTowards(vy, p.takeoffClimbRate * LiftMul * airLift,
                                        p.verticalResponse * 2f * dt);
                 return vy;
             }
@@ -162,8 +186,8 @@ public class DragonFlight : MonoBehaviour
                 {
                     float q = Mathf.Pow(Mathf.Clamp01(t / p.flapAnimDuration),
                                         p.flapBonusPower);
-                    vy = Mathf.Min(vy + p.flapBonusLift * q * ClimbMul * sizeScale * airLift,
-                                   Mathf.Max(vy, p.maxRiseSpeed * sizeScale));
+                    vy = Mathf.Min(vy + p.flapBonusLift * q * LiftMul * airLift,
+                                   Mathf.Max(vy, p.maxRiseSpeed * LiftMul));
                     forwardSpeed += p.flapBonusForward * q * sizeScale;
                     OnFlapBonus?.Invoke(q);
                 }
@@ -186,8 +210,8 @@ public class DragonFlight : MonoBehaviour
             (vitals == null || vitals.TrySpend(p.energyPerFlap * CostMul)))
         {
             // teto de subida — mas nunca REDUZ um vy já alto (ex.: decolagem)
-            vy = Mathf.Min(vy + p.flapLift * ClimbMul * sizeScale * airLift,
-                           Mathf.Max(vy, p.maxRiseSpeed * sizeScale));
+            vy = Mathf.Min(vy + p.flapLift * LiftMul * airLift,
+                           Mathf.Max(vy, p.maxRiseSpeed * LiftMul));
             forwardSpeed += p.flapForwardBoost * sizeScale;
             flapsLeft--;
             lastFlapTime = Time.time;
@@ -215,7 +239,7 @@ public class DragonFlight : MonoBehaviour
         wasDiving = diving;
 
         // updraft também perde força no ar rarefeito: nem térmica fura o teto
-        float targetVy = -sink + CurrentWind.y * p.windInfluence * airLift;
+        float targetVy = -sink + CurrentWind.y * p.windInfluence * WindReadMul * airLift;
 
         // pouso controlado (S): garante descida mínima rumo ao solo, com
         // resposta TRIPLICADA — o mergulho de pouso engata rápido e decidido.

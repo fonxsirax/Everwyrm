@@ -18,6 +18,7 @@ public class DragonHUD : MonoBehaviour
     readonly System.Collections.Generic.List<Image> flapPips = new();
     int lastFlapsLeft;
     Coroutine pipFlash;
+    readonly System.Collections.Generic.List<Image> tierPips = new();
 
     RectTransform healthFill, energyFill, hungerFill, growthFill;
     RectTransform ghostFill;            // "fantasma" do dano na barra de vida
@@ -51,7 +52,8 @@ public class DragonHUD : MonoBehaviour
         if (attrs != null)
         {
             attrs.OnChanged += OnAttrs;
-            attrs.OnLevelUp += OnLevelUp;
+            attrs.OnTierUp += OnTierUp;
+            BuildTierPips(attrs.MaxTier);
             OnAttrs(attrs);
 
             // ficha do dragão (Tab)
@@ -92,7 +94,7 @@ public class DragonHUD : MonoBehaviour
         if (attrs != null)
         {
             attrs.OnChanged -= OnAttrs;
-            attrs.OnLevelUp -= OnLevelUp;
+            attrs.OnTierUp -= OnTierUp;
         }
         if (flight != null)
         {
@@ -154,6 +156,47 @@ public class DragonHUD : MonoBehaviour
         pipFlash = null;
     }
 
+    /// <summary>Pips à direita da barra de Crescimento: um por degrau de maturidade
+    /// (DragonAttributes.MaxTier) — é o que desbloqueia ataques sozinho, sem pontos.</summary>
+    void BuildTierPips(int maxTier)
+    {
+        for (int i = 0; i < maxTier; i++)
+        {
+            var pip = new GameObject("TierPip", typeof(Image)).GetComponent<Image>();
+            pip.transform.SetParent(canvasRoot, false);
+            pip.raycastTarget = false;
+            var rt = pip.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0f, 0f);
+            rt.pivot = new Vector2(0f, 0f);
+            rt.anchoredPosition = new Vector2(30f + BarWidth + 10f + i * 13f, 104f);
+            rt.sizeDelta = new Vector2(10f, 14f);
+            tierPips.Add(pip);
+        }
+    }
+
+    /// <summary>Degraus já alcançados = dourado cheio; o atual pisca proporcional ao
+    /// progresso (TierProgress01); os futuros ficam translúcidos.</summary>
+    void PaintTierPips(DragonAttributes a)
+    {
+        for (int i = 0; i < tierPips.Count; i++)
+        {
+            if (i < a.Tier - 1) tierPips[i].color = new Color(0.95f, 0.85f, 0.4f);
+            else if (i == a.Tier - 1)
+                tierPips[i].color = Color.Lerp(new Color(1f, 1f, 1f, 0.12f),
+                                               new Color(0.95f, 0.85f, 0.4f), a.TierProgress01);
+            else tierPips[i].color = new Color(1f, 1f, 1f, 0.12f);
+        }
+    }
+
+    /// <summary>Toast breve de progresso — a mesma lógica de "vitrine" do OnStage:
+    /// o próximo OnStats (fome/energia mudando) reescreve statusText logo depois,
+    /// então isto só pisca por um instante.</summary>
+    void OnTierUp(int tier)
+    {
+        statusText.text = $"Degrau de maturidade {tier}/{(attrs != null ? attrs.MaxTier : tier)} alcançado!";
+        statusText.color = new Color(0.95f, 0.85f, 0.4f);
+    }
+
     // ------------------------------------------------------------ HANDLERS
     void OnStats(DragonVitals v)
     {
@@ -193,8 +236,16 @@ public class DragonHUD : MonoBehaviour
 
     void OnStage(DragonGrowth.LifeStage stage)
     {
-        statusText.text = $"Você cresceu: agora é {stage}!";
-        statusText.color = new Color(0.5f, 1f, 0.5f);
+        if (stage == DragonGrowth.LifeStage.Elder)
+        {
+            statusText.text = "A velhice chegou — seus dias se encurtam.";
+            statusText.color = new Color(0.85f, 0.72f, 0.5f);
+        }
+        else
+        {
+            statusText.text = $"Você cresceu: agora é {stage}!";
+            statusText.color = new Color(0.5f, 1f, 0.5f);
+        }
     }
 
     System.Collections.IEnumerator DrainGhost()
@@ -216,18 +267,15 @@ public class DragonHUD : MonoBehaviour
 
     void OnHint(string hint) => hintText.text = hint;
 
+    /// <summary>Linha de atributos: eles sobem sozinhos com a maturidade, então o
+    /// HUD só informa — não há mais ponto a gastar nem convite para gastar.</summary>
     void OnAttrs(DragonAttributes a)
     {
-        attrText.text = a.Unspent > 0
-            ? $"Nv {a.Level} · PONTO DISPONÍVEL ({a.Unspent}) — Tab abre a ficha"
-            : $"Nv {a.Level} · Vel {a.Velocidade} · Poder {a.Poder} · Res {a.Resistencia} · Tab: ficha";
-        attrText.color = a.Unspent > 0 ? new Color(0.5f, 1f, 0.5f) : Color.white;
-    }
-
-    void OnLevelUp(int level)
-    {
-        statusText.text = $"Nível {level}! Abra a ficha (Tab) e escolha um atributo";
-        statusText.color = new Color(0.5f, 1f, 0.5f);
+        attrText.text =
+            $"For {a.Might:0.0} · Cha {a.Ardor:0.0} · Agi {a.Agility:0.0} · " +
+            $"Vig {a.Vigor:0.0} · Fôl {a.Wind:0.0} · Ins {a.Instinct:0.0}   " +
+            $"·   mat {a.Maturity01 * 100f:0}% · Degrau {a.Tier}/{a.MaxTier} · Tab: ficha";
+        PaintTierPips(a);
     }
 
     static string ConditionLabel(float c) =>
@@ -262,8 +310,8 @@ public class DragonHUD : MonoBehaviour
         Place(hintText.rectTransform, 30f, 196f, 400f, 24f);
         hintText.color = new Color(1f, 0.95f, 0.6f);
 
-        attrText = MakeText(canvasGo.transform, "", 16, FontStyle.Normal);
-        Place(attrText.rectTransform, 30f, 224f, 650f, 22f);
+        attrText = MakeText(canvasGo.transform, "", 15, FontStyle.Normal);
+        Place(attrText.rectTransform, 30f, 224f, 940f, 22f);
     }
 
     static void Place(RectTransform rt, float x, float y, float w, float h)

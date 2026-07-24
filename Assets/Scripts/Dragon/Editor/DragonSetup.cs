@@ -290,9 +290,14 @@ public static class DragonSetup
                 root.AddComponent<DragonSounds>();
             if (root.GetComponent<DragonAbilities>() == null)
                 root.AddComponent<DragonAbilities>();
+            if (root.GetComponent<DragonPossession>() == null)
+                root.AddComponent<DragonPossession>();   // cola da possessão (linhagem)
+            if (root.GetComponent<DragonDissolve>() == null)
+                root.AddComponent<DragonDissolve>();      // dissolve na morte
 
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-            Debug.Log("Prefab configurado: CharacterController + DragonController + DragonVitals + DragonGrowth.");
+            Debug.Log("Prefab configurado: CharacterController + DragonController + DragonVitals + " +
+                      "DragonGrowth + DragonPossession + DragonDissolve.");
         }
         finally { PrefabUtility.UnloadPrefabContents(root); }
     }

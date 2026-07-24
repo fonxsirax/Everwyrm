@@ -1,15 +1,22 @@
+using System.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
-/// Ficha do dragão — menu de atributos (Tab).
-///  - Abre sozinho ao subir de nível (se não estiver voando).
-///  - Pausa o jogo (timeScale 0) e libera o cursor.
-///  - Gasta pontos clicando em [+] ou com as teclas 1/2/3.
-///  - Mostra os stats DERIVADOS dos atributos (velocidades, vida, energia, faro...)
-///    e dados do corpo: peso, condição, tamanho, idade e carne comida.
-/// Observer: assina OnChanged/OnLevelUp — nada de polling.
+/// Ficha do dragão (Tab). É uma TELA DE LEITURA: não há pontos para gastar, os SEIS
+/// atributos crescem sozinhos com a maturidade (DragonAttributes). A ficha existe
+/// para o jogador entender o bicho que pilota — e é a ferramenta de balanceamento
+/// mais rápida em jogo:
+///
+///  · ATRIBUTOS — 6 barras 0..10 com a maturidade que os move;
+///  · DEGRAU    — a barra de maturidade que desbloqueia ataques;
+///  · CORPO/LINHAGEM — natureza, os 6 IVs, traços, mutações, peso, idade;
+///  · DERIVADOS — velocidades, vida/energia, teto, subida por batida, faro;
+///  · PROJEÇÃO  — quanto ESTE dragão terá em cada fase da vida (estimativa).
+///
+/// Fora do Play, a mesma conta com mais detalhe está em Tools > Everwyrm >
+/// Balanço do Dragão. Pausa o jogo (timeScale 0) e libera o cursor.
 /// </summary>
 public class DragonStatsMenu : MonoBehaviour
 {
@@ -19,13 +26,36 @@ public class DragonStatsMenu : MonoBehaviour
     DragonGrowth growth;
     DragonVitals vitals;
     DragonController dragon;
+    DragonFlight flight;
+    DragonAbilities abilities;   // opcional — prévia do próximo golpe a desbloquear
+    DragonTraits traits;         // opcional — traços herdáveis
 
     GameObject panel;
-    Text headerText, bodyText, statsText;
-    readonly Text[] attrPoints = new Text[3];
-    readonly Button[] plusButtons = new Button[3];
+    Text headerText, bodyText, statsText, tierText, projText;
+    RectTransform tierBar;
+    readonly Text[] attrValues = new Text[Order.Length];
+    readonly RectTransform[] attrBars = new RectTransform[Order.Length];
 
-    static readonly string[] AttrNames = { "VELOCIDADE", "PODER", "RESISTÊNCIA" };
+    /// <summary>Ordem de exibição dos atributos na ficha (Força primeiro, etc.).</summary>
+    static readonly DragonAttributes.Attribute[] Order =
+    {
+        DragonAttributes.Attribute.Might,
+        DragonAttributes.Attribute.Ardor,
+        DragonAttributes.Attribute.Agility,
+        DragonAttributes.Attribute.Vigor,
+        DragonAttributes.Attribute.Wind,
+        DragonAttributes.Attribute.Instinct,
+    };
+    static readonly string[] AttrNames = { "FORÇA", "CHAMA", "AGILIDADE", "VIGOR", "FÔLEGO", "INSTINTO" };
+    static readonly string[] AttrShort = { "For", "Cha", "Agi", "Vig", "Fôl", "Ins" };
+
+    // ---- geometria do card: duas colunas com o mesmo padding dos dois lados,
+    // tudo posicionado pela borda esquerda (ver TopLeft) para nunca vazar da coluna.
+    const float CardW = 900f, CardH = 740f, Padding = 40f, ColumnGutter = 40f;
+    const float LeftX = -(CardW * 0.5f) + Padding;                 // -410
+    const float ColumnW = (CardW * 0.5f) - Padding - (ColumnGutter * 0.5f); // 390
+    const float RightX = ColumnGutter * 0.5f;                      // 20
+    const float ContentW = CardW - Padding * 2f;                   // 820 (título/header/footer)
 
     public void Bind(DragonVitals v, DragonController d)
     {
@@ -33,22 +63,20 @@ public class DragonStatsMenu : MonoBehaviour
         dragon = d;
         growth = v.GetComponent<DragonGrowth>();
         attrs = v.GetComponent<DragonAttributes>();
+        flight = v.GetComponent<DragonFlight>();
+        abilities = v.GetComponent<DragonAbilities>();
+        traits = v.GetComponent<DragonTraits>();
         if (attrs == null) { enabled = false; return; }
 
         Build();
         SetOpen(false);
 
         attrs.OnChanged += OnAttrsChanged;
-        attrs.OnLevelUp += OnLevelUp;
     }
 
     void OnDestroy()
     {
-        if (attrs != null)
-        {
-            attrs.OnChanged -= OnAttrsChanged;
-            attrs.OnLevelUp -= OnLevelUp;
-        }
+        if (attrs != null) attrs.OnChanged -= OnAttrsChanged;
         if (IsOpen) SetOpen(false); // nunca deixar o jogo pausado
     }
 
@@ -59,11 +87,6 @@ public class DragonStatsMenu : MonoBehaviour
     }
 
     void OnAttrsChanged(DragonAttributes a) { if (IsOpen) Refresh(); }
-
-    void OnLevelUp(int level)
-    {
-        if (!dragon.IsFlying && !dragon.IsDead) SetOpen(true);
-    }
 
     void SetOpen(bool open)
     {
@@ -79,47 +102,129 @@ public class DragonStatsMenu : MonoBehaviour
     void Refresh()
     {
         var a = attrs;
-        headerText.text = $"NÍVEL {a.Level}" +
-            (a.Unspent > 0 ? $"   ·   {a.Unspent} ponto{(a.Unspent > 1 ? "s" : "")} para gastar" : "");
-        headerText.color = a.Unspent > 0 ? new Color(0.55f, 1f, 0.55f) : Color.white;
+        var s = a.Current;
 
-        int[] pts = { a.Velocidade, a.Poder, a.Resistencia };
-        for (int i = 0; i < 3; i++)
+        string dragonName = DragonBase.Instance != null && DragonBase.Instance.Current != null
+            ? DragonBase.Instance.Current.dragonName : "—";
+
+        // na Velhice a maturidade EXIBIDA cai (elderDecline), mas o Tier ficou com o
+        // PICO — sem isto pareceria bug ("por que ainda tenho os golpes?").
+        bool declined = growth.IsElder && a.PeakMaturity01 - s.maturity01 > 0.02f;
+        headerText.text = $"{dragonName}   ·   {StageLabel(growth.Stage)}   ·   " +
+                          $"maturidade {s.maturity01 * 100f:0}%" +
+                          (declined ? $" (pico {a.PeakMaturity01 * 100f:0}%)" : "");
+        headerText.color = growth.IsElder ? new Color(0.85f, 0.72f, 0.5f) : Color.white;
+
+        tierText.text = a.Tier >= a.MaxTier
+            ? $"Degrau de maturidade: {a.Tier}/{a.MaxTier} (máximo — todo golpe por idade já é seu)"
+            : $"Degrau de maturidade: {a.Tier}/{a.MaxTier}   ·   {a.TierProgress01 * 100f:0}% para o próximo";
+        tierBar.sizeDelta = new Vector2(ColumnW * a.TierProgress01, 8f);
+
+        for (int i = 0; i < Order.Length; i++)
         {
-            attrPoints[i].text = pts[i].ToString();
-            plusButtons[i].gameObject.SetActive(a.Unspent > 0);
+            float val = s.Get(Order[i]);
+            attrValues[i].text = $"{val:0.0}";
+            attrBars[i].sizeDelta = new Vector2(
+                ColumnW * Mathf.Clamp01(val / Mathf.Max(0.01f, a.MaxAttribute)), 11f);
         }
 
         bodyText.text =
-            $"Fase: {growth.Stage}\n" +
-            $"Peso: {growth.WeightKg:0} kg\n" +
-            $"Condição: {ConditionLabel(growth.Condition01)}\n" +
-            $"Tamanho: {growth.Scale:0.00}x\n" +
-            $"Idade: {FormatAge(growth.AgeSeconds)}\n" +
-            $"Carne comida: {vitals.TotalEaten:0}";
+            $"Natureza: {DragonNatureTable.Describe(a.Nature)}\n" +
+            $"IVs (talento): {IvLine()}\n" +
+            $"Traços: {TraitLine()}\n" +
+            $"Mutações: {MutationLine()}\n" +
+            $"Peso: {growth.WeightKg:0} kg ({ConditionLabel(growth.Condition01)}) · {growth.Scale:0.00}x\n" +
+            $"Idade: {FormatAge(growth.AgeSeconds)} de ~{FormatAge(growth.LifespanSeconds)}\n" +
+            $"Carne comida: {vitals.TotalEaten:0}\n" +
+            $"Próximo golpe: {NextUnlockLabel()}";
 
-        var flight = dragon.GetComponent<DragonFlight>();
         statsText.text =
             $"Corrida máx: {dragon.MaxGroundSpeed:0.0} m/s\n" +
             $"Voo máx: {dragon.MaxFlightSpeed:0.0} m/s\n" +
-            $"Tempo até correr: {dragon.TimeToRun:0.0} s\n" +
             $"Vida máx: {vitals.MaxHealthEff:0}\n" +
             $"Energia máx: {vitals.MaxEnergyEff:0}\n" +
-            (flight != null ? $"Decolagem (subida): {flight.TakeoffClimbTime:0.0} s\n" : "") +
-            $"Teto de voo: {a.MaxAltitude:0} m\n" +
+            (flight != null ? $"Subida por batida: {flight.FlapLift:0.0} m/s\n" : "") +
+            $"Teto de voo: {(flight != null ? flight.Ceiling : s.maxAltitude):0} m\n" +
             $"Fome: -{vitals.HungerDecayEff * 60f:0.0}/min\n" +
-            $"Faro (dominância): {a.DominanceRadius:0} m\n" +
-            $"Dano: x{a.DamageMul:0.00}   Chama: x{a.FlameSizeMul:0.00}";
+            $"Faro (dominância): {s.dominanceRadius:0} m\n" +
+            $"Dano: x{s.damageMul:0.00}   Chama: x{s.flameMul:0.00}";
+
+        RefreshProjection();
     }
 
-    string DescriptionFor(int i) => i switch
+    /// <summary>Uma linha com os 6 IVs (talento bruto por atributo).</summary>
+    string IvLine() =>
+        string.Join(" ", Order.Select((attr, i) => $"{AttrShort[i]}{attrs.Iv(attr)}"));
+
+    /// <summary>Os traços ativos (nome + efeito). "nenhum" se não houver.</summary>
+    string TraitLine()
     {
-        0 => $"+{attrs.SpeedPerPoint:P0} vel. máxima · +{attrs.AccelSpeedPerPoint:P0} aceleração",
-        1 => $"+{attrs.DamagePerPoint:P0} dano · +{attrs.FlamePerPoint:P0} chama · +{attrs.DominancePerPoint:0} m de faro",
-        _ => $"+{attrs.HealthPerPoint:P0} vida · +{attrs.EnergyPerPoint:P0} energia · " +
-             $"-{attrs.HungerResistPerPoint:P0} fome · +{attrs.TakeoffClimbPerPoint:P0} decolagem · " +
-             $"+{attrs.CeilingPerPoint:0} m de teto",
+        if (traits == null || traits.Active.Count == 0) return "nenhum";
+        return string.Join(" · ", traits.Active.Select(DragonTraitInfo.Name));
+    }
+
+    string MutationLine()
+    {
+        var rec = DragonBase.Instance != null ? DragonBase.Instance.Current : null;
+        if (rec == null || rec.mutations <= 0) return "nenhuma";
+        // no máx. 1 mutação por ninhada: ou o slot extra (preferido), ou um outlier de stat
+        return rec.bonusAttackSlots > 0
+            ? "slot de ataque extra (prodígio da linhagem)"
+            : "talento acima do teto (prodígio da linhagem)";
+    }
+
+    /// <summary>Quanto ESTE dragão terá de cada atributo em cada fase da vida. Uma
+    /// linha por fase, os 6 atributos concatenados (estimativa; assume comer bem).</summary>
+    void RefreshProjection()
+    {
+        var sb = new System.Text.StringBuilder();
+        int[] iv = IvArray();
+        foreach (var (label, g, age, elder) in ProjectionStages())
+        {
+            float m = attrs.MaturityFor(g, age, elder);
+            var p = attrs.SnapshotAt(m, attrs.Nature, iv);
+            sb.Append($"{label,-9}");
+            for (int i = 0; i < Order.Length; i++)
+                sb.Append($" {AttrShort[i]}{p.Get(Order[i]):0.0}");
+            sb.Append('\n');
+        }
+        projText.text = sb.ToString();
+    }
+
+    /// <summary>Os 6 IVs deste dragão no formato que SnapshotAt espera (índice = Attribute).</summary>
+    int[] IvArray()
+    {
+        var iv = new int[DragonAttributes.Count];
+        for (int i = 0; i < DragonAttributes.Count; i++)
+            iv[i] = attrs.Iv((DragonAttributes.Attribute)i);
+        return iv;
+    }
+
+    (string label, float growth, float age, float elder)[] ProjectionStages() => new[]
+    {
+        ("Filhote", growth.AdultAt * 0.5f, 0.15f, 0f),
+        ("Adulto", (growth.AdultAt + growth.ColossalAt) * 0.5f, 0.45f, 0f),
+        ("Colossal", 1f, 0.8f, 0f),
+        ("Ancião", 1f, 1f, 1f),
     };
+
+    static string StageLabel(DragonGrowth.LifeStage s) => s switch
+    {
+        DragonGrowth.LifeStage.Hatchling => "Filhote",
+        DragonGrowth.LifeStage.Adult => "Adulto",
+        DragonGrowth.LifeStage.Colossal => "Colossal",
+        _ => "Ancião",
+    };
+
+    /// <summary>Primeiro ataque ainda travado — DragonAbilities.Known já vem
+    /// ordenado por unlockLevel (degrau).</summary>
+    string NextUnlockLabel()
+    {
+        if (abilities == null || abilities.Known.Count == 0) return "—";
+        foreach (var k in abilities.Known)
+            if (!abilities.Unlocked.Contains(k)) return $"{k.attackName} (degrau {k.unlockLevel})";
+        return "todos os golpes já são seus";
+    }
 
     static string ConditionLabel(float c) =>
         c < 0.3f ? "Magro" : c < 0.68f ? "Saudável" : "Gordo";
@@ -130,7 +235,6 @@ public class DragonStatsMenu : MonoBehaviour
     // --------------------------------------------------------------- BUILD
     void Build()
     {
-        // EventSystem para os botões funcionarem
         if (FindFirstObjectByType<EventSystem>() == null)
             new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
 
@@ -143,7 +247,6 @@ public class DragonStatsMenu : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
 
-        // fundo escurecido + painel central
         panel = new GameObject("Panel", typeof(Image));
         panel.transform.SetParent(canvasGo.transform, false);
         panel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.6f);
@@ -157,63 +260,104 @@ public class DragonStatsMenu : MonoBehaviour
         var cRt = card.rectTransform;
         cRt.anchorMin = cRt.anchorMax = new Vector2(0.5f, 0.5f);
         cRt.pivot = new Vector2(0.5f, 0.5f);
-        cRt.sizeDelta = new Vector2(780f, 520f);
+        cRt.sizeDelta = new Vector2(CardW, CardH);
 
-        var title = MakeText(card.transform, "FICHA DO DRAGÃO", 26, FontStyle.Bold, TextAnchor.MiddleCenter);
-        Top(title.rectTransform, 0f, -16f, 740f, 34f);
+        var title = MakeText(card.transform, "FICHA DO DRAGÃO", 24, FontStyle.Bold, TextAnchor.MiddleCenter);
+        Top(title.rectTransform, 0f, -36f, ContentW, 32f);
 
-        headerText = MakeText(card.transform, "", 20, FontStyle.Bold, TextAnchor.MiddleCenter);
-        Top(headerText.rectTransform, 0f, -52f, 740f, 28f);
+        headerText = MakeText(card.transform, "", 18, FontStyle.Bold, TextAnchor.MiddleCenter);
+        Top(headerText.rectTransform, 0f, -80f, ContentW, 26f);
 
-        // ---- coluna esquerda: atributos
-        for (int i = 0; i < 3; i++)
+        Line(card.transform, LeftX, -112f, ContentW, true);
+
+        // degrau de maturidade (o que desbloqueia ataques)
+        tierText = MakeText(card.transform, "", 13, FontStyle.Normal, TextAnchor.MiddleLeft);
+        TopLeft(tierText.rectTransform, LeftX, -124f, ColumnW, 18f);
+        tierBar = MakeBar(card.transform, LeftX, -146f, 8f, new Color(0.95f, 0.85f, 0.4f));
+
+        Line(card.transform, 0f, -112f, 1f, false, CardH - 112f - Padding); // divisor vertical entre colunas
+
+        // ---- coluna esquerda: 6 atributos (nome+valor na linha, barra abaixo)
+        const float rowH = 48f;
+        for (int i = 0; i < Order.Length; i++)
         {
-            float y = -100f - i * 96f;
-            int idx = i;
+            float y = -172f - i * rowH;
 
-            // LABEL  [+]  pontos  [tecla]  — tudo junto, à esquerda
-            var name = MakeText(card.transform, AttrNames[i], 20, FontStyle.Bold, TextAnchor.MiddleLeft);
-            Top(name.rectTransform, -245f, y, 230f, 26f);
+            var name = MakeText(card.transform, AttrNames[i], 15, FontStyle.Bold, TextAnchor.MiddleLeft);
+            TopLeft(name.rectTransform, LeftX, y, ColumnW - 70f, 22f);
 
-            var desc = MakeText(card.transform, DescriptionFor(i), 13, FontStyle.Normal, TextAnchor.UpperLeft);
-            desc.color = new Color(0.75f, 0.73f, 0.68f);
-            Top(desc.rectTransform, -245f, y - 26f, 230f, 56f);
+            attrValues[i] = MakeText(card.transform, "0.0", 17, FontStyle.Bold, TextAnchor.MiddleRight);
+            TopLeft(attrValues[i].rectTransform, LeftX + ColumnW - 64f, y, 64f, 22f);
 
-            var btnGo = new GameObject("Plus", typeof(Image), typeof(Button));
-            btnGo.transform.SetParent(card.transform, false);
-            btnGo.GetComponent<Image>().color = new Color(0.25f, 0.55f, 0.25f);
-            Top(btnGo.GetComponent<RectTransform>(), -100f, y - 10f, 44f, 44f);
-            var plus = MakeText(btnGo.transform, "+", 30, FontStyle.Bold, TextAnchor.MiddleCenter);
-            Stretch(plus.rectTransform);
-            plusButtons[i] = btnGo.GetComponent<Button>();
-            plusButtons[i].onClick.AddListener(() =>
-                attrs.SpendPoint((DragonAttributes.Attribute)idx));
-
-            attrPoints[i] = MakeText(card.transform, "0", 26, FontStyle.Bold, TextAnchor.MiddleCenter);
-            Top(attrPoints[i].rectTransform, -45f, y - 10f, 50f, 40f);
-
-            var key = MakeText(card.transform, $"[{i + 1}]", 14, FontStyle.Normal, TextAnchor.MiddleCenter);
-            key.color = new Color(0.6f, 0.6f, 0.6f);
-            Top(key.rectTransform, 5f, y - 10f, 40f, 40f);
+            attrBars[i] = MakeBar(card.transform, LeftX, y - 26f, 12f, new Color(0.85f, 0.72f, 0.35f));
         }
+        float attrsBottom = -172f - (Order.Length - 1) * rowH - 26f - 12f; // fim da última barra
 
-        // ---- coluna direita (bem separada): corpo e stats derivados
-        var bodyTitle = MakeText(card.transform, "CORPO", 16, FontStyle.Bold, TextAnchor.MiddleLeft);
-        Top(bodyTitle.rectTransform, 255f, -100f, 250f, 22f);
-        bodyText = MakeText(card.transform, "", 15, FontStyle.Normal, TextAnchor.UpperLeft);
-        Top(bodyText.rectTransform, 255f, -126f, 250f, 130f);
+        Line(card.transform, LeftX, attrsBottom - 22f, ColumnW, true);
 
-        var statsTitle = MakeText(card.transform, "STATS DERIVADOS", 16, FontStyle.Bold, TextAnchor.MiddleLeft);
-        Top(statsTitle.rectTransform, 255f, -266f, 250f, 22f);
-        statsText = MakeText(card.transform, "", 15, FontStyle.Normal, TextAnchor.UpperLeft);
-        Top(statsText.rectTransform, 255f, -292f, 250f, 190f);
+        // ---- coluna esquerda-baixo: corpo e linhagem
+        var bodyTitle = MakeText(card.transform, "CORPO E LINHAGEM", 14, FontStyle.Bold, TextAnchor.MiddleLeft);
+        TopLeft(bodyTitle.rectTransform, LeftX, attrsBottom - 36f, ColumnW, 18f);
+        bodyText = MakeText(card.transform, "", 13, FontStyle.Normal, TextAnchor.UpperLeft);
+        bodyText.lineSpacing = 1.15f;
+        TopLeft(bodyText.rectTransform, LeftX, attrsBottom - 58f, ColumnW, 170f);
 
-        var footer = MakeText(card.transform, "Tab — fechar", 14, FontStyle.Italic, TextAnchor.MiddleCenter);
+        // ---- coluna direita: derivados
+        var statsTitle = MakeText(card.transform, "STATS DERIVADOS", 14, FontStyle.Bold, TextAnchor.MiddleLeft);
+        TopLeft(statsTitle.rectTransform, RightX, -172f, ColumnW, 18f);
+        statsText = MakeText(card.transform, "", 13, FontStyle.Normal, TextAnchor.UpperLeft);
+        statsText.lineSpacing = 1.15f;
+        TopLeft(statsText.rectTransform, RightX, -196f, ColumnW, 190f);
+
+        Line(card.transform, RightX, -426f, ColumnW, true);
+
+        // ---- coluna direita-baixo: projeção por fase
+        var projTitle = MakeText(card.transform, "PROJEÇÃO POR FASE (estimativa)", 14, FontStyle.Bold, TextAnchor.MiddleLeft);
+        TopLeft(projTitle.rectTransform, RightX, -448f, ColumnW, 18f);
+        projText = MakeText(card.transform, "", 13, FontStyle.Normal, TextAnchor.UpperLeft);
+        projText.lineSpacing = 1.3f;
+        TopLeft(projText.rectTransform, RightX, -472f, ColumnW, 160f);
+
+        var footer = MakeText(card.transform,
+            "Os atributos sobem sozinhos com a maturidade — não há pontos para gastar.   Tab: fechar",
+            12, FontStyle.Italic, TextAnchor.MiddleCenter);
         footer.color = new Color(0.6f, 0.6f, 0.6f);
-        Top(footer.rectTransform, 0f, -488f, 740f, 22f);
+        Top(footer.rectTransform, 0f, -(CardH - 40f), ContentW, 20f);
     }
 
-    // posiciona ancorado ao topo-centro do card (x relativo ao centro)
+    /// <summary>Barra genérica: fundo escuro + preenchimento medido em Refresh. x/y são a borda
+    /// superior-esquerda (ver TopLeft), para nunca vazar da largura da coluna.</summary>
+    RectTransform MakeBar(Transform parent, float x, float y, float height = 14f,
+                          Color? fillColor = null, float width = ColumnW)
+    {
+        var bg = new GameObject("Bar", typeof(Image)).GetComponent<Image>();
+        bg.transform.SetParent(parent, false);
+        bg.color = new Color(1f, 1f, 1f, 0.1f);
+        TopLeft(bg.rectTransform, x, y, width, height);
+
+        var fill = new GameObject("Fill", typeof(Image)).GetComponent<Image>();
+        fill.transform.SetParent(bg.transform, false);
+        fill.color = fillColor ?? new Color(0.85f, 0.72f, 0.35f);
+        var rt = fill.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.sizeDelta = new Vector2(0f, height);
+        return rt;
+    }
+
+    /// <summary>Linha divisória fina (horizontal se vertical=false com largura w, ou vertical com
+    /// altura h). Só cosmética — separa os blocos que antes ficavam colados uns nos outros.</summary>
+    static void Line(Transform parent, float x, float y, float wOrThickness, bool horizontal, float length = 0f)
+    {
+        var img = new GameObject("Divider", typeof(Image)).GetComponent<Image>();
+        img.transform.SetParent(parent, false);
+        img.color = new Color(1f, 1f, 1f, 0.1f);
+        if (horizontal) TopLeft(img.rectTransform, x, y, wOrThickness, 1f);
+        else TopLeft(img.rectTransform, x, y, wOrThickness, length);
+    }
+
+    // posiciona ancorado ao topo-centro do card (x = centro do elemento, relativo ao centro do card)
     static void Top(RectTransform rt, float x, float y, float w, float h)
     {
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
@@ -222,10 +366,14 @@ public class DragonStatsMenu : MonoBehaviour
         rt.sizeDelta = new Vector2(w, h);
     }
 
-    static void Stretch(RectTransform rt)
+    // posiciona ancorado ao topo do card, mas x = BORDA ESQUERDA do elemento (não o centro) —
+    // assim w nunca faz o elemento vazar pra fora da coluna que ele deveria ocupar.
+    static void TopLeft(RectTransform rt, float x, float y, float w, float h)
     {
-        rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
-        rt.offsetMin = rt.offsetMax = Vector2.zero;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(x, y);
+        rt.sizeDelta = new Vector2(w, h);
     }
 
     Text MakeText(Transform parent, string content, int size, FontStyle style, TextAnchor align)

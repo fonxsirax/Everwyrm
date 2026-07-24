@@ -27,8 +27,11 @@ public class DragonAttackData : ScriptableObject
     public Sprite icon;                        // opcional — sem ele o HUD mostra as iniciais
 
     [Header("Desbloqueio")]
-    [Tooltip("Nível do dragão (DragonAttributes.Level) em que o ataque destrava. " +
-             "Ao destravar ele entra sozinho no primeiro slot livre (1-4).")]
+    // O nome do campo é contrato de serialização (assets já gravados) — o que
+    // mudou é o significado: hoje é o DEGRAU DE MATURIDADE (DragonAttributes.Tier,
+    // 1..10), que o dragão sobe crescendo e envelhecendo, não gastando pontos.
+    [Tooltip("Degrau de maturidade (DragonAttributes.Tier, 1..10) em que o ataque " +
+             "destrava. Ao destravar ele entra sozinho no primeiro slot livre (1-4).")]
     public int unlockLevel = 2;
 
     [Header("Custos e Tempos")]

@@ -236,6 +236,11 @@ public class InfiniteTerrain : MonoBehaviour
     [Range(0f, 1f)] [SerializeField] float forestGrassShare = 0.85f;
     [Tooltip("Limiar do noise das manchas de terra da floresta — maior = manchas mais raras/menores.")]
     [Range(0f, 1f)] [SerializeField] float forestDirtThreshold = 0.68f;
+    [Tooltip("TESTE: fração máx. de 'chão de montanha' (musgo/solo do pack Mountain) nas manchas do " +
+             "Plains, no lugar da terra da floresta. Maior que o antigo blend de terra (0.55) de propósito.")]
+    [Range(0f, 1f)] [SerializeField] float plainsMountainShare = 0.75f;
+    [Tooltip("Limiar do noise das manchas de chão de montanha no Plains — menor = manchas mais comuns/maiores.")]
+    [Range(0f, 1f)] [SerializeField] float plainsMountainThreshold = 0.55f;
 
     [Header("MicroSplat (gerar via Tools > Everwyrm > MicroSplat — Converter Terreno)")]
     [Tooltip("Material template do MicroSplat: cada tile ganha um MicroSplatTerrain sincronizado " +
@@ -1542,18 +1547,23 @@ public class InfiniteTerrain : MonoBehaviour
                 float dirtShare = Mathf.Lerp(1f - forestGrassShare, 1f, dirtPatch);
 
                 Array.Clear(chAcc, 0, nCh);
-                // Campos: manchas raras de terra batida (55% de blend — desgaste,
-                // não careca). Único bioma de canal ÚNICO em campo aberto — por
-                // isso só aqui o tiling da grama aparecia. Reusa o noise 'dn'.
+                // Campos: manchas de chão de montanha (TESTE — antes era terra da
+                // floresta). Único bioma de canal ÚNICO em campo aberto — por isso
+                // só aqui o tiling da grama aparecia. Reusa o noise 'dn'. Banda mais
+                // larga/baixa e blend máx. maior que o antigo (0.55) de propósito:
+                // a Montanha deve ficar mais presente no Plains do que a floresta estava.
                 float wear = Mathf.SmoothStep(0f, 1f,
-                    Mathf.InverseLerp(0.78f, 0.90f, dn)) * 0.55f;
+                    Mathf.InverseLerp(plainsMountainThreshold, plainsMountainThreshold + 0.22f, dn))
+                    * plainsMountainShare;
+                float plainsPatch = plains * wear;
                 chAcc[0] = plains * (1f - wear) + forest * (1f - dirtShare);
-                chAcc[1] = plains * wear + forest * dirtShare + sBank * 1.6f;
+                chAcc[1] = forest * dirtShare + sBank * 1.6f;
                 chAcc[2] = rock + sBed * 1.4f;
                 chAcc[3] = snow;
                 chAcc[4] = sand;
                 chAcc[5] = dRock;
-                if (nCh >= 10) { chAcc[7] = mMoss; chAcc[9] = mSoil; }
+                if (nCh >= 10) { chAcc[7] = mMoss; chAcc[9] = mSoil + plainsPatch; }
+                else chAcc[1] += plainsPatch;   // sem o pack de Montanha: mantém o comportamento antigo
 
                 // camadas com groundPaint: a MESMA mancha de agrupamento que junta
                 // os objetos pinta o chão sob eles (folhas congeladas sob os bosques

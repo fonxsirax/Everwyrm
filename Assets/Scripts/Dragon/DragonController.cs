@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Controlador do dragão (Unka) — chão, decolagem, voo, pouso, combate e sobrevivência.
@@ -22,7 +21,8 @@ using UnityEngine.SceneManagement;
 ///         R descansar · G comer carcaça próxima
 ///  Voo  : W acelera · S freia (SEGURE p/ pousar quando houver chão) · A/D vira
 ///         (curva fechada devagar, ampla em alta velocidade)
-///         Space sobe — soltar perto do fim da batida dá impulso extra (timing!)
+///         Space sobe MUITO por batida (quem limita é o PESO atual, não a idade) —
+///         soltar perto do fim da batida dá impulso extra (timing!)
 ///         Shift toque = WING BOOST (batida forte: aceleração instantânea, i-frames)
 ///         Shift + A/D = esquiva simples: desvia o rumo, sem animação dedicada
 ///         A/D + Shift + SPACE = ESQUIVA COMPLETA: toca o Fly Dodge L/R exato e
@@ -206,6 +206,7 @@ public class DragonController : MonoBehaviour
     DragonGrowth growth;                 // opcional
     DragonAttributes attrs;              // opcional
     DragonFlight flight;                 // opcional (voo skill-based)
+    DragonTraits traits;                 // opcional (traços herdáveis)
 
     bool flying, gliding, stalling, resting, dead, swimming, stealth, diving;
     float planarSpeed, flySpeed, verticalVel;
@@ -245,6 +246,10 @@ public class DragonController : MonoBehaviour
     public bool IsDashing => Time.time < dashUntil;
     public float MaxGroundSpeed => EffRunSpeed;          // p/ menu de atributos
     public float MaxFlightSpeed => maxFlySpeed * S;
+    // Bases CRUAS (antes de qualquer multiplicador) — a janela de balanceamento
+    // (Tools > Everwyrm > Balanço do Dragão) lê daqui para simular sem entrar em Play.
+    public float BaseRunSpeed => runSpeed;
+    public float BaseMaxFlySpeed => maxFlySpeed;
     public float TimeToRun => EffRunSpeed / Mathf.Max(0.01f, EffGroundAccel);
     public float Speed01 => flying ? Mathf.InverseLerp(0f, maxFlySpeed * S, flySpeed)
                                    : Mathf.InverseLerp(0f, EffRunSpeed, Mathf.Abs(planarSpeed));
@@ -260,14 +265,26 @@ public class DragonController : MonoBehaviour
         Time.time - lockStart >= (actionLockUntil - lockStart) * attackCancelWindow;
 
     // ---- Peso/tamanho (DragonGrowth) + atributos — neutros se não existirem
-    float AttrSpeed => attrs != null ? attrs.SpeedMul : 1f;   // Velocidade
-    float AttrAccel => attrs != null ? attrs.AccelMul : 1f;   // Velocidade + Resistência
+    float AttrSpeed => attrs != null ? attrs.SpeedMul : 1f;   // Agilidade
+    float AttrAccel => attrs != null ? attrs.AccelMul : 1f;   // Agilidade + Vigor
     float S => (growth != null ? growth.SpeedScale : 1f) * AttrSpeed;
-    float CostMul => growth != null ? growth.EnergyCostMul : 1f;
+    /// <summary>Custo de energia: PESO (crescimento/condição) × EFICIÊNCIA do Fôlego ×
+    /// bioma do Sangue Frio. O dragão de Fôlego voa a tarde inteira; no calor o
+    /// Sangue Frio custa mais caro.</summary>
+    float CostMul => (growth != null ? growth.EnergyCostMul : 1f)
+                   * (attrs != null ? attrs.EnergyCostMul : 1f)
+                   * (traits != null ? traits.EnergyCostBiomeMul(transform.position) : 1f);
     float RunMul => growth != null ? growth.RunSpeedMul : 1f;
     float ClimbMul => growth != null ? growth.ClimbMul : 1f;
+    /// <summary>Sustentação de asa pelo PESO atual — a mesma do DragonFlight.</summary>
+    float LiftMul => growth != null ? growth.FlapLiftMul : 1f;
     float SinkMul => growth != null ? growth.SinkMul : 1f;
-    float TurnMul => growth != null ? growth.TurnAgilityMul : 1f;
+    /// <summary>Giro: agilidade do PESO/idade × atributo Agilidade × traço (Couraça enrijece).</summary>
+    float TurnMul => (growth != null ? growth.TurnAgilityMul : 1f)
+                   * (attrs != null ? attrs.TurnMul : 1f)
+                   * (traits != null ? traits.TurnMul : 1f);
+    /// <summary>Fator das janelas de i-frame (Instinto) — dash/boost/esquiva.</summary>
+    float IFrameMul => attrs != null ? attrs.IFrameMul : 1f;
     float EffRunSpeed => runSpeed * RunMul * S;
     /// <summary>Aceleração terrestre efetiva: peso e idade modulam a EXPLOSÃO,
     /// não criam espera (filhote arranca ligeiro; gordo/colossal empurram mais).</summary>
@@ -284,6 +301,8 @@ public class DragonController : MonoBehaviour
         attrs = GetComponent<DragonAttributes>();
         flight = GetComponent<DragonFlight>();
         if (flight == null) flight = gameObject.AddComponent<DragonFlight>(); // garante o módulo de voo
+        traits = GetComponent<DragonTraits>();
+        if (traits == null) traits = gameObject.AddComponent<DragonTraits>(); // traços herdáveis (vazio sem record)
         if (GetComponent<DragonSounds>() == null)
             gameObject.AddComponent<DragonSounds>(); // receptor dos AnimationEvents "PlaySound" dos FBX
         if (vitals != null && GetComponent<DragonDamageFeedback>() == null)
@@ -328,8 +347,9 @@ public class DragonController : MonoBehaviour
         if (dead)
         {
             if (!cc.isGrounded) cc.Move(Vector3.down * 10f * dt);
-            if (DragonInput.RespawnDown)
-                SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            // Morte NÃO recomeça a cena (fim do "game over do The Isle"): a Base assume
+            // o próximo dragão. Enter força a troca na mão (debug/atalho de possessão).
+            if (DragonInput.RespawnDown) DragonBase.Instance?.PossessNext();
             return;
         }
 
@@ -529,7 +549,10 @@ public class DragonController : MonoBehaviour
     /// decolagem parecia PERDER força justo quando devia ganhar.</summary>
     void TakeoffLaunch()
     {
-        flight?.Launch(takeoffLaunchClimb * S * ClimbMul);
+        // o bote segue a MESMA regra do voo (DragonFlight): quem manda na altura
+        // é o peso atual, não o tamanho — decolar não pode render um pulo de
+        // filhote e um foguete de colossal
+        flight?.Launch(takeoffLaunchClimb * LiftMul);
         flySpeed += takeoffLaunchForward * S;
         vertInput = 1f;
 
@@ -625,9 +648,12 @@ public class DragonController : MonoBehaviour
 
         vitals?.Drain(glideCost * CostMul);   // sustentação passiva: custo mínimo
 
-        // pitch e animação seguem o movimento vertical REAL
-        vertInput = Mathf.MoveTowards(vertInput,
-            Mathf.Clamp(vy / Mathf.Max(1f, climbRate * s), -1f, 1f), 5f * dt);
+        // pitch e animação seguem o movimento vertical REAL, normalizado pela
+        // subida MÁXIMA que este corpo alcança — senão as batidas fortes do
+        // sistema novo saturariam o pitch em toda batida
+        float riseRef = flight != null ? Mathf.Max(1f, flight.MaxRiseSpeed)
+                                       : Mathf.Max(1f, climbRate * s);
+        vertInput = Mathf.MoveTowards(vertInput, Mathf.Clamp(vy / riseRef, -1f, 1f), 5f * dt);
 
         Vector3 fwd = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
         flightVel = fwd * flySpeed + Vector3.up * vy;   // OnControllerColliderHit mede o impacto daqui
@@ -728,7 +754,7 @@ public class DragonController : MonoBehaviour
         dashUntil = Time.time + dashDuration;
         dashReadyAt = Time.time +
             dashCooldown * (growth != null ? growth.DashCooldownMul : 1f);
-        vitals?.GrantIFrames(dashIFrames);
+        vitals?.GrantIFrames(dashIFrames * IFrameMul);   // Instinto estica a janela
 
         anim.SetFloat(P_DodgeDir, side);
         anim.SetTrigger(P_Dodge);
@@ -750,7 +776,7 @@ public class DragonController : MonoBehaviour
         if (vitals != null && !vitals.TrySpend(boostCost * CostMul)) return;
         if (Locked) CancelLock();
         boostReadyAt = Time.time + boostCooldown;
-        vitals?.GrantIFrames(boostIFrames);
+        vitals?.GrantIFrames(boostIFrames * IFrameMul);   // Instinto
 
         float side = DragonInput.Horizontal;
         if (Mathf.Abs(side) > 0.5f)
@@ -766,7 +792,8 @@ public class DragonController : MonoBehaviour
         {
             // WING BOOST: batida forte — aceleração instantânea (fantasia de dragão).
             // O visual vem do tranco de sustentação (Knock) refletido no blend de voo.
-            float mul = growth != null ? growth.BoostMul : 1f;
+            // Peso/idade (BoostMul) × Força (o aríete das asas do dragão possante).
+            float mul = (growth != null ? growth.BoostMul : 1f) * (attrs != null ? attrs.BoostMul : 1f);
             flySpeed = Mathf.Min(flySpeed + boostImpulse * S * mul,
                                  maxFlySpeed * boostMaxOverspeed * S);
             flight?.Knock(1.5f * mul);
@@ -800,7 +827,7 @@ public class DragonController : MonoBehaviour
         flyDodgeYawTarget = yaw + side * flyDodgeTurn * TurnMul;
         flyDodgeUntil = Time.time + flyDodgeDuration;
         diving = false;                    // o Shift do combo não vira mergulho
-        vitals?.GrantIFrames(flyDodgeIFrames);
+        vitals?.GrantIFrames(flyDodgeIFrames * IFrameMul);   // Instinto
 
         // CrossFade no estado EXATO: o trigger dependia da transição vencer o
         // blend do voo, e era isso que fazia a animação sair imprecisa
@@ -940,7 +967,9 @@ public class DragonController : MonoBehaviour
         if (drop <= safe) return 0f;
 
         float excess = (drop - safe) / safe;             // 1 = caiu do dobro do seguro
-        vitals?.Damage(fallDamageAtDouble * excess);
+        // Ossos Ocos amplia o dano de queda (o esqueleto leve quebra mais fácil).
+        float fallMul = traits != null ? traits.FallDamageMul : 1f;
+        vitals?.Damage(fallDamageAtDouble * excess * fallMul);
         return Mathf.Clamp01(excess);
     }
 
@@ -982,7 +1011,8 @@ public class DragonController : MonoBehaviour
                 anim.SetInteger(P_AttackType, 0);                   // mordida
                 anim.SetTrigger(P_Attack);
                 Lock(1.0f, LockKind.Attack);
-                float n = food.Consume();
+                // Estômago de Ferro rende mais de cada refeição (carniça velha inclusive).
+                float n = food.Consume() * (traits != null ? traits.EatNutritionMul : 1f);
                 vitals?.Eat(n);
                 growth?.NotifyAte(n);
             }
@@ -1035,7 +1065,12 @@ public class DragonController : MonoBehaviour
         nextHintCheck = Time.time + 0.25f;
 
         string hint = "";
-        if (flying && flight != null && flight.CurrentWind.y > 1.5f)
+        // ar rarefeito perto do teto de voo (Resistência): avisa ANTES de estolar
+        // por falta de sustentação — prioridade sobre a corrente ascendente, porque
+        // é o updraft que deixa de ajudar justo aqui
+        if (flying && flight != null && flight.ThinAir01 > 0.55f)
+            hint = "Ar rarefeito — perdendo sustentação!";
+        else if (flying && flight != null && flight.CurrentWind.y > 1.5f)
             hint = "^ Corrente ascendente — plane nela!";
         else if (!flying && !resting && !dead)
         {
@@ -1092,8 +1127,9 @@ public class DragonController : MonoBehaviour
     void SwimUpdate(float dt, float h, float v)
     {
         float s = S;
-        // gordo nada pior (mesma penalidade da corrida); exausto se arrasta
-        float mul = RunMul * (Exhausted ? 0.55f : 1f);
+        // gordo nada pior (mesma penalidade da corrida); exausto se arrasta.
+        // Guelras Vestigiais nadam bem mais rápido (o dragão aquático da linhagem).
+        float mul = RunMul * (Exhausted ? 0.55f : 1f) * (traits != null ? traits.SwimSpeedMul : 1f);
         float target = v > 0.01f ? v * swimSpeed * mul
                      : v < -0.01f ? v * swimBackSpeed
                      : 0f;
@@ -1110,7 +1146,9 @@ public class DragonController : MonoBehaviour
         Vector3 fwd = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
         cc.Move(fwd * planarSpeed * dt + Vector3.up * vyMove);
 
-        vitals?.Drain(swimCost * CostMul * (Mathf.Abs(planarSpeed) > 0.3f ? 1f : 0.35f));
+        // Guelras Vestigiais respiram submerso: nadar não custa energia.
+        if (traits == null || !traits.BreathesUnderwater)
+            vitals?.Drain(swimCost * CostMul * (Mathf.Abs(planarSpeed) > 0.3f ? 1f : 0.35f));
 
         // Space: decola da água (explosão de asas — custa um pouco mais)
         if (!Locked && DragonInput.Consume(DragonInput.Act.Flap) &&
@@ -1193,7 +1231,7 @@ public class DragonController : MonoBehaviour
         vertInput = running ? 0.35f : 1f;
         // parado, este é só o SALTO — o impulso de verdade vem do bote das asas
         // no fim do clipe (TakeoffLaunch). Correndo, as asas já abrem em movimento.
-        flight?.OnEnterFlight((running ? 5f : takeoffHopClimb) * S);
+        flight?.OnEnterFlight((running ? 5f : takeoffHopClimb) * LiftMul);
         anim.SetBool(P_Flying, true);
         anim.SetBool(P_Glide, false);
     }
@@ -1244,6 +1282,7 @@ public class DragonController : MonoBehaviour
     void OnStageUp(DragonGrowth.LifeStage newStage)
     {
         if (dead || flying || resting || swimming) return;
+        if (newStage == DragonGrowth.LifeStage.Elder) return;  // a velhice não se comemora
         anim.SetTrigger(P_Roar);          // celebra crescer de fase rugindo
         Lock(2.4f);
     }
@@ -1277,6 +1316,22 @@ public class DragonController : MonoBehaviour
         anim.SetBool(P_Swim, false);
         anim.SetFloat(P_DeathVar, UnityEngine.Random.Range(0, 2));
         anim.SetTrigger(P_Die);
+    }
+
+    /// <summary>Ressuscita o avatar para uma nova possessão (troca de dragão da Base):
+    /// zera a morte e o estado volátil de voo/lock e volta o Animator ao default. A
+    /// skin e os stats vêm da DragonPossession (LoadFrom nos componentes).</summary>
+    public void Revive()
+    {
+        dead = flying = gliding = stalling = resting = swimming = stealth = diving = false;
+        planarSpeed = flySpeed = verticalVel = vertInput = 0f;
+        actionLockUntil = staggerUntil = dashUntil = flyDodgeUntil = -99f;
+        takeoffTime = -99f;
+        inStationaryTakeoff = false;
+        fallFromY = float.NaN;
+        pitch = roll = 0f;
+        anim.Rebind();          // limpa o Death e volta ao estado default (Locomotion)
+        anim.Update(0f);
     }
 
     bool Spend(float amount) => vitals == null || vitals.TrySpend(amount);

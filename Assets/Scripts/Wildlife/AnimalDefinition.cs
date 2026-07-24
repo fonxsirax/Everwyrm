@@ -17,7 +17,9 @@ public class AnimalDefinition : ScriptableObject
     public enum SocialModel { Solitario, Rebanho, Alcateia, Hibrido }
 
     /// <summary>Papel de um indivíduo dentro do grupo.</summary>
-    public enum RoleKind { Lider, Membro, Filhote }
+    /// <summary>Líder · Membro · Filhote. A ORDEM é contrato de serialização (enum
+    /// grava como índice nos assets de fauna) — só acrescente no fim.</summary>
+    public enum RoleKind { Leader, Member, Young }
 
     /// <summary>Períodos de atividade — pronto para o futuro ciclo dia/noite.</summary>
     [Flags]
@@ -90,7 +92,7 @@ public class AnimalDefinition : ScriptableObject
     public class AnimalRole
     {
         public string name;
-        public RoleKind kind = RoleKind.Membro;
+        public RoleKind kind = RoleKind.Member;
         public GameObject[] prefabs;                    // variações visuais da variante
         public RuntimeAnimatorController controller;
         public AnimalAnimSet anims = new();

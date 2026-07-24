@@ -12,8 +12,10 @@ public class FlightProfile : ScriptableObject
     [Tooltip("Segundos após decolar em que SEGURAR Space sobe continuamente")]
     public float takeoffClimbTime = 3f;
     [Tooltip("Velocidade de subida na fase de decolagem (m/s) — precisa ser ALTA: " +
-             "abaixo do impulso de entrada, segurar Space PUXA o dragão pra baixo")]
-    public float takeoffClimbRate = 9f;
+             "abaixo do impulso de entrada, segurar Space PUXA o dragão pra baixo. " +
+             "Multiplicada pelo PESO (DragonGrowth.FlapLiftMul), não pelo tamanho. " +
+             "NERF jul/2026: a calibração anterior (12) ficou apelona.")]
+    public float takeoffClimbRate = 6f;
     [Tooltip("Energia por segundo segurando a subida de decolagem")]
     public float takeoffClimbEnergyPerSec = 4f;
 
@@ -28,20 +30,26 @@ public class FlightProfile : ScriptableObject
     [Header("Bônus de timing (soltar Space no fim da batida)")]
     [Tooltip("Duração da batida de asa — janela para soltar e ganhar o bônus (s)")]
     public float flapAnimDuration = 1f;
-    [Tooltip("Impulso vertical EXTRA máximo, soltando exatamente no fim da batida (m/s)")]
-    public float flapBonusLift = 9f;
+    [Tooltip("Impulso vertical EXTRA máximo, soltando exatamente no fim da batida (m/s). " +
+             "NERF jul/2026: escala junto com flapLift (mesma razão ÷4).")]
+    public float flapBonusLift = 3.25f;
     [Tooltip("Empurrão pra frente extra no bônus máximo (m/s)")]
     public float flapBonusForward = 0.8f;
     [Tooltip("Curva do bônus (maior = só soltura quase perfeita vale muito)")]
     public float flapBonusPower = 2f;
 
     [Header("Força da batida")]
-    [Tooltip("Impulso vertical por batida (m/s)")]
-    public float flapLift = 9f;
+    [Tooltip("Impulso vertical por batida (m/s). Voando estável é o número que faz o " +
+             "Space GANHAR ALTITUDE de verdade — multiplicado só pelo PESO atual " +
+             "(DragonGrowth.FlapLiftMul), então varia pouco ao longo da vida. " +
+             "NERF jul/2026: 1/4 do valor da calibração anterior (17) — ficou apelona; " +
+             "voar de verdade agora pede ritmo (batidas + planeio), não 1 flap só.")]
+    public float flapLift = 4.25f;
     [Tooltip("Empurrão pra frente por batida (m/s)")]
     public float flapForwardBoost = 1.1f;
-    [Tooltip("Velocidade máxima de subida acumulável")]
-    public float maxRiseSpeed = 12f;
+    [Tooltip("Velocidade máxima de subida acumulável (m/s) — também escala com o peso. " +
+             "NERF jul/2026: reduzida junto com flapLift (não é mais quase inatingível).")]
+    public float maxRiseSpeed = 10f;
 
     [Header("Planeio (sustentação pela velocidade)")]
     [Tooltip("Afundamento planando RÁPIDO (m/s) — voar rápido conserva altitude")]
@@ -65,8 +73,9 @@ public class FlightProfile : ScriptableObject
     public float swoopConversion = 0.35f;
 
     [Header("Custo de energia")]
-    [Tooltip("Energia por batida (multiplicada pelo peso do dragão)")]
-    public float energyPerFlap = 2f;
+    [Tooltip("Energia por batida (multiplicada pelo peso do dragão). Subiu junto com " +
+             "o flapLift: batida que rende muita altitude tem que custar")]
+    public float energyPerFlap = 3f;
 
     [Header("Vento")]
     [Tooltip("Quanto correntes de ar (updrafts/térmicas) afetam o dragão")]

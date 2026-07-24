@@ -1387,6 +1387,8 @@ GameObject:
   - component: {fileID: 7383170009394333558}
   - component: {fileID: 2878444471970049892}
   - component: {fileID: 7831661525013470528}
+  - component: {fileID: 7515630652582555693}
+  - component: {fileID: 5730309087826222179}
   m_Layer: 20
   m_Name: Unka Realistic
   m_TagString: Player
@@ -1470,18 +1472,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e9a4c4d05867e8f469931d4fb99e1c98, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  walkSpeed: 3.84
-  runSpeed: 11.4
+  walkSpeed: 5
+  runSpeed: 10
   reverseSpeed: 1.7
   groundAccel: 35
   groundDecel: 25
   turnRateIdle: 540
   turnRateRun: 240
   gravity: 28
-  hopImpulse: 6.5
-  takeoffMinSpeed: 1.5
   runningTakeoffFraction: 0.5
-  takeoffSteerLock: 0.35
+  takeoffLockMinimum: 0.15
+  takeoffHopClimb: 6
+  takeoffLaunchClimb: 12
+  takeoffLaunchForward: 3
+  takeoffMaxLock: 2.5
   takeoffGrace: 0.8
   dashSpeedMul: 1.7
   dashDuration: 0.35
@@ -1492,6 +1496,11 @@ MonoBehaviour:
   boostCooldown: 1
   boostIFrames: 0.25
   boostCost: 6
+  airDodgeYaw: 18.2
+  flyDodgeTurn: 90
+  flyDodgeDuration: 0.45
+  flyDodgeIFrames: 0.4
+  flyDodgeCost: 8
   attackCancelWindow: 0.4
   minFlySpeed: 6
   cruiseSpeed: 14
@@ -1538,7 +1547,6 @@ MonoBehaviour:
   flapCost: 3.5
   climbCost: 7
   glideCost: 0.3
-  hopCost: 4
   takeoffCost: 6
   dodgeCost: 8
   fireCost: 15
@@ -1594,6 +1602,12 @@ MonoBehaviour:
   starvingLossKgPerMinute: 3
   mealWeightNudgeKg: 2
   adultHealthyWeightKg: 950
+  oldAgeMinutes: 40
+  lifespanMinutes: 55
+  elderPenalty: 0.25
+  vigorGrowthPerPoint: 0.02
+  vigorLifespanPerPoint: 0.03
+  starveBelowHunger: 0.25
 --- !u!114 &7383170009394333558
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1622,6 +1636,8 @@ MonoBehaviour:
   ceilingBase: 150
   ceilingPerPoint: 15
   ceilingMaxPoints: 10
+  natureModifier: 0.1
+  ivBonusPerPoint: 0.1
 --- !u!114 &2878444471970049892
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1634,7 +1650,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f2c72148b63be84a9f2545313d6d7d7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  profile: {fileID: 0}
+  profile: {fileID: 11400000, guid: 72273d2c22d74984399c41d17057e91a, type: 2}
 --- !u!114 &7831661525013470528
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1656,6 +1672,35 @@ MonoBehaviour:
     clips: []
     volume: 0.9
     pitchRange: {x: 0.9, y: 1.1}
+--- !u!114 &7515630652582555693
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1328021928562530}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: beca2bcc01400c442816fd926a403e52, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &5730309087826222179
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1328021928562530}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 63b5c914d547b51429c6cd1e513064aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  duration: 2
+  dissolveProps:
+  - _DissolveAmount
+  - _Dissolve
+  - _DissolveValue
 --- !u!1 &1334724701867080
 GameObject:
   m_ObjectHideFlags: 0
@@ -2090,7 +2135,7 @@ SkinnedMeshRenderer:
   m_RenderingLayerMask: 4294967295
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: f3e42b973d0d68342a8424b5aee87942, type: 2}
+  - {fileID: 2100000, guid: 58b99df71c31db242ae893cdb051fc32, type: 2}
   - {fileID: 2100000, guid: 59134c9fc0fbb1040bc102c3f17daa20, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
@@ -2222,6 +2267,7 @@ SkinnedMeshRenderer:
   - {fileID: 4569561305227018}
   - {fileID: 4029433149614830}
   m_BlendShapeWeights:
+  - 0
   - 0
   - 0
   - 0

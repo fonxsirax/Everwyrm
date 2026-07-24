@@ -375,8 +375,8 @@ public static class WildlifeSetup
         d.memberSpacing = 3f; d.catchUpDistance = 9f;
         d.roles = new[]
         {
-            Role("Hares/HareMale", RoleKind.Membro, "Adulta", 2, 6),
-            Role("Hares/HareYoung", RoleKind.Filhote, "Filhote", 1, 3, 0.75f, 0.95f, 0.88f, 1f),
+            Role("Hares/HareMale", RoleKind.Member, "Adulta", 2, 6),
+            Role("Hares/HareYoung", RoleKind.Young, "Filhote", 1, 3, 0.75f, 0.95f, 0.88f, 1f),
         };
         d.biomes = new[]
         {
@@ -406,8 +406,8 @@ public static class WildlifeSetup
         d.memberSpacing = 3.5f; d.catchUpDistance = 10f;
         d.roles = new[]
         {
-            Role("Foxes/Fox", RoleKind.Membro, "Adulta", 1, 2),
-            Role("Foxes/FoxCub", RoleKind.Filhote, "Filhote", 1, 3, 0.45f, 0.9f, 0.85f, 1f),
+            Role("Foxes/Fox", RoleKind.Member, "Adulta", 1, 2),
+            Role("Foxes/FoxCub", RoleKind.Young, "Filhote", 1, 3, 0.45f, 0.9f, 0.85f, 1f),
         };
         d.biomes = new[]
         {
@@ -439,9 +439,9 @@ public static class WildlifeSetup
         d.memberSpacing = 4.5f; d.catchUpDistance = 12f;
         d.roles = new[]
         {
-            Role("Deers/DeerStag", RoleKind.Lider, "Stag", 1, 1, 0.55f, 1f, 1f, 1.08f),
-            Role("Deers/DeerDoe", RoleKind.Membro, "Corça", 4, 8),
-            Role("Deers/DeerCalf", RoleKind.Filhote, "Filhote", 1, 3, 0.8f, 0.95f, 0.85f, 1f),
+            Role("Deers/DeerStag", RoleKind.Leader, "Stag", 1, 1, 0.55f, 1f, 1f, 1.08f),
+            Role("Deers/DeerDoe", RoleKind.Member, "Corça", 4, 8),
+            Role("Deers/DeerCalf", RoleKind.Young, "Filhote", 1, 3, 0.8f, 0.95f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Floresta, 0.25f, 1f), B(Biome.Campos, 0.2f, 0.75f) };
         d.spawnWeight = 10f; d.maxActiveGroups = 5;
@@ -463,7 +463,7 @@ public static class WildlifeSetup
                         "pequeno território e pode partir para cima se acuado por um dragão jovem.";
         d.social = Social.Solitario;
         d.groupSize = new Vector2Int(1, 1);
-        d.roles = new[] { Role("Deers/DeerStag", RoleKind.Lider, "Stag", 1, 1, 1f, 1f, 1.02f, 1.1f) };
+        d.roles = new[] { Role("Deers/DeerStag", RoleKind.Leader, "Stag", 1, 1, 1f, 1f, 1.02f, 1.1f) };
         d.biomes = new[] { B(Biome.Floresta, 0.3f, 0.9f), B(Biome.Campos, 0.25f, 0.6f) };
         d.spawnWeight = 2.2f; d.maxActiveGroups = 3;
         d.activity = Activity.Madrugada | Activity.Dia | Activity.Entardecer;
@@ -487,9 +487,9 @@ public static class WildlifeSetup
         d.memberSpacing = 5f; d.catchUpDistance = 14f;
         d.roles = new[]
         {
-            Role("RedDeers/RedDeer_Stag", RoleKind.Lider, "Stag", 1, 1, 0.7f, 1f, 1f, 1.08f),
-            Role("RedDeers/RedDeer_Doe", RoleKind.Membro, "Corça", 4, 8),
-            Role("RedDeers/RedDeer_Calf", RoleKind.Filhote, "Filhote", 2, 4, 0.85f, 0.95f, 0.85f, 1f),
+            Role("RedDeers/RedDeer_Stag", RoleKind.Leader, "Stag", 1, 1, 0.7f, 1f, 1f, 1.08f),
+            Role("RedDeers/RedDeer_Doe", RoleKind.Member, "Corça", 4, 8),
+            Role("RedDeers/RedDeer_Calf", RoleKind.Young, "Filhote", 2, 4, 0.85f, 0.95f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Campos, 0.22f, 1f), B(Biome.Floresta, 0.28f, 0.5f) };
         d.spawnWeight = 7f; d.maxActiveGroups = 3;
@@ -509,7 +509,7 @@ public static class WildlifeSetup
                         "lagos (bebe muito) e se torna perigosíssimo quando provocado.";
         d.social = Social.Solitario;
         d.groupSize = new Vector2Int(1, 1);
-        d.roles = new[] { Role("Moose/MooseBull", RoleKind.Lider, "Macho", 1, 1, 1f, 1f, 1f, 1.1f) };
+        d.roles = new[] { Role("Moose/MooseBull", RoleKind.Leader, "Macho", 1, 1, 1f, 1f, 1f, 1.1f) };
         d.biomes = new[]
         {
             B(Biome.Tundra, 0.25f, 1f), B(Biome.Floresta, 0.28f, 0.55f),
@@ -537,8 +537,8 @@ public static class WildlifeSetup
         d.memberSpacing = 3.5f;
         d.roles = new[]
         {
-            Role("Moose/MooseCow", RoleKind.Membro, "Fêmea", 1, 1),
-            Role("Moose/MooseCalf", RoleKind.Filhote, "Cria", 1, 1, 1f, 0.9f, 0.9f, 1f),
+            Role("Moose/MooseCow", RoleKind.Member, "Fêmea", 1, 1),
+            Role("Moose/MooseCalf", RoleKind.Young, "Cria", 1, 1, 1f, 0.9f, 0.9f, 1f),
         };
         d.biomes = new[] { B(Biome.Tundra, 0.25f, 1f), B(Biome.Floresta, 0.3f, 0.5f) };
         d.spawnWeight = 1.2f; d.maxActiveGroups = 2;
@@ -563,9 +563,9 @@ public static class WildlifeSetup
         d.memberSpacing = 3.5f; d.catchUpDistance = 10f;
         d.roles = new[]
         {
-            Role("Boars/BoarMale", RoleKind.Lider, "Macho", 1, 1, 0.8f, 1f, 1f, 1.08f),
-            Role("Boars/BoarFemale", RoleKind.Membro, "Fêmea", 2, 4),
-            Role("Boars/BoarYoung", RoleKind.Filhote, "Filhote", 0, 4, 0.7f, 0.9f, 0.85f, 1f),
+            Role("Boars/BoarMale", RoleKind.Leader, "Macho", 1, 1, 0.8f, 1f, 1f, 1.08f),
+            Role("Boars/BoarFemale", RoleKind.Member, "Fêmea", 2, 4),
+            Role("Boars/BoarYoung", RoleKind.Young, "Filhote", 0, 4, 0.7f, 0.9f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Floresta, 0.25f, 1f), B(Biome.Campos, 0.25f, 0.6f) };
         d.spawnWeight = 6.5f; d.maxActiveGroups = 5;
@@ -588,7 +588,7 @@ public static class WildlifeSetup
                         "em duas patas para intimidar e decide se ignora ou ataca.";
         d.social = Social.Solitario;
         d.groupSize = new Vector2Int(1, 1);
-        d.roles = new[] { Role("Bears/BearMale", RoleKind.Lider, "Macho", 1, 1, 1f, 1f, 1f, 1.1f) };
+        d.roles = new[] { Role("Bears/BearMale", RoleKind.Leader, "Macho", 1, 1, 1f, 1f, 1f, 1.1f) };
         d.biomes = new[]
         {
             B(Biome.Floresta, 0.3f, 1f), B(Biome.Montanha, 0.3f, 0.6f),
@@ -617,8 +617,8 @@ public static class WildlifeSetup
         d.memberSpacing = 3f;
         d.roles = new[]
         {
-            Role("Bears/BearFemale", RoleKind.Membro, "Fêmea", 1, 1),
-            Role("Bears/BearCub", RoleKind.Filhote, "Filhote", 1, 2, 1f, 0.88f, 0.85f, 1f),
+            Role("Bears/BearFemale", RoleKind.Member, "Fêmea", 1, 1),
+            Role("Bears/BearCub", RoleKind.Young, "Filhote", 1, 2, 1f, 0.88f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Floresta, 0.3f, 1f), B(Biome.Montanha, 0.3f, 0.5f) };
         d.spawnWeight = 0.9f; d.maxActiveGroups = 1;
@@ -644,9 +644,9 @@ public static class WildlifeSetup
         d.memberSpacing = 4f; d.catchUpDistance = 12f;
         d.roles = new[]
         {
-            Role("Wolfes/WolfMale", RoleKind.Lider, "Alfa", 1, 1, 1f, 1f, 1.02f, 1.1f),
-            Role("Wolfes/WolfMale", RoleKind.Membro, "Adulto", 2, 4),
-            Role("Wolfes/WolfCub", RoleKind.Filhote, "Filhote", 0, 2, 0.55f, 0.9f, 0.85f, 1f),
+            Role("Wolfes/WolfMale", RoleKind.Leader, "Alfa", 1, 1, 1f, 1f, 1.02f, 1.1f),
+            Role("Wolfes/WolfMale", RoleKind.Member, "Adulto", 2, 4),
+            Role("Wolfes/WolfCub", RoleKind.Young, "Filhote", 0, 2, 0.55f, 0.9f, 0.85f, 1f),
         };
         d.biomes = new[]
         {
@@ -681,8 +681,8 @@ public static class WildlifeSetup
         d.memberSpacing = 3f; d.catchUpDistance = 9f;
         d.roles = new[]
         {
-            Role("Hares/HareMale", RoleKind.Membro, "Adulta", 2, 3),
-            Role("Hares/HareYoung", RoleKind.Filhote, "Filhote", 0, 2, 0.6f, 0.95f, 0.88f, 1f),
+            Role("Hares/HareMale", RoleKind.Member, "Adulta", 2, 3),
+            Role("Hares/HareYoung", RoleKind.Young, "Filhote", 0, 2, 0.6f, 0.95f, 0.88f, 1f),
         };
         d.biomes = new[] { B(Biome.Deserto, 0.3f, 1f) };
         d.spawnWeight = 8f; d.maxActiveGroups = 4;
@@ -707,8 +707,8 @@ public static class WildlifeSetup
         d.memberSpacing = 3.5f;
         d.roles = new[]
         {
-            Role("Foxes/Fox", RoleKind.Membro, "Adulta", 1, 2),
-            Role("Foxes/FoxCub", RoleKind.Filhote, "Filhote", 0, 2, 0.3f, 0.9f, 0.85f, 1f),
+            Role("Foxes/Fox", RoleKind.Member, "Adulta", 1, 2),
+            Role("Foxes/FoxCub", RoleKind.Young, "Filhote", 0, 2, 0.3f, 0.9f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Deserto, 0.3f, 1f) };
         d.spawnWeight = 5f; d.maxActiveGroups = 3;
@@ -734,9 +734,9 @@ public static class WildlifeSetup
         d.memberSpacing = 3.5f; d.catchUpDistance = 10f;
         d.roles = new[]
         {
-            Role("Boars/BoarMale", RoleKind.Lider, "Macho", 1, 1, 0.8f, 1f, 1f, 1.08f),
-            Role("Boars/BoarFemale", RoleKind.Membro, "Fêmea", 1, 2),
-            Role("Boars/BoarYoung", RoleKind.Filhote, "Filhote", 0, 2, 0.5f, 0.9f, 0.85f, 1f),
+            Role("Boars/BoarMale", RoleKind.Leader, "Macho", 1, 1, 0.8f, 1f, 1f, 1.08f),
+            Role("Boars/BoarFemale", RoleKind.Member, "Fêmea", 1, 2),
+            Role("Boars/BoarYoung", RoleKind.Young, "Filhote", 0, 2, 0.5f, 0.9f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Deserto, 0.35f, 0.8f) };
         d.spawnWeight = 3f; d.maxActiveGroups = 3;
@@ -762,9 +762,9 @@ public static class WildlifeSetup
         d.memberSpacing = 4f; d.catchUpDistance = 12f;
         d.roles = new[]
         {
-            Role("Wolfes/WolfMale", RoleKind.Lider, "Alfa", 1, 1, 1f, 1f, 1.02f, 1.1f),
-            Role("Wolfes/WolfMale", RoleKind.Membro, "Adulto", 1, 3),
-            Role("Wolfes/WolfCub", RoleKind.Filhote, "Filhote", 0, 1, 0.35f, 0.9f, 0.85f, 1f),
+            Role("Wolfes/WolfMale", RoleKind.Leader, "Alfa", 1, 1, 1f, 1f, 1.02f, 1.1f),
+            Role("Wolfes/WolfMale", RoleKind.Member, "Adulto", 1, 3),
+            Role("Wolfes/WolfCub", RoleKind.Young, "Filhote", 0, 1, 0.35f, 0.9f, 0.85f, 1f),
         };
         d.biomes = new[] { B(Biome.Deserto, 0.35f, 0.7f) };
         d.spawnWeight = 2f; d.maxActiveGroups = 2;

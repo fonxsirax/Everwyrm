@@ -38,13 +38,27 @@ public class DragonVitals : MonoBehaviour
 
     DragonController dragon;
     DragonAttributes attrs;                          // opcional
+    DragonTraits traitsCache;                        // opcional (adicionado em runtime pelo Controller)
+    /// <summary>Getter preguiçoso: o DragonTraits é criado no Awake do Controller, e
+    /// a ordem de Awake entre componentes é indefinida — buscar sob demanda evita
+    /// cachear null cedo demais.</summary>
+    DragonTraits Traits => traitsCache != null ? traitsCache : (traitsCache = GetComponent<DragonTraits>());
     float lastH = -1f, lastE = -1f, lastF = -1f;     // últimos valores emitidos
     float invulnUntil = -99f;                        // i-frames (dash/boost)
 
-    // máximos efetivos (Resistência aumenta vida e energia total)
-    public float MaxHealthEff => maxHealth * (attrs != null ? attrs.MaxHealthMul : 1f);
+    // bases cruas — a janela de balanceamento (Tools > Everwyrm > Balanço do
+    // Dragão) simula os máximos por fase da vida a partir daqui
+    public float BaseMaxHealth => maxHealth;
+    public float BaseMaxEnergy => maxEnergy;
+    public float BaseHungerDecay => hungerDecay;
+
+    // máximos efetivos: Vigor aumenta a vida, Fôlego a energia; os traços cobram
+    // sua parte (Ossos Ocos/Fôlego de Forja tiram vida; Insone acelera a fome)
+    public float MaxHealthEff => maxHealth * (attrs != null ? attrs.MaxHealthMul : 1f)
+                                          * (Traits != null ? Traits.HealthMul : 1f);
     public float MaxEnergyEff => maxEnergy * (attrs != null ? attrs.MaxEnergyMul : 1f);
-    public float HungerDecayEff => hungerDecay * (attrs != null ? attrs.HungerDecayMul : 1f);
+    public float HungerDecayEff => hungerDecay * (attrs != null ? attrs.HungerDecayMul : 1f)
+                                              * (Traits != null ? Traits.HungerDecayMul : 1f);
     public float TotalEaten { get; private set; }    // carne comida na vida
 
     public float Hunger { get; private set; }
@@ -98,8 +112,10 @@ public class DragonVitals : MonoBehaviour
                                      : MaxEnergyEff;
         bool idleGround = !dragon.IsFlying && dragon.Speed01 < 0.05f;
         float hungerFactor = IsHungerCritical ? 0.4f : 1f; // recuperação lenta com fome
+        // Insone repõe energia parado bem mais rápido — dispensa parar para o R
+        float idleMul = Traits != null ? Traits.IdleRegenMul : 1f;
         if (dragon.IsResting) Energy += regenResting * regenMultiplier * hungerFactor * dt;
-        else if (idleGround) Energy += regenIdle * regenMultiplier * hungerFactor * dt;
+        else if (idleGround) Energy += regenIdle * regenMultiplier * hungerFactor * idleMul * dt;
         Energy = Mathf.Clamp(Energy, 0f, cap);
 
         // ---- Vida
@@ -159,6 +175,8 @@ public class DragonVitals : MonoBehaviour
     public void Damage(float amount, Vector3? source)
     {
         if (IsDead || amount <= 0f || IsInvulnerable) return;
+        // Couraça amortece o dano recebido (o esqueleto blindado da linhagem)
+        if (Traits != null) amount *= Traits.DamageTakenMul;
         Health = Mathf.Max(0f, Health - amount);
         OnDamaged?.Invoke(amount, source);
         if (Health <= 0f)
@@ -171,4 +189,46 @@ public class DragonVitals : MonoBehaviour
     }
 
     public void Heal(float amount) => Health = Mathf.Min(MaxHealthEff, Health + amount);
+
+    // ============================================================ POSSESSÃO
+    /// <summary>Restaura fome/energia/vida (frações do state × máximos efetivos).
+    /// Os atributos já devem ter sido carregados antes (os máximos dependem deles).</summary>
+    public void LoadFrom(DragonRecord record)
+    {
+        var s = record.state;
+        Hunger = Mathf.Clamp01(s.hunger01) * maxHunger;
+        Energy = Mathf.Clamp01(s.energy01) * MaxEnergyEff;
+        Health = Mathf.Clamp01(s.health01) * MaxHealthEff;
+        TotalEaten = s.totalEaten;
+        IsDead = s.isDead;
+        EmitStats();
+    }
+
+    public void WriteTo(DragonState s)
+    {
+        s.hunger01 = Hunger01;
+        s.energy01 = Energy01;
+        s.health01 = Health01;
+        s.totalEaten = TotalEaten;
+        s.isDead = IsDead;
+    }
+
+    /// <summary>Volta à vida ao ser possuído (a vida vem do state via LoadFrom).</summary>
+    public void Revive()
+    {
+        IsDead = false;
+        if (Health <= 0.5f) Health = MaxHealthEff;
+        EmitStats();
+    }
+
+    /// <summary>Morte IMPOSTA (velhice): zera a vida e dispara OnDeath como qualquer
+    /// morte — o dragão não some, apenas fica com 0 de vida (a Base assume o próximo).</summary>
+    public void Kill()
+    {
+        if (IsDead) return;
+        Health = 0f;
+        IsDead = true;
+        EmitStats();
+        OnDeath?.Invoke();
+    }
 }
