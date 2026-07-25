@@ -17,6 +17,17 @@ public class DragonCamera : MonoBehaviour
              "esse padrão; arraste outro DragonCameraProfile para outro estilo.")]
     [SerializeField] DragonCameraProfile cameraProfile;
 
+    [Header("Modo mira (over-the-shoulder)")]
+    [Tooltip("Ligado pelo DragonAim enquanto a mira (tecla E) está ativa — a câmera vai " +
+             "pro ombro e fica atrás do corpo. Estes números ficam no componente (e não " +
+             "no profile) para o asset de câmera existente não precisar ser regerado.")]
+    public bool AimMode;
+    [SerializeField] float aimDistanceMul = 0.55f;   // aproxima na mira
+    [SerializeField] float aimShoulder = 1.1f;       // desloca pro ombro (× escala)
+    [SerializeField] float aimHeight = 0.4f;         // sobe o pivô um pouco (× escala)
+    [SerializeField] float aimPitch = 8f;            // leve olhar pra baixo
+    [SerializeField] float aimFollowSpeed = 8f;      // rapidez de ficar atrás do corpo
+
     /// <summary>O perfil resolvido, sob demanda: o campo acima quando preenchido,
     /// senão o asset padrão. PREGUIÇOSO de propósito — a janela de balanceamento
     /// (Tools > Everwyrm > Balanço do Dragão) lê estes números direto no PREFAB,
@@ -85,7 +96,9 @@ public class DragonCamera : MonoBehaviour
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
-        if (Cursor.lockState != CursorLockMode.Locked && Input.GetMouseButtonDown(0))
+        // na mira o cursor fica destravado de propósito (retícula segue o mouse):
+        // não re-travar no clique de ataque — o DragonAim é quem manda no cursor.
+        if (!AimMode && Cursor.lockState != CursorLockMode.Locked && Input.GetMouseButtonDown(0))
         {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
@@ -111,6 +124,14 @@ public class DragonCamera : MonoBehaviour
         {
             camYaw = Mathf.LerpAngle(camYaw, target.eulerAngles.y, cfg.autoAlignSpeed * dt);
             camPitch = Mathf.Lerp(camPitch, 12f, cfg.autoAlignSpeed * dt);
+        }
+
+        // na mira o mouse é da retícula, não da órbita: a câmera fica ATRÁS do corpo
+        // (que encara o alvo), num leve olhar pra baixo — over-the-shoulder.
+        if (AimMode)
+        {
+            camYaw = Mathf.LerpAngle(camYaw, target.eulerAngles.y, aimFollowSpeed * dt);
+            camPitch = Mathf.Lerp(camPitch, aimPitch, aimFollowSpeed * dt);
         }
 
         // giro forçado da esquiva: acompanha o dragão de volta às costas dele
@@ -139,6 +160,14 @@ public class DragonCamera : MonoBehaviour
         Vector3 pivot = target.position + Vector3.up * cfg.pivotHeight * sizeScale;
         Quaternion rot = Quaternion.Euler(camPitch + divePitch, camYaw + turnLead, 0f);
         float dist = distance * sizeScale;
+
+        // ombro: desloca o pivô pro lado/cima e aproxima a câmera
+        if (AimMode)
+        {
+            pivot += rot * Vector3.right * (aimShoulder * sizeScale)
+                   + Vector3.up * (aimHeight * sizeScale);
+            dist *= aimDistanceMul;
+        }
 
         // não atravessar paredes/terreno
         if (Physics.SphereCast(pivot, 0.35f, rot * Vector3.back, out RaycastHit hit,

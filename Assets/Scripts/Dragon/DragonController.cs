@@ -18,7 +18,8 @@ using UnityEngine;
 ///         mudar de rumo, igual à esquiva de voo) — cancela golpes após ~40% do
 ///         swing (as duas teclas precisam ser um toque FRESCO e próximo: segurar
 ///         a direcional de antes não conta, solte e aperte as duas de novo)
-///         LMB combo (mordida/garras) · Q cauda · E asas · RMB/F fogo · T rugido
+///         LMB combo (mordida/garras) · Q cauda · P asas · RMB/F fogo · T rugido
+///         E = MODO MIRA (retícula no mouse, cabeça segue o alvo, ataques miram nele)
 ///         R descansar · G comer carcaça próxima
 ///  Voo  : W acelera · S freia (SEGURE p/ pousar quando houver chão) · A/D vira
 ///         (curva fechada devagar, ampla em alta velocidade)
@@ -122,6 +123,7 @@ public class DragonController : MonoBehaviour
     DragonAttributes attrs;              // opcional
     DragonFlight flight;                 // opcional (voo skill-based)
     DragonTraits traits;                 // opcional (traços herdáveis)
+    DragonAim aim;                       // modo mira (tecla E) — criado no Awake
 
     bool flying, gliding, stalling, resting, dead, swimming, stealth, diving;
     float planarSpeed, flySpeed, verticalVel;
@@ -223,6 +225,8 @@ public class DragonController : MonoBehaviour
         if (flight == null) flight = gameObject.AddComponent<DragonFlight>(); // garante o módulo de voo
         traits = GetComponent<DragonTraits>();
         if (traits == null) traits = gameObject.AddComponent<DragonTraits>(); // traços herdáveis (vazio sem record)
+        aim = GetComponent<DragonAim>();
+        if (aim == null) aim = gameObject.AddComponent<DragonAim>();          // modo mira (tecla E)
         if (GetComponent<DragonSounds>() == null)
             gameObject.AddComponent<DragonSounds>(); // receptor dos AnimationEvents "PlaySound" dos FBX
         if (vitals != null && GetComponent<DragonDamageFeedback>() == null)
@@ -333,6 +337,36 @@ public class DragonController : MonoBehaviour
 
             Vector3 fwdMove = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
             planarVel = fwdMove * planarSpeed + dashLateral;
+        }
+        else if (aim != null && aim.Active)
+        {
+            // ---- MODO MIRA (over-the-shoulder): o corpo encara o rumo horizontal da
+            // retícula, W/S dão frente/ré nesse rumo e A/D fazem STRAFE lateral. A
+            // cabeça (DragonAim) e os ataques (DragonAbilities) miram no ponto; aqui
+            // é só a locomoção. Fora da mira este ramo nem roda — o de baixo é o de sempre.
+            Vector3 flat = aim.AimPoint - transform.position; flat.y = 0f;
+            if (flat.sqrMagnitude > 0.04f)
+            {
+                float desiredYaw = Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg;
+                yaw = Mathf.MoveTowardsAngle(yaw, desiredYaw, aim.BodyTurnRate * TurnMul * dt);
+            }
+
+            float top = stealth ? mv.walkSpeed * S : EffRunSpeed;
+            if (Exhausted) top = Mathf.Min(top, mv.walkSpeed * S);
+            float fwd = Mathf.Clamp(v, -1f, 1f);                 // W frente, S ré
+            float signedTop = fwd >= 0f ? top : mv.reverseSpeed * S;
+            float target = Mathf.Abs(fwd) > 0.05f ? signedTop * fwd : 0f;
+
+            float decel = mv.groundDecel * S;
+            if (Locked && lockKind == LockKind.Attack) decel *= 0.35f;
+            float rate2 = Mathf.Abs(target) > Mathf.Abs(planarSpeed) ? EffGroundAccel : decel;
+            planarSpeed = Mathf.MoveTowards(planarSpeed, target, rate2 * dt);
+
+            Vector3 right = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+            Vector3 strafeVel = right * (Mathf.Clamp(h, -1f, 1f) * top * aim.StrafeFraction);
+
+            Vector3 fwdMove = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+            planarVel = fwdMove * planarSpeed + strafeVel;
         }
         else
         {

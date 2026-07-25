@@ -55,6 +55,8 @@ public class DragonAbilities : MonoBehaviour
     public int ActiveSlotCount => Mathf.Clamp(cfg.baseSlotCount + bonusSlots, 1, MaxSlotCount);
 
     DragonController dragon;
+    DragonAim aimCache;           // modo mira — criado pelo DragonController (pode faltar no Awake)
+    DragonAim Aim => aimCache != null ? aimCache : (aimCache = GetComponent<DragonAim>());
     DragonVitals vitals;          // opcional (padrão do projeto)
     DragonAttributes attrs;       // opcional
     DragonGrowth growth;          // opcional
@@ -166,12 +168,18 @@ public class DragonAbilities : MonoBehaviour
         float radiusMul = a.isFire && attrs != null ? attrs.FlameSizeMul : 1f;
         float damage = a.baseDamage * dmgMul * scale;
 
+        // MODO MIRA: o sopro/projétil e o melee apontam para o alvo da retícula
+        // (ponto sob o cursor, ou o animal agarrado no SoftLock). Fora da mira, tudo
+        // sai pra FRENTE do corpo como sempre. Área (Incinerate) fica centrada no dragão.
+        bool aiming = Aim != null && Aim.Active;
+
         if (a.usesProjectile)
         {
             Vector3 mouth = transform.position
                           + transform.forward * (2.4f * scale)
                           + Vector3.up * (1.6f * scale);
-            AttackProjectile.Launch(a, mouth, transform.forward, damage,
+            Vector3 dir = aiming ? Aim.AimDirectionFrom(mouth) : transform.forward;
+            AttackProjectile.Launch(a, mouth, dir, damage,
                                     a.areaRadius * radiusMul * scale, scale, transform);
         }
         else if (a.areaDamage)
@@ -193,8 +201,11 @@ public class DragonAbilities : MonoBehaviour
         else
         {
             // melee single target — mesmo alcance/padrão do StrikeWildlife
-            Vector3 p = transform.position + transform.forward * (a.range * 0.5f * scale);
-            var target = AnimalAgent.FindNearest(p, a.range * scale);
+            Vector3 dir = aiming ? Aim.AimDirectionFrom(transform.position) : transform.forward;
+            Vector3 p = transform.position + dir * (a.range * 0.5f * scale);
+            var target = aiming && Aim.LockedAgent != null
+                       ? Aim.LockedAgent
+                       : AnimalAgent.FindNearest(p, a.range * scale);
             if (target != null)
             {
                 target.TakeHit(damage, transform.position);

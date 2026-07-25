@@ -8,7 +8,8 @@ using UnityEngine;
 ///   Space = asa/decolar · Shift SEGURADO (ar) = mergulho · Wing Boost = Shift + W
 ///   (chord fresco, ver ConsumeBoost) · esquiva lateral = Shift + A/D (chão e ar,
 ///   ver ConsumeDashLeft/Right) — Shift PURO não acelera mais
-///   LMB combo físico · RMB (ou F) fogo · Q cauda · E asas · T rugir
+///   LMB combo físico · RMB (ou F) fogo · Q cauda · P asas · T rugir
+///   E = liga/desliga MODO MIRA (retícula segue o mouse, ver DragonAim)
 ///   R descansar · G comer · 1-4 habilidades · Tab ficha
 ///
 ///  BUFFER: apertar um pouco ANTES de poder agir enfileira o comando — quem
@@ -58,7 +59,7 @@ public static class DragonInput
         if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.F))
             pressTime[(int)Act.Fire] = now;
         if (Input.GetKeyDown(KeyCode.Q)) pressTime[(int)Act.Tail] = now;
-        if (Input.GetKeyDown(KeyCode.E)) pressTime[(int)Act.Wing] = now;
+        if (Input.GetKeyDown(KeyCode.P)) pressTime[(int)Act.Wing] = now;  // asa saiu do E (agora mira)
         if (Input.GetKeyDown(KeyCode.T)) pressTime[(int)Act.Roar] = now;
         if (Input.GetKeyDown(KeyCode.R)) pressTime[(int)Act.Rest] = now;
         if (Input.GetKeyDown(KeyCode.G)) pressTime[(int)Act.Eat] = now;
@@ -116,6 +117,9 @@ public static class DragonInput
         Act.Fire => Input.GetMouseButton(1) || Input.GetKey(KeyCode.F),
         _ => false,
     };
+
+    /// <summary>Tecla E: liga/desliga o modo mira (toggle — sem buffer, é modal).</summary>
+    public static bool AimToggleDown => Input.GetKeyDown(KeyCode.E);
 
     /// <summary>Ctrl segurado = passo de caçada (Stealth).</summary>
     public static bool StealthHeld =>
