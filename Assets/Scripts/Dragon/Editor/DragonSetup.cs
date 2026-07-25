@@ -272,9 +272,83 @@ public static class DragonSetup
         dieT.canTransitionToSelf = false;
         Cond(dieT, 0.2f, (AnimatorConditionMode.If, "Die"));
 
+        // ---- LAYER MASCARADA "Fire Cast" (Unka Fire Mask): cuspe de projétil só no
+        // pescoço/cabeça, por cima do voo/locomoção. O DragonAbilities toca os estados
+        // por anim.Play e controla o PESO (repousa em 0, invisível).
+        AddFireCastLayer(c);
+
         EditorUtility.SetDirty(c);
         Debug.Log("Animator gerado em " + ControllerPath);
         return c;
+    }
+
+    // ---------------------------------------------------- LAYER MASCARADA (Fire Cast)
+    const string FireMaskFbx = "Unka Fire Mask.FBX";
+    const string FireCastLayerName = "Fire Cast";
+    const string FireCastMaskPath = OutDir + "/Fire Cast Mask.mask";
+
+    static void AddFireCastLayer(AnimatorController c)
+    {
+        var ballClip = Clip(FireMaskFbx, "UFireBall Mask");
+        var breathClip = Clip(FireMaskFbx, "UFireBreathMask");
+        if (ballClip == null && breathClip == null)
+        {
+            Debug.LogWarning("Fire Cast: clips do Unka Fire Mask não encontrados — layer não criada.");
+            return;
+        }
+
+        // AddLayer cria a layer com um stateMachine vazio já anexado ao asset; máscara,
+        // peso e blend se ajustam reatribuindo o array de layers (API do controller).
+        c.AddLayer(FireCastLayerName);
+        var layers = c.layers;
+        int idx = layers.Length - 1;
+        var L = layers[idx];
+        L.avatarMask = GetOrBuildFireCastMask();
+        L.defaultWeight = 0f;                                   // repousa invisível
+        L.blendingMode = AnimatorLayerBlendingMode.Override;
+        layers[idx] = L;
+        c.layers = layers;
+
+        var sm = c.layers[idx].stateMachine;
+        sm.AddState("Idle");                                    // default vazio (repouso)
+        // estados de cuspe: alcançados por anim.Play direto (sem trigger), como o resto
+        // dos estados imperativos do projeto.
+        if (ballClip != null) State(sm, "UFireBall Mask", ballClip);
+        if (breathClip != null) State(sm, "UFireBreathMask", breathClip);
+    }
+
+    /// <summary>AvatarMask que habilita SÓ o pescoço alto (Neck1..Neck4) + a cabeça e
+    /// tudo abaixo dela (mandíbula, língua, olhos, narinas) — o mesmo conjunto que os
+    /// clips do Unka Fire Mask animam. Construída da hierarquia do prefab; reusada se já
+    /// existir (apague o .mask p/ reconstruir se o rig mudar).</summary>
+    static AvatarMask GetOrBuildFireCastMask()
+    {
+        var existing = AssetDatabase.LoadAssetAtPath<AvatarMask>(FireCastMaskPath);
+        if (existing != null) return existing;
+
+        var mask = new AvatarMask();
+        var avatar = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+        if (avatar != null)
+        {
+            var all = avatar.GetComponentsInChildren<Transform>(true);
+            Transform head = null;
+            foreach (var t in all) if (t.name == "Head") { head = t; break; }
+
+            mask.transformCount = all.Length;
+            for (int i = 0; i < all.Length; i++)
+            {
+                var t = all[i];
+                mask.SetTransformPath(i, AnimationUtility.CalculateTransformPath(t, avatar.transform));
+                bool neck = t.name == "Neck1" || t.name == "Neck2"
+                         || t.name == "Neck3" || t.name == "Neck4";
+                bool inHead = head != null && (t == head || t.IsChildOf(head));
+                mask.SetTransformActive(i, neck || inHead);
+            }
+        }
+        else Debug.LogWarning("Fire Cast: prefab do dragão não encontrado — máscara vazia.");
+
+        AssetDatabase.CreateAsset(mask, FireCastMaskPath);
+        return mask;
     }
 
     // -------------------------------------------------------------- PREFAB
@@ -437,6 +511,23 @@ public static class DragonSetup
     {
         for (int i = c.parameters.Length - 1; i >= 0; i--)
             c.RemoveParameter(i);
+
+        // remove as layers EXTRAS (ex.: "Fire Cast") — só a Base Layer (0) é
+        // reconstruída in-place. Limpa cada uma a fundo antes, senão sobram
+        // AnimatorState órfãos inchando o .controller a cada rebuild.
+        if (c.layers.Length > 1)
+        {
+            var layers = c.layers;
+            for (int i = 1; i < layers.Length; i++)
+            {
+                var lsm = layers[i].stateMachine;
+                if (lsm == null) continue;
+                foreach (var s in lsm.states) lsm.RemoveState(s.state);
+                foreach (var m in lsm.stateMachines) lsm.RemoveStateMachine(m.stateMachine);
+                Object.DestroyImmediate(lsm, true);
+            }
+            c.layers = new[] { layers[0] };
+        }
 
         var sm = c.layers[0].stateMachine;
         sm.entryTransitions = new AnimatorTransition[0];

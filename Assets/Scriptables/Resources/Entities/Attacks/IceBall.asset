@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c5b1fe36dcf9994198773842b611cdb, type: 3}
+  m_Name: IceBall
+  m_EditorClassIdentifier: 
+  attackName: Bola de Gelo
+  description: "Forma uma esfera de gelo e a arremessa na dire\xE7\xE3o da mira,
+    atingindo UM alvo."
+  icon: {fileID: 21300000, guid: b4ff3f905fc583749b97952d0bd424ac, type: 3}
+  unlockLevel: 3
+  energyCost: 11
+  baseDamage: 17
+  cooldown: 2.6
+  castTime: 0.1
+  animationLock: 1.1
+  animation: 8
+  fireMaskCast: 1
+  usableInFlight: 1
+  isPhysical: 1
+  isFire: 0
+  range: 60
+  areaDamage: 0
+  areaRadius: 6
+  appliesBurn: 0
+  burnDamagePerSecond: 4
+  burnDuration: 5
+  spawnsFireArea: 0
+  fireAreaDuration: 8
+  usesProjectile: 1
+  aimBeforeFire: 1
+  projectileSpeed: 34
+  projectileLifetime: 0
+  explodesOnImpact: 0
+  projectileHitRadius: 1.2
+  projectilePrefab: {fileID: 1018882707796302, guid: f013a7465c9b4274bbd66d2ff9761187, type: 3}
+  vfxPrefab: {fileID: 0}

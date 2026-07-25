@@ -54,6 +54,10 @@ public class DragonAim : MonoBehaviour
 
     /// <summary>Mira ligada AGORA?</summary>
     public bool Active => active;
+    /// <summary>Liga/desliga a mira POR CÓDIGO (ex.: <see cref="DragonAbilities"/> abre o
+    /// modo mira quando uma habilidade de projétil com <c>aimBeforeFire</c> é acionada).
+    /// Reusa exatamente o mesmo caminho da tecla E — câmera de ombro, retícula e cursor.</summary>
+    public void SetAimActive(bool on) => SetActive(on);
     /// <summary>Ponto do mundo sob a retícula.</summary>
     public Vector3 AimPoint => aimPoint;
     /// <summary>Animal agarrado pelo soft-lock (null quando não há fauna perto do ponto).</summary>

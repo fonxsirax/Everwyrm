@@ -33,12 +33,30 @@ public class AttackProjectile : MonoBehaviour
         p.hitRadius = data.projectileHitRadius * Mathf.Max(1f, scale * 0.8f);
 
         if (data.projectilePrefab != null)
-            Instantiate(data.projectilePrefab, origin, go.transform.rotation, go.transform);
+        {
+            var vis = Instantiate(data.projectilePrefab, origin, go.transform.rotation, go.transform);
+            StripSelfMovers(vis);
+        }
         else
             CombatVFX.ProjectileGlow(go.transform,
                 data.isFire ? CombatVFX.FireColor : new Color(0.8f, 0.9f, 1f),
                 0.35f * Mathf.Max(1f, scale * 0.7f));
         return p;
+    }
+
+    // O campo projectilePrefab do DragonAttackData é VISUAL — quem move o projétil, detecta
+    // acerto e aplica dano é ESTE componente (padrão do projeto, sem Physics). Prefabs de
+    // pacote (ex.: Hovl "AAA Projectiles") vêm com auto-movimento (Rigidbody + mover próprio),
+    // colisor e auto-destruição, o que criaria um sistema PARALELO: o filho voaria sozinho,
+    // colidiria por conta e sumiria. Neutraliza tudo isso e deixa só as partículas/luz, para
+    // que QUALQUER prefab de projétil possa ser plugado como visual sem tocar em código.
+    static void StripSelfMovers(GameObject vis)
+    {
+        // MonoBehaviours = os scripts de movimento/colisão do pacote (HS_ProjectileMover etc.).
+        // As partículas e a luz não são MonoBehaviour, então continuam intactas.
+        foreach (var mb in vis.GetComponentsInChildren<MonoBehaviour>(true)) Destroy(mb);
+        foreach (var rb in vis.GetComponentsInChildren<Rigidbody>(true)) Destroy(rb);
+        foreach (var col in vis.GetComponentsInChildren<Collider>(true)) Destroy(col);
     }
 
     void Update()

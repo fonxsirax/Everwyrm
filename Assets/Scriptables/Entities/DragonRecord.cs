@@ -247,8 +247,12 @@ public class DragonState
     public bool isDead;
     public bool isDeadOfOldAge;
 
-    // ---- Combate (DragonAbilities) — loadout dos 4 slots por nome de ataque
-    public string[] equippedAttackNames;
+    // ---- Combate (DragonAbilities) — loadout dos slots como REFERÊNCIAS de ataque
+    //      (DragonAttackData), não mais nomes: os próprios assets, resolvidos direto
+    //      (sem casar por string). A verdade de qual é o ataque ATUAL é o loadout vivo
+    //      do dragão possuído — WriteTo grava os slots de lá. Serializa como referência
+    //      de asset no .asset do record (o mesmo objeto que Resources.LoadAll devolve).
+    public DragonAttackData[] equippedAttacks;
 
     public string ToJson() => JsonUtility.ToJson(this);
     public static DragonState FromJson(string json) => JsonUtility.FromJson<DragonState>(json);

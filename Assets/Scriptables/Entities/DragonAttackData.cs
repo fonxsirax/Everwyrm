@@ -46,6 +46,12 @@ public class DragonAttackData : ScriptableObject
     [Header("Animação (clips do Unka — número finito)")]
     public DragonAttackAnimation animation = DragonAttackAnimation.BiteFront;
 
+    [Tooltip("Se != None, o gesto do disparo toca na LAYER MASCARADA 'Fire Cast' " +
+             "(Unka Fire Mask): só pescoço/cabeça/mandíbula, POR CIMA do voo/locomoção — " +
+             "o dragão cospe sem parar de voar nem travar o controle. Nesse caso o campo " +
+             "'animation' acima é ignorado. None = layer base normal (trava a ação).")]
+    public DragonFireMaskCast fireMaskCast = DragonFireMaskCast.None;
+
     [Header("Regras")]
     public bool usableInFlight = false;
     public bool isPhysical = true;
@@ -69,6 +75,11 @@ public class DragonAttackData : ScriptableObject
 
     [Header("Projétil")]
     public bool usesProjectile = false;
+    [Tooltip("Fluxo de MIRA antes de disparar: a tecla da habilidade ABRE o modo mira " +
+             "(DragonAim) em vez de atirar na hora. Botão esquerdo confirma e lança o " +
+             "projétil na direção da retícula; botão direito cancela SEM gastar energia " +
+             "nem entrar em cooldown. Só faz sentido com usesProjectile. Chão e voo.")]
+    public bool aimBeforeFire = false;
     public float projectileSpeed = 30f;
     [Tooltip("Vida do projétil em segundos. 0 = derivada de range ÷ velocidade.")]
     public float projectileLifetime = 0f;
@@ -103,4 +114,16 @@ public enum DragonAttackAnimation
     WingRight,      // UAttack Wings R
     FireBreath,     // Fire Breath (UAttack FireBreath L)
     Roar            // Roar (U ROAR)
+}
+
+/// <summary>
+/// Gesto de cuspe na LAYER MASCARADA "Fire Cast" (clips do "Unka Fire Mask.FBX" —
+/// só cabeça/pescoço/mandíbula). Toca por cima do voo/locomoção sem travar o dragão,
+/// ao contrário dos estados de corpo inteiro do <see cref="DragonAttackAnimation"/>.
+/// </summary>
+public enum DragonFireMaskCast
+{
+    None,        // usa a layer base (DragonAttackAnimation), travando a ação
+    FireBall,    // UFireBall Mask — cuspe rápido da esfera
+    FireBreath   // UFireBreathMask — sopro contínuo mascarado
 }

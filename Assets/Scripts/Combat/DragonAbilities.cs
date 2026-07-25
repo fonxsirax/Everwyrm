@@ -57,6 +57,15 @@ public class DragonAbilities : MonoBehaviour
     DragonController dragon;
     DragonAim aimCache;           // modo mira — criado pelo DragonController (pode faltar no Awake)
     DragonAim Aim => aimCache != null ? aimCache : (aimCache = GetComponent<DragonAim>());
+
+    // ---- MIRA DE HABILIDADE (aimBeforeFire): a tecla ABRE a mira e o clique confirma
+    int aimCastSlot = -1;         // slot aguardando confirmação do disparo (-1 = nenhum)
+    int fireCastLayer = -1;       // layer mascarada 'Fire Cast' (Unka Fire Mask); -1 = ausente
+    Coroutine fireMaskRoutine;    // controla o peso da layer mascarada durante o gesto
+    /// <summary>Uma habilidade de projétil está com a MIRA aberta, esperando o clique?
+    /// O <see cref="DragonController"/> consulta isto para NÃO deixar os botões do mouse
+    /// virarem golpe/sopro no chão enquanto o jogador mira.</summary>
+    public bool AimCasting => aimCastSlot >= 0;
     DragonVitals vitals;          // opcional (padrão do projeto)
     DragonAttributes attrs;       // opcional
     DragonGrowth growth;          // opcional
@@ -95,6 +104,11 @@ public class DragonAbilities : MonoBehaviour
 
     void Start()
     {
+        // índice da layer mascarada 'Fire Cast' (Unka Fire Mask). -1 até o Animator ser
+        // regenerado (Tools > Everwyrm > Regenerar Animator do Dragão) — aí o cuspe cai
+        // na layer base como antes, sem quebrar.
+        fireCastLayer = anim != null ? anim.GetLayerIndex("Fire Cast") : -1;
+
         EnsureKnown();
 
         // slots pré-preenchidos no Inspector contam como desbloqueados
@@ -121,7 +135,13 @@ public class DragonAbilities : MonoBehaviour
 
     void Update()
     {
+        // fecha a mira de habilidade se algo modal a invalidar (ficha aberta / morte)
+        if (AimCasting && (DragonStatsMenu.IsOpen || dragon.IsDead)) EndAimCast();
         if (DragonStatsMenu.IsOpen || dragon.IsDead) return;
+
+        // com a mira de habilidade aberta, o mouse é confirmar/cancelar — as teclas
+        // 1-4 ficam inertes até o disparo sair (ou o jogador cancelar).
+        if (AimCasting) { UpdateAimCast(); return; }
 
         // bindings centralizados no DragonInput (preparo p/ gamepad futuro).
         // Só até ActiveSlotCount — o slot de mutação (5) só responde a quem o tem.
@@ -130,9 +150,44 @@ public class DragonAbilities : MonoBehaviour
     }
 
     // ============================================================== EXECUÇÃO
+    /// <summary>Aciona o slot. Projétil com <c>aimBeforeFire</c> ABRE o modo mira e
+    /// espera o clique (ver <see cref="UpdateAimCast"/>); todo o resto dispara na hora,
+    /// à frente ou no alvo da mira (tecla E) se ela já estiver ligada.</summary>
     public void TryUse(int slot)
     {
         if (slot >= ActiveSlotCount) return;   // slot de mutação sem o bônus: nada
+        var a = GetSlot(slot);
+        if (a == null) return;
+
+        if (a.usesProjectile && a.aimBeforeFire)
+        {
+            // só ABRE a mira se o disparo for viável (cooldown/energia/estado) — nada é
+            // gasto aqui; a energia/cooldown só entram na confirmação (Execute).
+            if (CanFire(a)) BeginAimCast(slot);
+            return;
+        }
+
+        Execute(slot, null);
+    }
+
+    /// <summary>Viabilidade do disparo SEM gastar nada — compartilhada entre disparar na
+    /// hora e ABRIR a mira, para o jogador não entrar em mira de uma habilidade impossível.</summary>
+    bool CanFire(DragonAttackData a)
+    {
+        if (a == null) return false;
+        if (dragon.ActionsLocked || dragon.IsResting || dragon.IsSwimming) return false;
+        if (Time.time < CooldownEnd(a)) return false;
+        if (dragon.IsFlying && !a.usableInFlight) return false;
+        float costMul = (growth != null ? growth.EnergyCostMul : 1f)
+                      * (attrs != null ? attrs.EnergyCostMul : 1f);
+        return vitals == null || vitals.Energy >= a.energyCost * costMul;
+    }
+
+    /// <summary>Dispara o ataque DE FATO: gasta energia, arma o cooldown, toca a animação
+    /// e agenda o efeito. <paramref name="aimOverride"/> = ponto do mundo travado no clique
+    /// da mira (null = comportamento antigo: à frente, ou no alvo da mira se ligada).</summary>
+    void Execute(int slot, Vector3? aimOverride)
+    {
         var a = GetSlot(slot);
         if (a == null) return;
         if (dragon.ActionsLocked || dragon.IsResting || dragon.IsSwimming) return;
@@ -148,17 +203,107 @@ public class DragonAbilities : MonoBehaviour
         float cdMul = a.isFire && Traits != null ? Traits.FireCooldownMul : 1f;
         cooldownUntil[a] = Time.time + a.cooldown * cdMul;
 
-        // CrossFade direto para o estado (mesmo padrão do AnimalAgent): funciona
-        // do chão E do voo — as transições de saída do Animator devolvem para
-        // Locomotion ou Fly conforme o bool "Flying".
-        anim.CrossFadeInFixedTime(StateName(a.animation), 0.1f, 0);
-        dragon.LockActions(a.animationLock);
+        // GESTO do disparo. Cuspe MASCARADO (Unka Fire Mask): toca na layer 'Fire Cast'
+        // só no pescoço/cabeça, POR CIMA do voo/locomoção e SEM travar o dragão — ele
+        // dispara sem parar de voar nem perder o controle. Demais ataques: estado de
+        // corpo inteiro na layer base, que trava a ação como antes (as saídas do Animator
+        // devolvem para Locomotion ou Fly conforme o bool "Flying").
+        string maskState = fireCastLayer >= 0 ? FireMaskState(a.fireMaskCast) : null;
+        if (maskState != null)
+        {
+            anim.Play(maskState, fireCastLayer, 0f);   // reinicia o gesto (o peso sobe do 0)
+            PlayFireMask(a.animationLock);
+        }
+        else
+        {
+            anim.CrossFadeInFixedTime(StateName(a.animation), 0.1f, 0);
+            dragon.LockActions(a.animationLock);
+        }
 
-        StartCoroutine(FireAfterCast(a));
+        StartCoroutine(FireAfterCast(a, aimOverride));
         OnAttackFired?.Invoke(slot, a);
     }
 
-    IEnumerator FireAfterCast(DragonAttackData a)
+    /// <summary>Estado na layer 'Fire Cast' para cada gesto mascarado (null = layer base).</summary>
+    static string FireMaskState(DragonFireMaskCast m) => m switch
+    {
+        DragonFireMaskCast.FireBall => "UFireBall Mask",
+        DragonFireMaskCast.FireBreath => "UFireBreathMask",
+        _ => null
+    };
+
+    // Sobe o peso da layer mascarada, segura durante o gesto e desce — a layer descansa
+    // em 0 (invisível). Interrompe um gesto anterior p/ os pesos não brigarem.
+    void PlayFireMask(float hold)
+    {
+        if (fireMaskRoutine != null) StopCoroutine(fireMaskRoutine);
+        fireMaskRoutine = StartCoroutine(FireMaskWeight(hold));
+    }
+
+    IEnumerator FireMaskWeight(float hold)
+    {
+        yield return BlendFireLayer(1f, 0.06f);
+        yield return new WaitForSeconds(Mathf.Max(0.1f, hold));
+        yield return BlendFireLayer(0f, 0.2f);
+        fireMaskRoutine = null;
+    }
+
+    IEnumerator BlendFireLayer(float target, float time)
+    {
+        float start = anim.GetLayerWeight(fireCastLayer);
+        for (float t = 0f; t < time; t += Time.deltaTime)
+        {
+            anim.SetLayerWeight(fireCastLayer, Mathf.Lerp(start, target, t / time));
+            yield return null;
+        }
+        anim.SetLayerWeight(fireCastLayer, target);
+    }
+
+    // ------------------------------------------------- modo mira de habilidade
+    void BeginAimCast(int slot)
+    {
+        aimCastSlot = slot;
+        if (Aim != null) Aim.SetAimActive(true);   // abre retícula + câmera de ombro
+    }
+
+    /// <summary>Roda a cada frame enquanto a mira de habilidade está aberta: clique
+    /// esquerdo confirma, direito cancela, e qualquer invalidação (mira fechada por fora,
+    /// travou, começou a nadar) cancela sem custo.</summary>
+    void UpdateAimCast()
+    {
+        var a = GetSlot(aimCastSlot);
+        // mira fechada por fora (tecla E, nado, despossessão) ou estado inválido → cancela
+        if (a == null || Aim == null || !Aim.Active
+            || dragon.ActionsLocked || dragon.IsResting || dragon.IsSwimming)
+        { EndAimCast(); return; }
+
+        // ESQUERDO confirma: FIXA o alvo agora e dispara exatamente nessa direção
+        if (Input.GetMouseButtonDown(0))
+        {
+            Vector3 target = Aim.AimTargetPoint;   // retícula (ou alvo do soft-lock)
+            int slot = aimCastSlot;
+            EndAimCast();                          // encerra a mira ANTES do disparo
+            DragonInput.Clear(DragonInput.Act.Melee);   // o mesmo clique não vira golpe no chão
+            Execute(slot, target);
+            return;
+        }
+
+        // DIREITO cancela: sai da mira sem gastar energia nem entrar em cooldown
+        if (Input.GetMouseButtonDown(1))
+        {
+            EndAimCast();
+            DragonInput.Clear(DragonInput.Act.Fire);    // o mesmo clique não vira sopro no chão
+        }
+    }
+
+    void EndAimCast()
+    {
+        if (aimCastSlot < 0) return;
+        aimCastSlot = -1;
+        if (Aim != null && Aim.Active) Aim.SetAimActive(false);
+    }
+
+    IEnumerator FireAfterCast(DragonAttackData a, Vector3? aimOverride)
     {
         if (a.castTime > 0f) yield return new WaitForSeconds(a.castTime);
         if (dragon.IsDead) yield break;
@@ -178,7 +323,14 @@ public class DragonAbilities : MonoBehaviour
             Vector3 mouth = transform.position
                           + transform.forward * (2.4f * scale)
                           + Vector3.up * (1.6f * scale);
-            Vector3 dir = aiming ? Aim.AimDirectionFrom(mouth) : transform.forward;
+            // direção: ponto TRAVADO no clique da mira (aimBeforeFire) > mira livre (E) > frente
+            Vector3 dir;
+            if (aimOverride.HasValue)
+            {
+                Vector3 d = aimOverride.Value - mouth;
+                dir = d.sqrMagnitude > 0.0001f ? d.normalized : transform.forward;
+            }
+            else dir = aiming ? Aim.AimDirectionFrom(mouth) : transform.forward;
             AttackProjectile.Launch(a, mouth, dir, damage,
                                     a.areaRadius * radiusMul * scale, scale, transform);
         }
@@ -284,7 +436,7 @@ public class DragonAbilities : MonoBehaviour
     }
 
     // ============================================================ POSSESSÃO
-    /// <summary>Restaura o BÔNUS DE SLOT (mutação) e o loadout salvo (por nome de
+    /// <summary>Restaura o BÔNUS DE SLOT (mutação) e o loadout salvo (referências de
     /// ataque) de um DragonRecord, depois reavalia desbloqueios e preenche qualquer
     /// slot ATIVO ainda vazio com algo já desbloqueado. Essa última parte cobre a
     /// ordem de Awake/Start entre componentes NÃO ser garantida: se o bônus de slot
@@ -295,15 +447,20 @@ public class DragonAbilities : MonoBehaviour
         bonusSlots = record.bonusAttackSlots;
         EnsureKnown();
 
-        var names = record.state.equippedAttackNames;
-        if (names != null && names.Length > 0)
+        var equipped = record.state.equippedAttacks;
+        if (equipped != null && equipped.Length > 0)
         {
             for (int i = 0; i < MaxSlotCount; i++)
             {
-                string n = i < names.Length ? names[i] : null;
-                var a = string.IsNullOrEmpty(n) ? null : known.Find(k => k.attackName == n);
+                var a = i < equipped.Length ? equipped[i] : null;
                 slots[i] = a;
-                if (a != null && !unlocked.Contains(a)) unlocked.Add(a);
+                // referência direta: se o ataque não estava no catálogo (fora de
+                // Resources/Attacks), entra por ele mesmo — já vem desbloqueado.
+                if (a != null)
+                {
+                    if (!known.Contains(a)) known.Add(a);
+                    if (!unlocked.Contains(a)) unlocked.Add(a);
+                }
             }
         }
 
@@ -321,10 +478,12 @@ public class DragonAbilities : MonoBehaviour
 
     public void WriteTo(DragonState s)
     {
-        var names = new string[MaxSlotCount];
+        // grava o loadout VIVO do dragão como referências de ataque (o "ataque atual"
+        // é o que está nos slots agora), null em slot vazio.
+        var equipped = new DragonAttackData[MaxSlotCount];
         for (int i = 0; i < MaxSlotCount; i++)
-            names[i] = slots[i] != null ? slots[i].attackName : null;
-        s.equippedAttackNames = names;
+            equipped[i] = slots[i];
+        s.equippedAttacks = equipped;
     }
 
     /// <summary>Nome do estado no Animator para cada animação do enum.</summary>

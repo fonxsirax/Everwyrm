@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e963ef76c8fe6dc4a85536b711637e51, type: 3}
-  m_Name: Zephion
+  m_Name: Fonx
   m_EditorClassIdentifier: 
-  dragonName: Zephion
+  dragonName: Fonx
   skin: {fileID: 11400000, guid: 52c0ffb2da1732c4689664fb027802d0, type: 2}
   nature: 6
   genes:
@@ -28,24 +28,28 @@ MonoBehaviour:
     bodyMaterial: 0
     tint: {r: 0.71777564, g: 0.70958257, b: 0.7155004, a: 1}
     wingHue: 0.016944291
-  ivVelocidade: 16
-  ivPoder: 18
-  ivResistencia: 2
+  ivAgility: 16
+  ivMight: 18
   ivVigor: 16
+  ivArdor: 0
+  ivWind: 2
+  ivInstinct: 0
+  traits: 
+  bonusAttackSlots: 0
+  mutations: 0
   state:
     version: 1
     ageSeconds: 0
     growth01: 0
     condition01: 0.5
-    level: 1
-    unspent: 5
-    velocidade: 0
-    poder: 0
-    resistencia: 0
     hunger01: 0.85
     energy01: 1
     health01: 1
     totalEaten: 0
     isDead: 0
     isDeadOfOldAge: 0
-    equippedAttackNames: []
+    equippedAttacks:
+    - {fileID: 11400000, guid: 1c5c0ec834a935800f151aca1a054d59, type: 2}
+    - {fileID: 11400000, guid: 0e40ab17a7632b446adb0c147aee5087, type: 2}
+    - {fileID: 11400000, guid: beb6f573d0556224a9c9be849ef6fd14, type: 2}
+    - {fileID: 11400000, guid: 689ea8c3e4dd3643c31ac031360019d0, type: 2}

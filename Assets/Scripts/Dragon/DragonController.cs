@@ -124,6 +124,7 @@ public class DragonController : MonoBehaviour
     DragonFlight flight;                 // opcional (voo skill-based)
     DragonTraits traits;                 // opcional (traços herdáveis)
     DragonAim aim;                       // modo mira (tecla E) — criado no Awake
+    DragonAbilities abilities;           // habilidades 1-4 (opcional) — p/ a mira de habilidade
 
     bool flying, gliding, stalling, resting, dead, swimming, stealth, diving;
     float planarSpeed, flySpeed, verticalVel;
@@ -227,6 +228,7 @@ public class DragonController : MonoBehaviour
         if (traits == null) traits = gameObject.AddComponent<DragonTraits>(); // traços herdáveis (vazio sem record)
         aim = GetComponent<DragonAim>();
         if (aim == null) aim = gameObject.AddComponent<DragonAim>();          // modo mira (tecla E)
+        abilities = GetComponent<DragonAbilities>();                          // habilidades 1-4 (opcional)
         if (GetComponent<DragonSounds>() == null)
             gameObject.AddComponent<DragonSounds>(); // receptor dos AnimationEvents "PlaySound" dos FBX
         if (vitals != null && GetComponent<DragonDamageFeedback>() == null)
@@ -1055,6 +1057,10 @@ public class DragonController : MonoBehaviour
     {
         bool grounded = !flying && cc.isGrounded;
         if (!grounded) return;   // golpes aéreos vivem no DragonAbilities (1-4)
+
+        // mira de habilidade aberta (aimBeforeFire): os botões do mouse são
+        // confirmar/cancelar o disparo — não viram golpe/sopro no chão neste frame.
+        if (abilities != null && abilities.AimCasting) return;
 
         if (DragonInput.Consume(DragonInput.Act.Eat))               // comer
         {
